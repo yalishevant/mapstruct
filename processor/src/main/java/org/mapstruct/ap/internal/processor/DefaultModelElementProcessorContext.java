@@ -6,30 +6,26 @@
 package org.mapstruct.ap.internal.processor;
 
 import java.util.Map;
-import java.util.stream.IntStream;
-import javax.annotation.processing.Filer;
-import javax.annotation.processing.Messager;
-import javax.annotation.processing.ProcessingEnvironment;
-import javax.lang.model.element.AnnotationMirror;
-import javax.lang.model.element.AnnotationValue;
-import javax.lang.model.element.Element;
-import javax.lang.model.element.TypeElement;
-import javax.tools.Diagnostic.Kind;
-
-import org.mapstruct.ap.internal.langmodel.LangModelContext;
-import org.mapstruct.ap.internal.langmodel.api.DescriptorUnwrapper;
-import org.mapstruct.ap.internal.model.common.TypeFactory;
+import java.util.Objects;
+import org.mapstruct.ap.internal.codegen.CodeGenerationContext;
+import org.mapstruct.ap.internal.codegen.CodeGenerator;
+import org.mapstruct.ap.internal.codegen.DefaultCodeGenerationContext;
+import org.mapstruct.ap.internal.codegen.freemarker.FreemarkerCodeGenerator;
+import org.mapstruct.ap.internal.codegen.freemarker.FreemarkerTemplateRenderer;
+import org.mapstruct.ap.internal.codegen.template.TemplateRenderer;
 import org.mapstruct.ap.internal.option.Options;
 import org.mapstruct.ap.internal.processor.ModelElementProcessor.ProcessorContext;
 import org.mapstruct.ap.internal.util.AccessorNamingUtils;
-import org.mapstruct.ap.internal.util.ElementUtils;
+import org.mapstruct.ap.internal.util.AnnotationProcessorContextView;
 import org.mapstruct.ap.internal.util.FormattingMessager;
-import org.mapstruct.ap.internal.util.Message;
 import org.mapstruct.ap.internal.util.RoundContext;
-import org.mapstruct.ap.internal.util.TypeUtils;
 import org.mapstruct.ap.internal.version.VersionInformation;
 import org.mapstruct.ap.spi.EnumMappingStrategy;
 import org.mapstruct.ap.spi.EnumTransformationStrategy;
+import org.mapstruct.ap.internal.langmodel.api.DescriptorUnwrapper;
+import org.mapstruct.ap.internal.langmodel.LangModelContext;
+import org.mapstruct.ap.internal.langmodel.codegen.GeneratedFileSink;
+import org.mapstruct.ap.internal.model.common.TypeFactory;
 
 /**
  * Default implementation of the processor context.
@@ -38,56 +34,58 @@ import org.mapstruct.ap.spi.EnumTransformationStrategy;
  */
 public class DefaultModelElementProcessorContext implements ProcessorContext {
 
-    private final ProcessingEnvironment processingEnvironment;
-    private final DelegatingMessager messager;
+    private final FormattingMessager messager;
     private final Options options;
     private final TypeFactory typeFactory;
     private final VersionInformation versionInformation;
-    private final LangModelContext langModelContext;
+    private final LangModelContext<?, ?, ?, ?> langModelContext;
     private final DescriptorUnwrapper descriptorUnwrapper;
-    private final TypeUtils delegatingTypes;
-    private final ElementUtils delegatingElements;
     private final AccessorNamingUtils accessorNaming;
     private final RoundContext roundContext;
+    private final CodeGenerationContext codeGenerationContext;
+    private final CodeGenerator codeGenerator;
 
-    public DefaultModelElementProcessorContext(ProcessingEnvironment processingEnvironment, Options options,
-            RoundContext roundContext, Map<String, String> notToBeImported, TypeElement mapperElement,
-            LangModelContext langModelContext, DescriptorUnwrapper descriptorUnwrapper) {
+    public DefaultModelElementProcessorContext(Options options,
+            RoundContext roundContext,
+            Map<String, String> notToBeImported,
+            LangModelContext<?, ?, ?, ?> langModelContext,
+            DescriptorUnwrapper descriptorUnwrapper,
+            FormattingMessager messager,
+            GeneratedFileSink generatedFileSink,
+            VersionInformation versionInformation) {
 
-        this.processingEnvironment = processingEnvironment;
-        this.messager = new DelegatingMessager( processingEnvironment.getMessager(), options.isVerbose() );
-        this.accessorNaming = roundContext.getAnnotationProcessorContext().getAccessorNaming();
-        this.versionInformation = DefaultVersionInformation.fromProcessingEnvironment( processingEnvironment );
-        this.delegatingTypes = TypeUtils.create( processingEnvironment, versionInformation );
-        this.delegatingElements = ElementUtils.create( processingEnvironment, versionInformation, mapperElement );
-        this.roundContext = roundContext;
-        this.langModelContext = langModelContext;
-        this.descriptorUnwrapper = descriptorUnwrapper;
+        this.options = Objects.requireNonNull( options, "options" );
+        this.roundContext = Objects.requireNonNull( roundContext, "roundContext" );
+        this.langModelContext = Objects.requireNonNull( langModelContext, "langModelContext" );
+        this.descriptorUnwrapper = Objects.requireNonNull( descriptorUnwrapper, "descriptorUnwrapper" );
+        this.messager = Objects.requireNonNull( messager, "messager" );
+        this.versionInformation = Objects.requireNonNull( versionInformation, "versionInformation" );
+        Objects.requireNonNull( generatedFileSink, "generatedFileSink" );
+
+        AnnotationProcessorContextView annotationProcessorContext =
+            roundContext.getAnnotationProcessorContext();
+        this.accessorNaming = annotationProcessorContext.getAccessorNaming();
         this.typeFactory = new TypeFactory(
-            delegatingElements,
-            delegatingTypes,
+            langModelContext,
             messager,
             roundContext,
             notToBeImported,
             options.isVerbose(),
             versionInformation
         );
-        this.options = options;
+
+        TemplateRenderer templateRenderer = new FreemarkerTemplateRenderer();
+        this.codeGenerationContext = new DefaultCodeGenerationContext(
+            generatedFileSink,
+            templateRenderer,
+            descriptorUnwrapper
+        );
+        this.codeGenerator = new FreemarkerCodeGenerator();
     }
 
     @Override
-    public Filer getFiler() {
-        return processingEnvironment.getFiler();
-    }
-
-    @Override
-    public TypeUtils getTypeUtils() {
-        return delegatingTypes;
-    }
-
-    @Override
-    public ElementUtils getElementUtils() {
-        return delegatingElements;
+    public LangModelContext getLangModelContext() {
+        return langModelContext;
     }
 
     @Override
@@ -101,13 +99,18 @@ public class DefaultModelElementProcessorContext implements ProcessorContext {
     }
 
     @Override
-    public LangModelContext getLangModelContext() {
-        return langModelContext;
+    public AccessorNamingUtils getAccessorNaming() {
+        return accessorNaming;
     }
 
     @Override
-    public AccessorNamingUtils getAccessorNaming() {
-        return accessorNaming;
+    public CodeGenerator getCodeGenerator() {
+        return codeGenerator;
+    }
+
+    @Override
+    public CodeGenerationContext getCodeGenerationContext() {
+        return codeGenerationContext;
     }
 
     @Override
@@ -140,72 +143,4 @@ public class DefaultModelElementProcessorContext implements ProcessorContext {
         return descriptorUnwrapper;
     }
 
-    private static final class DelegatingMessager implements FormattingMessager {
-
-        private final Messager delegate;
-        private boolean isErroneous = false;
-        private final boolean verbose;
-
-        DelegatingMessager(Messager delegate, boolean verbose) {
-            this.delegate = delegate;
-            this.verbose = verbose;
-        }
-
-        @Override
-        public void printMessage(Message msg, Object... args) {
-            String message = String.format( msg.getDescription(), args );
-            delegate.printMessage( msg.getDiagnosticKind(), message );
-            if ( msg.getDiagnosticKind() == Kind.ERROR ) {
-                isErroneous = true;
-            }
-        }
-
-        @Override
-        public void printMessage(Element e, Message msg, Object... args) {
-            String message = String.format( msg.getDescription(), args );
-            delegate.printMessage( msg.getDiagnosticKind(), message, e );
-            if ( msg.getDiagnosticKind() == Kind.ERROR ) {
-                isErroneous = true;
-            }
-        }
-
-        @Override
-        public void printMessage(Element e, AnnotationMirror a, Message msg, Object... args) {
-            if ( a == null ) {
-                printMessage( e, msg, args );
-            }
-            else {
-                String message = String.format( msg.getDescription(), args );
-                delegate.printMessage( msg.getDiagnosticKind(), message, e, a );
-                if ( msg.getDiagnosticKind() == Kind.ERROR ) {
-                    isErroneous = true;
-                }
-            }
-        }
-
-        @Override
-        public void printMessage(Element e, AnnotationMirror a, AnnotationValue v, Message msg,
-                                 Object... args) {
-            String message = String.format( msg.getDescription(), args );
-            delegate.printMessage( msg.getDiagnosticKind(), message, e, a, v );
-            if ( msg.getDiagnosticKind() == Kind.ERROR ) {
-                isErroneous = true;
-            }
-        }
-
-        public void note( int level, Message msg, Object... args ) {
-            if ( verbose ) {
-                StringBuilder builder = new StringBuilder();
-                IntStream.range( 0, level ).mapToObj( i -> "-" ).forEach( builder::append );
-                builder.append( " MapStruct: " ).append( String.format( msg.getDescription(), args ) );
-                delegate.printMessage( Kind.NOTE, builder.toString() );
-            }
-        }
-
-        @Override
-        public boolean isErroneous() {
-            return isErroneous;
-        }
-
-    }
 }

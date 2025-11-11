@@ -21,17 +21,6 @@ import java.util.function.Function;
 import java.util.function.Supplier;
 import java.util.stream.Collectors;
 
-import javax.lang.model.element.AnnotationMirror;
-import javax.lang.model.element.Element;
-import javax.lang.model.element.ExecutableElement;
-import javax.lang.model.element.Name;
-import javax.lang.model.element.TypeElement;
-import javax.lang.model.type.DeclaredType;
-import javax.lang.model.type.ExecutableType;
-import javax.lang.model.type.TypeKind;
-import javax.lang.model.type.TypeMirror;
-import javax.lang.model.util.ElementFilter;
-
 import org.mapstruct.ap.internal.conversion.ConversionProvider;
 import org.mapstruct.ap.internal.conversion.Conversions;
 import org.mapstruct.ap.internal.gem.ReportingPolicyGem;
@@ -48,6 +37,7 @@ import org.mapstruct.ap.internal.model.common.ConversionContext;
 import org.mapstruct.ap.internal.model.common.DefaultConversionContext;
 import org.mapstruct.ap.internal.model.common.FieldReference;
 import org.mapstruct.ap.internal.model.common.FormattingParameters;
+import org.mapstruct.ap.internal.model.common.Parameter;
 import org.mapstruct.ap.internal.model.common.SourceRHS;
 import org.mapstruct.ap.internal.model.common.Type;
 import org.mapstruct.ap.internal.model.common.TypeFactory;
@@ -59,13 +49,21 @@ import org.mapstruct.ap.internal.model.source.selector.SelectedMethod;
 import org.mapstruct.ap.internal.model.source.selector.SelectionContext;
 import org.mapstruct.ap.internal.model.source.selector.SelectionCriteria;
 import org.mapstruct.ap.internal.util.Collections;
-import org.mapstruct.ap.internal.util.ElementUtils;
 import org.mapstruct.ap.internal.util.FormattingMessager;
 import org.mapstruct.ap.internal.util.Message;
 import org.mapstruct.ap.internal.util.MessageConstants;
 import org.mapstruct.ap.internal.util.NativeTypes;
 import org.mapstruct.ap.internal.util.Strings;
-import org.mapstruct.ap.internal.util.TypeUtils;
+import org.mapstruct.ap.internal.option.Options;
+import org.mapstruct.ap.descriptor.ExecutableDescriptor;
+import org.mapstruct.ap.descriptor.LangElementKind;
+import org.mapstruct.ap.langmodel.api.LangElements;
+import org.mapstruct.ap.langmodel.LangModelContext;
+import org.mapstruct.ap.langmodel.LangModelTypeSystem;
+import org.mapstruct.ap.langmodel.api.LangTypes;
+import org.mapstruct.ap.descriptor.AnnotationDescriptor;
+import org.mapstruct.ap.descriptor.NameDescriptor;
+import org.mapstruct.ap.descriptor.TypeElementDescriptor;
 
 /**
  * The one and only implementation of {@link MappingResolver}. The class has been split into an interface an
@@ -79,8 +77,10 @@ public class MappingResolverImpl implements MappingResolver {
     private static final int LIMIT_REPORTING_AMBIGUOUS = 5;
 
     private final FormattingMessager messager;
-    private final TypeUtils typeUtils;
     private final TypeFactory typeFactory;
+    private final LangModelContext<?, ?, ?, ?> langModelContext;
+    private final LangTypes langTypes;
+    private final LangElements langElements;
 
     private final List<Method> sourceModel;
     private final List<MapperReference> mapperReferences;
@@ -104,19 +104,22 @@ public class MappingResolverImpl implements MappingResolver {
      */
     private final Set<Field> usedSupportedFields = new HashSet<>();
 
-    public MappingResolverImpl(FormattingMessager messager, ElementUtils elementUtils, TypeUtils typeUtils,
-                               TypeFactory typeFactory, List<Method> sourceModel,
-                               List<MapperReference> mapperReferences, boolean verboseLogging) {
+    public MappingResolverImpl(FormattingMessager messager,
+                               TypeFactory typeFactory, LangModelContext langModelContext, List<Method> sourceModel,
+                               List<MapperReference> mapperReferences, Options options, boolean verboseLogging) {
         this.messager = messager;
-        this.typeUtils = typeUtils;
         this.typeFactory = typeFactory;
+        this.langModelContext = langModelContext;
+        LangModelTypeSystem<?, ?, ?, ?> typeSystem = langModelContext.typeSystem();
+        this.langTypes = typeSystem.types();
+        this.langElements = langModelContext.elementQuery().elements();
 
         this.sourceModel = sourceModel;
         this.mapperReferences = mapperReferences;
 
         this.conversions = new Conversions( typeFactory );
         this.builtInMethods = new BuiltInMappingMethods( typeFactory );
-        this.methodSelectors = new MethodSelectors( typeUtils, elementUtils, messager, null );
+        this.methodSelectors = new MethodSelectors( typeFactory, messager, options );
 
         this.verboseLogging = verboseLogging;
     }
@@ -125,9 +128,8 @@ public class MappingResolverImpl implements MappingResolver {
     public Assignment getTargetAssignment(Method mappingMethod, ForgedMethodHistory description, Type targetType,
                                           FormattingParameters formattingParameters,
                                           SelectionCriteria criteria, SourceRHS sourceRHS,
-                                          AnnotationMirror positionHint,
+                                          AnnotationDescriptor positionHint,
                                           Supplier<Assignment> forger) {
-
         ResolvingAttempt attempt = new ResolvingAttempt(
             sourceModel,
             mappingMethod,
@@ -174,7 +176,7 @@ public class MappingResolverImpl implements MappingResolver {
         private final SelectionCriteria selectionCriteria;
         private final SourceRHS sourceRHS;
         private final FormattingParameters formattingParameters;
-        private final AnnotationMirror positionHint;
+        private final AnnotationDescriptor positionHint;
         private final Supplier<Assignment> forger;
         private final List<BuiltInMethod> builtIns;
         private final FormattingMessager messager;
@@ -189,7 +191,7 @@ public class MappingResolverImpl implements MappingResolver {
         private ResolvingAttempt(List<Method> sourceModel, Method mappingMethod, ForgedMethodHistory description,
                                  FormattingParameters formattingParameters, SourceRHS sourceRHS,
                                  SelectionCriteria criteria,
-                                 AnnotationMirror positionHint,
+                                 AnnotationDescriptor positionHint,
                                  Supplier<Assignment> forger,
                                  List<BuiltInMethod> builtIns,
                                  FormattingMessager messager, boolean verboseLogging) {
@@ -213,7 +215,9 @@ public class MappingResolverImpl implements MappingResolver {
         private <T extends Method> List<T> filterPossibleCandidateMethods(List<T> candidateMethods, T mappingMethod) {
             List<T> result = new ArrayList<>( candidateMethods.size() );
             for ( T candidate : candidateMethods ) {
-                if ( isCandidateForMapping( candidate ) && isNotSelfOrSelfAllowed( mappingMethod, candidate )) {
+                boolean candidateForMapping = isCandidateForMapping( candidate );
+                boolean selfAllowed = isNotSelfOrSelfAllowed( mappingMethod, candidate );
+                if ( candidateForMapping && selfAllowed ) {
                     result.add( candidate );
                 }
             }
@@ -341,18 +345,20 @@ public class MappingResolverImpl implements MappingResolver {
         private void printQualifierMessage(SelectionCriteria selectionCriteria ) {
 
             List<String> annotations = selectionCriteria.getQualifiers().stream()
-                .filter( DeclaredType.class::isInstance )
-                .map( DeclaredType.class::cast )
-                .map( DeclaredType::asElement )
-                .map( Element::getSimpleName )
-                .map( Name::toString )
-                .map( a -> "@" + a )
+                .map( descriptor -> descriptor.typeElement()
+                    .map( TypeElementDescriptor::simpleName )
+                    .map( NameDescriptor::content )
+                    .orElseGet( () -> {
+                        String displayName = descriptor.displayName();
+                        return displayName != null ? displayName : descriptor.id();
+                    } ) )
+                .map( name -> "@" + name )
                 .collect( Collectors.toList() );
             List<String> names = selectionCriteria.getQualifiedByNames();
 
             if ( !annotations.isEmpty() && !names.isEmpty() ) {
                 messager.printMessage(
-                    mappingMethod.getExecutable(),
+                    mappingMethod.getExecutableDescriptor(),
                     positionHint,
                     Message.GENERAL_NO_QUALIFYING_METHOD_COMBINED,
                     Strings.join( names, MessageConstants.AND ),
@@ -361,7 +367,7 @@ public class MappingResolverImpl implements MappingResolver {
             }
             else if ( !annotations.isEmpty() ) {
                 messager.printMessage(
-                    mappingMethod.getExecutable(),
+                    mappingMethod.getExecutableDescriptor(),
                     positionHint,
                     Message.GENERAL_NO_QUALIFYING_METHOD_ANNOTATION,
                     Strings.join( annotations, MessageConstants.AND )
@@ -369,7 +375,7 @@ public class MappingResolverImpl implements MappingResolver {
             }
             else  {
                 messager.printMessage(
-                    mappingMethod.getExecutable(),
+                    mappingMethod.getExecutableDescriptor(),
                     positionHint,
                     Message.GENERAL_NO_QUALIFYING_METHOD_NAMED,
                     Strings.join( names, MessageConstants.AND )
@@ -514,7 +520,7 @@ public class MappingResolverImpl implements MappingResolver {
 
                 if ( sourceRHS.getSourceErrorMessagePart() != null ) {
                     messager.printMessage(
-                        mappingMethod.getExecutable(),
+                        mappingMethod.getExecutableDescriptor(),
                         positionHint,
                         Message.GENERAL_AMBIGUOUS_MAPPING_METHOD,
                         descriptionStr,
@@ -524,7 +530,7 @@ public class MappingResolverImpl implements MappingResolver {
                 }
                 else {
                     messager.printMessage(
-                        mappingMethod.getExecutable(),
+                        mappingMethod.getExecutableDescriptor(),
                         positionHint,
                         Message.GENERAL_AMBIGUOUS_FACTORY_METHOD,
                         target.describe(),
@@ -598,42 +604,28 @@ public class MappingResolverImpl implements MappingResolver {
                 return false;
             }
 
-            List<ExecutableElement> targetTypeConstructors = ElementFilter.constructorsIn(
-                targetType.getTypeElement().getEnclosedElements() );
+            TypeElementDescriptor targetDescriptor = targetType.getTypeDescriptor() != null
+                ? targetType.getTypeDescriptor().typeElement().orElse( null )
+                : null;
+            List<ExecutableDescriptor> constructors = targetDescriptor != null
+                ? langElements.constructors( targetDescriptor )
+                : java.util.Collections.emptyList();
 
-            for ( ExecutableElement constructor : targetTypeConstructors ) {
-                if ( constructor.getParameters().size() != 1 ) {
+            for ( ExecutableDescriptor constructor : constructors ) {
+                if ( constructor.kind() != LangElementKind.CONSTRUCTOR ) {
+                    continue;
+                }
+                if ( constructor.parameters().size() != 1 ) {
                     continue;
                 }
 
-                // get the constructor resolved against the type arguments of specific target type
-                ExecutableType typedConstructor = (ExecutableType) typeUtils.asMemberOf(
-                    (DeclaredType) targetType.getTypeMirror(),
-                    constructor
-                );
-
-                TypeMirror parameterType = Collections.first( typedConstructor.getParameterTypes() );
-                if ( parameterType.getKind() == TypeKind.DECLARED ) {
-                    // replace any possible type bounds in the type parameters of the parameter types, as in JDK super
-                    // type bounds in the arguments are returned from asMemberOf with "? extends ? super XX"
-                    //
-                    // It might also be enough to just remove "? super" from type parameters of
-                    // targetType.getTypeMirror() in case we're in JDK. And that would be something that should be
-                    // handled in SpecificCompilerWorkarounds...
-
-                    DeclaredType p = (DeclaredType) parameterType;
-                    List<TypeMirror> typeArguments = new ArrayList<>( p.getTypeArguments().size() );
-
-                    for ( TypeMirror tArg : p.getTypeArguments() ) {
-                        typeArguments.add( typeFactory.getTypeBound( tArg ) );
-                    }
-                    parameterType = typeUtils.getDeclaredType(
-                        (TypeElement) p.asElement(),
-                        typeArguments.toArray( new TypeMirror[typeArguments.size()] )
-                    );
+                List<Parameter> parameters = typeFactory.getParameters( targetType, constructor );
+                if ( parameters.size() != 1 ) {
+                    continue;
                 }
 
-                if ( typeUtils.isAssignable( sourceType.getTypeMirror(), parameterType ) ) {
+                Type parameterType = parameters.get( 0 ).getType();
+                if ( parameterType != null && sourceType.isAssignableTo( parameterType ) ) {
                     return true;
                 }
             }
@@ -687,7 +679,7 @@ public class MappingResolverImpl implements MappingResolver {
         private void report(FormattingMessager messager, ResolvingAttempt attempt, Message message) {
 
             messager.printMessage(
-                attempt.mappingMethod.getExecutable(),
+                attempt.mappingMethod.getExecutableDescriptor(),
                 attempt.positionHint,
                 message,
                 attempt.sourceRHS.getSourceErrorMessagePart(),
@@ -893,7 +885,7 @@ public class MappingResolverImpl implements MappingResolver {
                                             .append( e.getKey().getMethod().describe() )
                                             .append( "; " ) );
             attempt.messager.printMessage(
-                attempt.mappingMethod.getExecutable(),
+                attempt.mappingMethod.getExecutableDescriptor(),
                 attempt.positionHint,
                 Message.GENERAL_AMBIGUOUS_MAPPING_METHODY_METHODX,
                 attempt.sourceRHS.getSourceType().getName() + " " + attempt.sourceRHS.getSourceParameterName(),
@@ -1007,7 +999,7 @@ public class MappingResolverImpl implements MappingResolver {
                                                .append( e.getKey().shortName() )
                                                .append( "; " ) );
             attempt.messager.printMessage(
-                attempt.mappingMethod.getExecutable(),
+                attempt.mappingMethod.getExecutableDescriptor(),
                 attempt.positionHint,
                 Message.GENERAL_AMBIGUOUS_MAPPING_METHODY_CONVERSIONX,
                 attempt.sourceRHS.getSourceType().getName() + " " + attempt.sourceRHS.getSourceParameterName(),
@@ -1124,7 +1116,7 @@ public class MappingResolverImpl implements MappingResolver {
                                                .append( attempt.join( e.getValue() ) )
                                                .append( "; " ) );
             attempt.messager.printMessage(
-                attempt.mappingMethod.getExecutable(),
+                attempt.mappingMethod.getExecutableDescriptor(),
                 attempt.positionHint,
                 Message.GENERAL_AMBIGUOUS_MAPPING_CONVERSIONY_METHODX,
                 attempt.sourceRHS.getSourceType().getName() + " " + attempt.sourceRHS.getSourceParameterName(),
@@ -1132,5 +1124,4 @@ public class MappingResolverImpl implements MappingResolver {
                 result.toString() );
         }
     }
-
 }

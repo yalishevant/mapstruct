@@ -5,15 +5,10 @@
  */
 package org.mapstruct.ap.internal.processor;
 
-import java.io.IOException;
-
-import javax.annotation.processing.Filer;
-import javax.lang.model.element.TypeElement;
-import javax.tools.JavaFileObject;
-
+import org.mapstruct.ap.internal.codegen.GeneratedFile;
 import org.mapstruct.ap.internal.model.GeneratedType;
 import org.mapstruct.ap.internal.model.Mapper;
-import org.mapstruct.ap.internal.writer.ModelWriter;
+import org.mapstruct.ap.descriptor.TypeElementDescriptor;
 
 /**
  * A {@link ModelElementProcessor} which creates a Java source file representing
@@ -24,42 +19,44 @@ import org.mapstruct.ap.internal.writer.ModelWriter;
 public class MapperRenderingProcessor implements ModelElementProcessor<Mapper, Mapper> {
 
     @Override
-    public Mapper process(ProcessorContext context, TypeElement mapperTypeElement, Mapper mapper) {
+    public Mapper process(ProcessorContext context, TypeElementDescriptor mapperDescriptor, Mapper mapper) {
+        if ( mapper == null ) {
+            return null;
+        }
         if ( !context.isErroneous() ) {
-            writeToSourceFile( context.getFiler(), mapper, mapperTypeElement );
+            writeToSourceFile( context, mapper, mapperDescriptor );
             return mapper;
         }
 
         return null;
     }
 
-    private void writeToSourceFile(Filer filer, Mapper model, TypeElement originatingElement) {
-        ModelWriter modelWriter = new ModelWriter();
-
-        createSourceFile( model, modelWriter, filer, originatingElement );
-
+    private void writeToSourceFile(ProcessorContext context,
+                                   Mapper model,
+                                   TypeElementDescriptor originatingDescriptor) {
+        createSourceFile( context, model, originatingDescriptor );
         if ( model.getDecorator() != null ) {
-            createSourceFile( model.getDecorator(), modelWriter, filer, originatingElement );
+            createSourceFile( context, model.getDecorator(), originatingDescriptor );
         }
     }
 
-    private void createSourceFile(GeneratedType model, ModelWriter modelWriter, Filer filer,
-                                  TypeElement originatingElement) {
+    private void createSourceFile(ProcessorContext context, GeneratedType model,
+                                  TypeElementDescriptor originatingDescriptor) {
         String fileName = "";
         if ( model.hasPackageName() ) {
             fileName += model.getPackageName() + ".";
         }
         fileName += model.getName();
 
-        JavaFileObject sourceFile;
-        try {
-            sourceFile = filer.createSourceFile( fileName, originatingElement );
-        }
-        catch ( IOException e ) {
-            throw new RuntimeException( e );
-        }
+        GeneratedFile generatedFile = GeneratedFile.javaSource(
+            model.getPackageName(),
+            model.getName(),
+            model
+        )
+            .addOriginatingElement( originatingDescriptor )
+            .build();
 
-        modelWriter.writeModel( sourceFile, model );
+        context.getCodeGenerator().generate( generatedFile, context.getCodeGenerationContext() );
     }
 
     @Override

@@ -8,24 +8,22 @@ package org.mapstruct.ap.internal.processor;
 import java.util.Map;
 import javax.tools.Diagnostic.Kind;
 
-import javax.annotation.processing.Filer;
-import javax.lang.model.element.TypeElement;
-
+import org.mapstruct.ap.internal.codegen.CodeGenerationContext;
+import org.mapstruct.ap.internal.codegen.CodeGenerator;
 import org.mapstruct.ap.internal.model.common.TypeFactory;
 import org.mapstruct.ap.internal.option.Options;
 import org.mapstruct.ap.internal.util.AccessorNamingUtils;
 import org.mapstruct.ap.internal.util.FormattingMessager;
+import org.mapstruct.ap.internal.langmodel.api.DescriptorUnwrapper;
 import org.mapstruct.ap.internal.version.VersionInformation;
 import org.mapstruct.ap.internal.langmodel.LangModelContext;
-import org.mapstruct.ap.internal.langmodel.api.DescriptorUnwrapper;
-import org.mapstruct.ap.internal.util.ElementUtils;
-import org.mapstruct.ap.internal.util.TypeUtils;
+import org.mapstruct.ap.internal.langmodel.descriptor.TypeElementDescriptor;
 import org.mapstruct.ap.spi.EnumMappingStrategy;
 import org.mapstruct.ap.spi.EnumTransformationStrategy;
 
 /**
  * A processor which performs one task of the mapper generation, e.g. retrieving
- * methods from the source {@link TypeElement}, performing validity checks or
+ * methods from the source {@link TypeElementDescriptor}, performing validity checks or
  * generating the output source file.
  *
  * @param <P> The parameter type processed by this processor
@@ -37,19 +35,18 @@ public interface ModelElementProcessor<P, R> {
 
     /**
      * Context object passed to
-     * {@link ModelElementProcessor#process(ProcessorContext, TypeElement, Object)}
-     * providing access to common infrastructure objects such as {@link TypeUtils}
-     * etc.
+     * {@link ModelElementProcessor#process(ProcessorContext, TypeElementDescriptor, Object)}
+     * providing access to common infrastructure objects such as {@link LangModelContext}.
      *
      * @author Gunnar Morling
      */
     public interface ProcessorContext {
 
-        Filer getFiler();
+        CodeGenerator getCodeGenerator();
 
-        TypeUtils getTypeUtils();
+        CodeGenerationContext getCodeGenerationContext();
 
-        ElementUtils getElementUtils();
+        LangModelContext<?, ?, ?, ?> getLangModelContext();
 
         TypeFactory getTypeFactory();
 
@@ -64,13 +61,6 @@ public interface ModelElementProcessor<P, R> {
         Options getOptions();
 
         VersionInformation getVersionInformation();
-
-        /**
-         * Provides access to the active {@link LangModelContext}.
-         *
-         * @return language model context for the mapper currently being processed
-         */
-        LangModelContext getLangModelContext();
 
         /**
          * Provides backend-specific conversions for descriptor unwrapping.
@@ -95,11 +85,11 @@ public interface ModelElementProcessor<P, R> {
      * one form or another.
      *
      * @param context Context providing common infrastructure objects.
-     * @param mapperTypeElement The original type element from which the given mapper object
+     * @param mapperTypeDescriptor The mapper descriptor from which the given mapper object
      * is derived.
      * @param sourceModel The current representation of the bean mapper. Never
      * {@code null} (the very first processor receives the original
-     * type element).
+     * type descriptor).
      *
      * @return The resulting representation of the bean mapper; may be the same
      *         as the source representation, e.g. if a given implementation just
@@ -107,7 +97,7 @@ public interface ModelElementProcessor<P, R> {
      *         return {@code null} except for the very last processor which
      *         generates the resulting Java source file.
      */
-    R process(ProcessorContext context, TypeElement mapperTypeElement, P sourceModel);
+    R process(ProcessorContext context, TypeElementDescriptor mapperTypeDescriptor, P sourceModel);
 
     /**
      * Returns the priority value of this processor which must be between 1

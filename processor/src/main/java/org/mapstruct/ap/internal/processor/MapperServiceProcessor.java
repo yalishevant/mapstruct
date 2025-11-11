@@ -5,12 +5,7 @@
  */
 package org.mapstruct.ap.internal.processor;
 
-import java.io.IOException;
-import javax.annotation.processing.Filer;
-import javax.lang.model.element.TypeElement;
-import javax.tools.FileObject;
-import javax.tools.StandardLocation;
-
+import org.mapstruct.ap.internal.codegen.GeneratedFile;
 import org.mapstruct.ap.internal.gem.MappingConstantsGem;
 import org.mapstruct.ap.internal.model.Decorator;
 import org.mapstruct.ap.internal.model.GeneratedType;
@@ -18,7 +13,9 @@ import org.mapstruct.ap.internal.model.Mapper;
 import org.mapstruct.ap.internal.model.ServicesEntry;
 import org.mapstruct.ap.internal.model.common.Type;
 import org.mapstruct.ap.internal.model.source.MapperOptions;
-import org.mapstruct.ap.internal.writer.ModelWriter;
+import org.mapstruct.ap.langmodel.LangModelContext;
+import org.mapstruct.ap.langmodel.MapperAnnotation;
+import org.mapstruct.ap.descriptor.TypeElementDescriptor;
 
 /**
  * A {@link ModelElementProcessor} which creates files in the {@code META-INF/services}
@@ -31,21 +28,31 @@ import org.mapstruct.ap.internal.writer.ModelWriter;
  */
 public class MapperServiceProcessor  implements ModelElementProcessor<Mapper, Void> {
     @Override
-    public Void process(ProcessorContext context, TypeElement mapperTypeElement, Mapper mapper) {
+    public Void process(ProcessorContext context, TypeElementDescriptor mapperDescriptor, Mapper mapper) {
+        if ( mapper == null ) {
+            return null;
+        }
         boolean spiGenerationNeeded;
 
         if ( context.getOptions().isAlwaysGenerateSpi() ) {
             spiGenerationNeeded = true;
         }
         else {
-            String componentModel =
-                MapperOptions.getInstanceOn( mapperTypeElement, context.getOptions() ).componentModel( );
+            LangModelContext<?, ?, ?, ?> langModelContext = context.getLangModelContext();
+            MapperAnnotation mapperAnnotation = langModelContext.elementQuery().mapperAnnotation( mapperDescriptor );
+            MapperOptions mapperOptions = MapperOptions.fromAnnotation(
+                mapperAnnotation,
+                mapperDescriptor,
+                context.getOptions(),
+                langModelContext
+            );
+            String componentModel = mapperOptions.componentModel();
 
             spiGenerationNeeded = MappingConstantsGem.ComponentModelGem.DEFAULT.equals( componentModel );
         }
 
         if ( !context.isErroneous() && spiGenerationNeeded && mapper.hasCustomImplementation() ) {
-            writeToSourceFile( context.getFiler(), mapper );
+            writeToSourceFile( context, mapper );
         }
         return null;
     }
@@ -55,11 +62,9 @@ public class MapperServiceProcessor  implements ModelElementProcessor<Mapper, Vo
         return 10000;
     }
 
-    private void writeToSourceFile(Filer filer, Mapper model) {
-        ModelWriter modelWriter = new ModelWriter();
+    private void writeToSourceFile(ProcessorContext context, Mapper model) {
         ServicesEntry servicesEntry = getServicesEntry( model );
-
-        createSourceFile( servicesEntry, modelWriter, filer );
+        createSourceFile( context, servicesEntry );
     }
 
     private ServicesEntry getServicesEntry(Mapper mapper) {
@@ -82,17 +87,14 @@ public class MapperServiceProcessor  implements ModelElementProcessor<Mapper, Vo
                                  model.getPackageName(), model.getName());
     }
 
-    private void createSourceFile(ServicesEntry model, ModelWriter modelWriter, Filer filer) {
+    private void createSourceFile(ProcessorContext context, ServicesEntry model) {
         String fileName = model.getPackageName() + "." + model.getName();
 
-        FileObject sourceFile;
-        try {
-            sourceFile = filer.createResource( StandardLocation.CLASS_OUTPUT, "", "META-INF/services/" + fileName );
-        }
-        catch ( IOException e ) {
-            throw new RuntimeException( e );
-        }
+        GeneratedFile generatedFile = GeneratedFile.resource(
+            "META-INF/services/" + fileName,
+            model
+        ).build();
 
-        modelWriter.writeModel( sourceFile, model );
+        context.getCodeGenerator().generate( generatedFile, context.getCodeGenerationContext() );
     }
 }

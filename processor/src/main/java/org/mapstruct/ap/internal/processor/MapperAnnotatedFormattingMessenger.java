@@ -7,35 +7,34 @@ package org.mapstruct.ap.internal.processor;
 
 import java.util.Objects;
 import java.util.stream.Collectors;
-import javax.lang.model.element.AnnotationMirror;
-import javax.lang.model.element.AnnotationValue;
-import javax.lang.model.element.Element;
-import javax.lang.model.element.ExecutableElement;
-import javax.lang.model.element.TypeElement;
-import javax.lang.model.element.VariableElement;
-import javax.lang.model.type.TypeMirror;
 import javax.tools.Diagnostic.Kind;
 
+import org.mapstruct.ap.descriptor.AnnotationDescriptor;
+import org.mapstruct.ap.descriptor.AnnotationValueDescriptor;
+import org.mapstruct.ap.descriptor.ElementDescriptor;
+import org.mapstruct.ap.descriptor.ExecutableDescriptor;
+import org.mapstruct.ap.descriptor.ParameterDescriptor;
+import org.mapstruct.ap.descriptor.TypeElementDescriptor;
 import org.mapstruct.ap.internal.util.FormattingMessager;
 import org.mapstruct.ap.internal.util.Message;
-import org.mapstruct.ap.internal.util.TypeUtils;
 
 /**
  * Handles redirection of errors/warnings so that they're shown on the mapper instead of hidden on a superclass.
+ * <p>
+ * Note: this messenger bridges MapStruct diagnostics to the JSR 269 {@link javax.annotation.processing.Messager}
+ * API, keeping descriptor-level metadata aligned with compiler reporting.
  *
  * @author Ben Zegveld
  */
 public class MapperAnnotatedFormattingMessenger implements FormattingMessager {
 
-    private FormattingMessager delegateMessager;
-    private TypeElement mapperTypeElement;
-    private TypeUtils typeUtils;
+    private final FormattingMessager delegateMessager;
+    private final TypeElementDescriptor mapperTypeDescriptor;
 
-    public MapperAnnotatedFormattingMessenger(FormattingMessager delegateMessager, TypeElement mapperTypeElement,
-                                              TypeUtils typeUtils) {
-        this.delegateMessager = delegateMessager;
-        this.mapperTypeElement = mapperTypeElement;
-        this.typeUtils = typeUtils;
+    public MapperAnnotatedFormattingMessenger(FormattingMessager delegateMessager,
+                                              TypeElementDescriptor mapperTypeDescriptor) {
+        this.delegateMessager = Objects.requireNonNull( delegateMessager, "delegateMessager" );
+        this.mapperTypeDescriptor = mapperTypeDescriptor;
     }
 
     @Override
@@ -44,33 +43,27 @@ public class MapperAnnotatedFormattingMessenger implements FormattingMessager {
     }
 
     @Override
-    public void printMessage(Element e, Message msg, Object... args) {
-        delegateMessager
-                        .printMessage(
-                            determineDelegationElement( e ),
-                            determineDelegationMessage( e, msg ),
-                            determineDelegationArguments( e, msg, args ) );
+    public void printMessage(ElementDescriptor element, Message msg, Object... args) {
+        delegateMessager.printMessage(
+            determineDelegationElement( element ),
+            determineDelegationMessage( element, msg ),
+            determineDelegationArguments( element, msg, args )
+        );
     }
 
     @Override
-    public void printMessage(Element e, AnnotationMirror a, Message msg, Object... args) {
-        delegateMessager
-                        .printMessage(
-                            determineDelegationElement( e ),
-                            a,
-                            determineDelegationMessage( e, msg ),
-                            determineDelegationArguments( e, msg, args ) );
-    }
-
-    @Override
-    public void printMessage(Element e, AnnotationMirror a, AnnotationValue v, Message msg, Object... args) {
-        delegateMessager
-                        .printMessage(
-                            determineDelegationElement( e ),
-                            a,
-                            v,
-                            determineDelegationMessage( e, msg ),
-                            determineDelegationArguments( e, msg, args ) );
+    public void printMessage(ElementDescriptor element,
+                             AnnotationDescriptor annotation,
+                             AnnotationValueDescriptor value,
+                             Message msg,
+                             Object... args) {
+        delegateMessager.printMessage(
+            determineDelegationElement( element ),
+            annotation,
+            value,
+            determineDelegationMessage( element, msg ),
+            determineDelegationArguments( element, msg, args )
+        );
     }
 
     @Override
@@ -83,47 +76,57 @@ public class MapperAnnotatedFormattingMessenger implements FormattingMessager {
         return delegateMessager.isErroneous();
     }
 
-    private Object[] determineDelegationArguments(Element e, Message msg, Object[] args) {
-        if ( methodInMapperClass( e ) ) {
+    private Object[] determineDelegationArguments(ElementDescriptor element, Message msg, Object[] args) {
+        if ( methodInMapperClass( element ) ) {
+            return args;
+        }
+        if ( element == null || element.enclosingElement().isEmpty() ) {
             return args;
         }
         String originalMessage = String.format( msg.getDescription(), args );
-        return new Object[] { originalMessage, constructMethod( e ), e.getEnclosingElement().getSimpleName() };
+        return new Object[] {
+            originalMessage,
+            constructMethod( element ),
+            element.enclosingElement()
+                .map( enclosing -> enclosing.simpleName().content() )
+                .orElse( "" )
+        };
     }
 
     /**
      * ExecutableElement.toString() has different values depending on the compiler. Constructing the method itself
      * manually will ensure that the message is always traceable to it's source.
      */
-    private String constructMethod(Element e) {
-        if ( e instanceof ExecutableElement ) {
-            ExecutableElement ee = (ExecutableElement) e;
+    private String constructMethod(ElementDescriptor element) {
+        if ( element instanceof ExecutableDescriptor ) {
+            ExecutableDescriptor executableElement = (ExecutableDescriptor) element;
             StringBuilder method = new StringBuilder();
-            method.append( typeMirrorToString( ee.getReturnType() ) );
-            method.append( " " );
-            method.append( ee.getSimpleName() );
-            method.append( "(" );
-            method.append( ee.getParameters()
-                    .stream()
-                    .map( this::parameterToString )
-                    .collect( Collectors.joining( ", " ) ) );
-            method.append( ")" );
+            method.append( executableElement.returnType() != null
+                ? executableElement.returnType().displayName()
+                : "void" );
+            method.append( ' ' );
+            method.append( executableElement.simpleName().content() );
+            method.append( '(' );
+            method.append( executableElement.parameters()
+                .stream()
+                .map( this::parameterToString )
+                .collect( Collectors.joining( ", " ) ) );
+            method.append( ')' );
             return method.toString();
         }
-        return e.toString();
+        return element != null ? element.simpleName().content() : "";
     }
 
-    private String parameterToString(VariableElement element) {
-        return typeMirrorToString( element.asType() ) + " " + element.getSimpleName();
+    private String parameterToString(ParameterDescriptor parameter) {
+        String typeName = parameter.type().displayName();
+        if ( parameter.isVarArgs() && typeName.endsWith( "[]" ) ) {
+            typeName = typeName.substring( 0, typeName.length() - 2 ) + "...";
+        }
+        return typeName + " " + parameter.name();
     }
 
-    private String typeMirrorToString(TypeMirror type) {
-        Element element = typeUtils.asElement( type );
-        return element != null ? element.getSimpleName().toString() : Objects.toString( type );
-    }
-
-    private Message determineDelegationMessage(Element e, Message msg) {
-        if ( methodInMapperClass( e ) ) {
+    private Message determineDelegationMessage(ElementDescriptor element, Message msg) {
+        if ( methodInMapperClass( element ) ) {
             return msg;
         }
         if ( msg.getDiagnosticKind() == Kind.ERROR ) {
@@ -132,12 +135,23 @@ public class MapperAnnotatedFormattingMessenger implements FormattingMessager {
         return Message.MESSAGE_MOVED_TO_MAPPER_WARNING;
     }
 
-    private Element determineDelegationElement(Element e) {
-        return methodInMapperClass( e ) ? e : mapperTypeElement;
+    private ElementDescriptor determineDelegationElement(ElementDescriptor element) {
+        if ( methodInMapperClass( element ) ) {
+            return element;
+        }
+        return mapperTypeDescriptor != null ? mapperTypeDescriptor : element;
     }
 
-    private boolean methodInMapperClass(Element e) {
-        return mapperTypeElement == null || e.equals( mapperTypeElement )
-            || e.getEnclosingElement().equals( mapperTypeElement );
+    private boolean methodInMapperClass(ElementDescriptor element) {
+        if ( mapperTypeDescriptor == null || element == null ) {
+            return true;
+        }
+        if ( element.id().equals( mapperTypeDescriptor.id() ) ) {
+            return true;
+        }
+        return element.enclosingElement()
+            .map( enclosing -> enclosing.id().equals( mapperTypeDescriptor.id() ) )
+            .orElse( false );
     }
+
 }

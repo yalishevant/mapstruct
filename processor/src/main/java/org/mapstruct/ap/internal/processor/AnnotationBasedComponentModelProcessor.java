@@ -12,8 +12,6 @@ import java.util.List;
 import java.util.ListIterator;
 import java.util.Set;
 import java.util.stream.Collectors;
-import javax.lang.model.element.TypeElement;
-
 import org.mapstruct.ap.internal.gem.InjectionStrategyGem;
 import org.mapstruct.ap.internal.model.AnnotatedConstructor;
 import org.mapstruct.ap.internal.model.AnnotatedSetter;
@@ -26,6 +24,9 @@ import org.mapstruct.ap.internal.model.MapperReference;
 import org.mapstruct.ap.internal.model.common.Type;
 import org.mapstruct.ap.internal.model.common.TypeFactory;
 import org.mapstruct.ap.internal.model.source.MapperOptions;
+import org.mapstruct.ap.langmodel.LangModelContext;
+import org.mapstruct.ap.langmodel.MapperAnnotation;
+import org.mapstruct.ap.descriptor.TypeElementDescriptor;
 
 /**
  * An {@link ModelElementProcessor} which converts the given {@link Mapper} object into an annotation based component
@@ -38,12 +39,29 @@ import org.mapstruct.ap.internal.model.source.MapperOptions;
 public abstract class AnnotationBasedComponentModelProcessor implements ModelElementProcessor<Mapper, Mapper> {
 
     private TypeFactory typeFactory;
+    private ProcessorContext processorContext;
 
     @Override
-    public Mapper process(ProcessorContext context, TypeElement mapperTypeElement, Mapper mapper) {
+    public Mapper process(ProcessorContext context, TypeElementDescriptor mapperDescriptor, Mapper mapper) {
+        if ( mapper == null ) {
+            return null;
+        }
         this.typeFactory = context.getTypeFactory();
+        this.processorContext = context;
 
-        MapperOptions mapperAnnotation = MapperOptions.getInstanceOn( mapperTypeElement, context.getOptions() );
+        LangModelContext<?, ?, ?, ?> langModelContext = context.getLangModelContext();
+        MapperAnnotation mapperAnnotationDescriptor = langModelContext.elementQuery().mapperAnnotation(
+            mapperDescriptor );
+        MapperOptions mapperAnnotation = MapperOptions.fromAnnotation(
+            mapperAnnotationDescriptor,
+            mapperDescriptor,
+            context.getOptions(),
+            langModelContext
+        );
+
+        if ( !mapperAnnotation.isValid() ) {
+            return mapper;
+        }
 
         String componentModel = mapperAnnotation.componentModel();
         InjectionStrategyGem injectionStrategy = mapperAnnotation.getInjectionStrategy();
@@ -102,6 +120,10 @@ public abstract class AnnotationBasedComponentModelProcessor implements ModelEle
             }
         }
         decorator.setFields( replacement );
+    }
+
+    protected ProcessorContext getProcessorContext() {
+        return processorContext;
     }
 
     private List<MapperReference> toMapperReferences(List<Field> fields) {

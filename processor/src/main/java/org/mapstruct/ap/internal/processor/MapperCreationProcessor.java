@@ -6,7 +6,6 @@
 package org.mapstruct.ap.internal.processor;
 
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.Collections;
 import java.util.LinkedHashSet;
 import java.util.LinkedList;
@@ -14,22 +13,13 @@ import java.util.List;
 import java.util.Set;
 import java.util.SortedSet;
 import java.util.TreeSet;
-import javax.lang.model.element.AnnotationMirror;
-import javax.lang.model.element.Element;
-import javax.lang.model.element.ElementKind;
-import javax.lang.model.element.ExecutableElement;
-import javax.lang.model.element.Modifier;
-import javax.lang.model.element.TypeElement;
-import javax.lang.model.type.TypeKind;
-import javax.lang.model.type.TypeMirror;
-import javax.lang.model.util.ElementFilter;
+import java.util.stream.Collectors;
 
 import org.mapstruct.ap.internal.gem.BuilderGem;
 import org.mapstruct.ap.internal.gem.DecoratedWithGem;
 import org.mapstruct.ap.internal.gem.InheritConfigurationGem;
 import org.mapstruct.ap.internal.gem.InheritInverseConfigurationGem;
 import org.mapstruct.ap.internal.gem.JavadocGem;
-import org.mapstruct.ap.internal.gem.MapperGem;
 import org.mapstruct.ap.internal.gem.MappingInheritanceStrategyGem;
 import org.mapstruct.ap.internal.gem.NullValueMappingStrategyGem;
 import org.mapstruct.ap.internal.model.AdditionalAnnotationsBuilder;
@@ -62,16 +52,30 @@ import org.mapstruct.ap.internal.model.source.SourceMethod;
 import org.mapstruct.ap.internal.option.Options;
 import org.mapstruct.ap.internal.processor.creation.MappingResolverImpl;
 import org.mapstruct.ap.internal.util.AccessorNamingUtils;
-import org.mapstruct.ap.internal.util.ElementUtils;
+import org.mapstruct.ap.internal.util.AnnotationDescriptorUtils;
 import org.mapstruct.ap.internal.util.FormattingMessager;
 import org.mapstruct.ap.internal.util.Message;
 import org.mapstruct.ap.internal.util.Strings;
-import org.mapstruct.ap.internal.util.TypeUtils;
+import org.mapstruct.ap.descriptor.AnnotationDescriptor;
+import org.mapstruct.ap.langmodel.AnnotationGemFactory;
+import org.mapstruct.ap.langmodel.AnnotationGemsCapability;
+import org.mapstruct.ap.descriptor.ExecutableDescriptor;
+import org.mapstruct.ap.internal.langmodel.MissingLangModelCapabilityException;
+import org.mapstruct.ap.descriptor.LangModifier;
+import org.mapstruct.ap.langmodel.LangDescriptorFactory;
+import org.mapstruct.ap.descriptor.LangElementKind;
+import org.mapstruct.ap.langmodel.api.LangElements;
+import org.mapstruct.ap.langmodel.LangModelContext;
+import org.mapstruct.ap.langmodel.LangModelElementQuery;
+import org.mapstruct.ap.langmodel.LangModelTypeSystem;
+import org.mapstruct.ap.langmodel.api.LangTypes;
+import org.mapstruct.ap.descriptor.FieldDescriptor;
+import org.mapstruct.ap.descriptor.ParameterDescriptor;
+import org.mapstruct.ap.descriptor.TypeDescriptor;
+import org.mapstruct.ap.descriptor.TypeElementDescriptor;
+import org.mapstruct.ap.langmodel.MapperAnnotation;
 import org.mapstruct.ap.internal.version.VersionInformation;
 
-import static javax.lang.model.element.Modifier.FINAL;
-import static javax.lang.model.element.Modifier.PUBLIC;
-import static javax.lang.model.element.Modifier.STATIC;
 import static org.mapstruct.ap.internal.model.SupportingConstructorFragment.addAllFragmentsIn;
 import static org.mapstruct.ap.internal.model.SupportingField.addAllFieldsIn;
 import static org.mapstruct.ap.internal.util.Collections.first;
@@ -85,40 +89,59 @@ import static org.mapstruct.ap.internal.util.Collections.join;
  */
 public class MapperCreationProcessor implements ModelElementProcessor<List<SourceMethod>, Mapper> {
 
-    /** Modifiers for public "constant" e.g. "public static final" */
-    private static final List<Modifier> PUBLIC_CONSTANT_MODIFIERS = Arrays.asList( PUBLIC, STATIC, FINAL );
-
-    private ElementUtils elementUtils;
-    private TypeUtils typeUtils;
+    private LangModelContext<?, ?, ?, ?> langModelContext;
+    private LangModelElementQuery langElementQuery;
+    private LangElements langElements;
+    private LangTypes langTypes;
+    private LangDescriptorFactory<Object, Object, Object, Object> descriptorFactory;
+    private AnnotationGemFactory annotationGems;
     private FormattingMessager messager;
     private Options options;
     private VersionInformation versionInformation;
     private TypeFactory typeFactory;
     private AccessorNamingUtils accessorNaming;
     private MappingBuilderContext mappingContext;
-
     private AdditionalAnnotationsBuilder additionalAnnotationsBuilder;
 
     @Override
-    public Mapper process(ProcessorContext context, TypeElement mapperTypeElement, List<SourceMethod> sourceModel) {
-        this.elementUtils = context.getElementUtils();
-        this.typeUtils = context.getTypeUtils();
+    public Mapper process(ProcessorContext context,
+                          TypeElementDescriptor mapperDescriptor,
+                          List<SourceMethod> sourceModel) {
+        this.langModelContext = context.getLangModelContext();
+        LangModelTypeSystem<?, ?, ?, ?> typeSystem = langModelContext.typeSystem();
+        this.langElementQuery = langModelContext.elementQuery();
+        AnnotationGemsCapability annotationGemsCapability = langModelContext.optional( AnnotationGemsCapability.class )
+            .orElseThrow( () -> MissingLangModelCapabilityException.required( AnnotationGemsCapability.class ) );
+        this.annotationGems = annotationGemsCapability.annotationGems();
+        this.langElements = langElementQuery.elements();
+        this.langTypes = typeSystem.types();
+        @SuppressWarnings("unchecked")
+        LangDescriptorFactory<Object, Object, Object, Object> descriptorFactory =
+            (LangDescriptorFactory<Object, Object, Object, Object>) typeSystem.descriptors();
+        this.descriptorFactory = descriptorFactory;
         this.messager =
-            new MapperAnnotatedFormattingMessenger( context.getMessager(), mapperTypeElement, context.getTypeUtils() );
+            new MapperAnnotatedFormattingMessenger(
+                context.getMessager(),
+                mapperDescriptor
+            );
         this.options = context.getOptions();
         this.versionInformation = context.getVersionInformation();
         this.typeFactory = context.getTypeFactory();
         this.accessorNaming = context.getAccessorNaming();
-        additionalAnnotationsBuilder =
-            new AdditionalAnnotationsBuilder( elementUtils, typeFactory, messager );
+        additionalAnnotationsBuilder = new AdditionalAnnotationsBuilder( typeFactory, messager );
 
-        MapperOptions mapperOptions = MapperOptions.getInstanceOn( mapperTypeElement, context.getOptions() );
-        List<MapperReference> mapperReferences = initReferencedMappers( mapperTypeElement, mapperOptions );
+        MapperAnnotation mapperAnnotation = langElementQuery.mapperAnnotation( mapperDescriptor );
+        MapperOptions mapperOptions = MapperOptions.fromAnnotation(
+            mapperAnnotation,
+            mapperDescriptor,
+            context.getOptions(),
+            langModelContext
+        );
+        List<MapperReference> mapperReferences = initReferencedMappers( mapperOptions );
 
         MappingBuilderContext ctx = new MappingBuilderContext(
             typeFactory,
-            elementUtils,
-            typeUtils,
+            langModelContext,
             messager,
             accessorNaming,
             context.getEnumMappingStrategy(),
@@ -126,21 +149,21 @@ public class MapperCreationProcessor implements ModelElementProcessor<List<Sourc
             options,
             new MappingResolverImpl(
                 messager,
-                elementUtils,
-                typeUtils,
                 typeFactory,
+                langModelContext,
                 new ArrayList<>( sourceModel ),
                 mapperReferences,
+                options,
                 options.isVerbose()
             ),
-            mapperTypeElement,
+            mapperDescriptor,
             //sourceModel is passed only to fetch the after/before mapping methods in lifecycleCallbackFactory;
             //Consider removing those methods directly into MappingBuilderContext.
             Collections.unmodifiableList( sourceModel ),
             mapperReferences
         );
         this.mappingContext = ctx;
-        return getMapper( mapperTypeElement, mapperOptions, sourceModel );
+        return getMapper( mapperDescriptor, mapperOptions, sourceModel );
     }
 
     @Override
@@ -148,15 +171,22 @@ public class MapperCreationProcessor implements ModelElementProcessor<List<Sourc
         return 1000;
     }
 
-    private List<MapperReference> initReferencedMappers(TypeElement element, MapperOptions mapperAnnotation) {
+    private List<MapperReference> initReferencedMappers(MapperOptions mapperAnnotation) {
         List<MapperReference> result = new LinkedList<>();
         List<String> variableNames = new LinkedList<>();
 
-        for ( TypeMirror usedMapper : mapperAnnotation.uses() ) {
+        for ( TypeDescriptor usedMapper : mapperAnnotation.uses() ) {
+            Type type = typeFactory.getType( usedMapper );
+
+            TypeElementDescriptor mapperDescriptor = usedMapper.typeElement().orElse( null );
+            boolean isAnnotatedMapper = mapperDescriptor != null
+                && langElementQuery.mapperAnnotation( mapperDescriptor ).isValid();
+            boolean isSingleton = mapperDescriptor != null && hasSingletonInstance( mapperDescriptor );
+
             DefaultMapperReference mapperReference = DefaultMapperReference.getInstance(
-                typeFactory.getType( usedMapper ),
-                MapperGem.instanceOn( typeUtils.asElement( usedMapper ) ) != null,
-                hasSingletonInstance( usedMapper ),
+                type,
+                isAnnotatedMapper,
+                isSingleton,
                 typeFactory,
                 variableNames
             );
@@ -168,23 +198,38 @@ public class MapperCreationProcessor implements ModelElementProcessor<List<Sourc
         return result;
     }
 
-    private boolean hasSingletonInstance(TypeMirror mapper) {
-      return typeUtils.asElement( mapper ).getEnclosedElements().stream()
-          .anyMatch( a -> isPublicConstantOfType( a, "INSTANCE", mapper ) );
+    private boolean hasSingletonInstance(TypeElementDescriptor mapperDescriptor) {
+        if ( mapperDescriptor == null ) {
+            return false;
+        }
+        TypeDescriptor mapperType = mapperDescriptor.asType();
+        if ( mapperType == null ) {
+            return false;
+        }
+        for ( FieldDescriptor field : langElements.enclosedFields( mapperDescriptor ) ) {
+            if ( isPublicConstantOfType( field, "INSTANCE", mapperType ) ) {
+                return true;
+            }
+        }
+        return false;
     }
 
-    /**
-     * @return true if the <code>element</code> is a "public static final" field (e.g. a constant)
-     *         named <code>fieldName</code> of type "fieldType"
-     */
-    private boolean isPublicConstantOfType(Element element, String fieldName, TypeMirror fieldType) {
-      return element.getKind().isField() &&
-             element.getModifiers().containsAll( PUBLIC_CONSTANT_MODIFIERS ) &&
-             element.getSimpleName().contentEquals( fieldName ) &&
-             typeUtils.isSameType( element.asType(), fieldType );
+    private boolean isPublicConstantOfType(FieldDescriptor field, String fieldName, TypeDescriptor expectedType) {
+        if ( field == null || expectedType == null ) {
+            return false;
+        }
+        boolean nameMatches = field.simpleName().content().equals( fieldName );
+        boolean modifiersMatch = field.modifiers().contains( LangModifier.PUBLIC )
+            && field.modifiers().contains( LangModifier.STATIC )
+            && field.modifiers().contains( LangModifier.FINAL );
+        TypeDescriptor fieldType = field.fieldType();
+        boolean typeMatches = fieldType != null && langTypes.isSameType( fieldType, expectedType );
+        return nameMatches && modifiersMatch && typeMatches;
     }
 
-    private Mapper getMapper(TypeElement element, MapperOptions mapperOptions, List<SourceMethod> methods) {
+    private Mapper getMapper(TypeElementDescriptor elementDescriptor,
+                             MapperOptions mapperOptions,
+                             List<SourceMethod> methods) {
 
         List<MappingMethod> mappingMethods = getMappingMethods( mapperOptions, methods );
         mappingMethods.addAll( mappingContext.getUsedSupportedMappings() );
@@ -201,68 +246,99 @@ public class MapperCreationProcessor implements ModelElementProcessor<List<Sourc
         addAllFragmentsIn( mappingContext.getUsedSupportedMappings(), constructorFragments );
 
         Mapper mapper = new Mapper.Builder()
-            .element( element )
+            .element( elementDescriptor )
             .methods( mappingMethods )
             .fields( fields )
             .constructorFragments(  constructorFragments )
             .options( options )
             .versionInformation( versionInformation )
-            .decorator( getDecorator( element, methods, mapperOptions ) )
+            .decorator( getDecorator( elementDescriptor, methods, mapperOptions ) )
             .typeFactory( typeFactory )
-            .elementUtils( elementUtils )
-            .extraImports( getExtraImports( element, mapperOptions ) )
+            .extraImports( getExtraImports( elementDescriptor, mapperOptions ) )
             .implName( mapperOptions.implementationName() )
             .implPackage( mapperOptions.implementationPackage() )
             .suppressGeneratorTimestamp( mapperOptions.suppressTimestampInGenerated() )
-            .additionalAnnotations( additionalAnnotationsBuilder.getProcessedAnnotations( element ) )
-            .javadoc( getJavadoc( element ) )
+            .additionalAnnotations( additionalAnnotationsBuilder.getProcessedAnnotations( elementDescriptor ) )
+            .javadoc( getJavadoc( elementDescriptor ) )
             .build();
 
         if ( !mappingContext.getForgedMethodsUnderCreation().isEmpty() ) {
-            messager.printMessage( element, Message.GENERAL_NOT_ALL_FORGED_CREATED,
+            messager.printMessage( elementDescriptor, Message.GENERAL_NOT_ALL_FORGED_CREATED,
                 mappingContext.getForgedMethodsUnderCreation().keySet() );
         }
 
-        if ( element.getModifiers().contains( Modifier.PRIVATE ) ) {
+        if ( elementDescriptor != null && elementDescriptor.modifiers().contains( LangModifier.PRIVATE ) ) {
             // If the mapper element is private then we should report an error
             // we can't generate an implementation for a private mapper
             mappingContext.getMessager()
-                .printMessage( element,
+                .printMessage( elementDescriptor,
                     Message.GENERAL_CANNOT_IMPLEMENT_PRIVATE_MAPPER,
-                    element.getSimpleName().toString(),
-                    element.getKind() == ElementKind.INTERFACE ? "interface" : "class"
+                    elementDescriptor.simpleName().content(),
+                    elementDescriptor.kind() == LangElementKind.INTERFACE ? "interface" : "class"
                 );
         }
 
         return mapper;
     }
 
-    private Decorator getDecorator(TypeElement element, List<SourceMethod> methods, MapperOptions mapperOptions) {
-        DecoratedWithGem decoratedWith = DecoratedWithGem.instanceOn( element );
+    private Decorator getDecorator(TypeElementDescriptor mapperDescriptor,
+                                   List<SourceMethod> methods,
+                                   MapperOptions mapperOptions) {
+        if ( mapperDescriptor == null ) {
+            return null;
+        }
 
+        AnnotationDescriptor decoratorAnnotation = AnnotationDescriptorUtils.findAnnotation(
+            langElements,
+            mapperDescriptor,
+            "org.mapstruct.DecoratedWith"
+        ).orElse( null );
+
+        DecoratedWithGem decoratedWith = annotationGems.decoratedWith( decoratorAnnotation );
         if ( decoratedWith == null ) {
             return null;
         }
 
-        TypeElement decoratorElement = (TypeElement) typeUtils.asElement( decoratedWith.value().get() );
-
-        if ( !typeUtils.isAssignable( decoratorElement.asType(), element.asType() ) ) {
-            messager.printMessage( element, decoratedWith.mirror(), Message.DECORATOR_NO_SUBTYPE );
+        TypeDescriptor decoratorTypeDescriptor = decoratedWith.value().hasValue()
+            ? descriptorFactory.typeDescriptor( decoratedWith.value().get() )
+            : null;
+        TypeElementDescriptor decoratorDescriptor = decoratorTypeDescriptor != null
+            ? decoratorTypeDescriptor.typeElement().orElse( null )
+            : null;
+        if ( decoratorDescriptor == null ) {
+            return null;
         }
 
+        TypeDescriptor mapperTypeDescriptor = mapperDescriptor.asType();
+        if ( mapperTypeDescriptor != null && decoratorTypeDescriptor != null
+            && !langTypes.isAssignable( decoratorTypeDescriptor, mapperTypeDescriptor ) ) {
+            messager.printMessage( mapperDescriptor, decoratorAnnotation, Message.DECORATOR_NO_SUBTYPE );
+        }
+
+        List<ExecutableDescriptor> decoratorMethods = langElements.enclosedExecutables( decoratorDescriptor )
+            .stream()
+            .filter( executable -> executable.kind() == LangElementKind.METHOD )
+            .collect( Collectors.toList() );
+        List<ExecutableDescriptor> decoratorConstructors = langElements.constructors( decoratorDescriptor );
+
+        Type decoratorMapperType = mapperTypeDescriptor != null ? typeFactory.getType( mapperTypeDescriptor ) : null;
         List<MappingMethod> mappingMethods = new ArrayList<>( methods.size() );
 
         for ( SourceMethod mappingMethod : methods ) {
             boolean implementationRequired = true;
-            for ( ExecutableElement method : ElementFilter.methodsIn( decoratorElement.getEnclosedElements() ) ) {
-                if ( elementUtils.overrides( method, mappingMethod.getExecutable(), decoratorElement ) ) {
-                    implementationRequired = false;
-                    break;
+            ExecutableDescriptor mappingDescriptor = mappingMethod.getExecutableDescriptor();
+            if ( mappingDescriptor != null ) {
+                for ( ExecutableDescriptor methodDescriptor : decoratorMethods ) {
+                    if ( langElements.overrides( methodDescriptor, mappingDescriptor, decoratorDescriptor ) ) {
+                        implementationRequired = false;
+                        break;
+                    }
                 }
             }
+
             Type declaringMapper = mappingMethod.getDeclaringMapper();
             if ( implementationRequired && !( mappingMethod.isDefault() || mappingMethod.isStatic() ) ) {
-                if ( ( declaringMapper == null ) || declaringMapper.equals( typeFactory.getType( element ) ) ) {
+                if ( ( declaringMapper == null ) || declaringMapper.equals( decoratorMapperType ) ) {
                     mappingMethods.add( new DelegatingMethod( mappingMethod ) );
                 }
             }
@@ -270,39 +346,41 @@ public class MapperCreationProcessor implements ModelElementProcessor<List<Sourc
 
         boolean hasDelegateConstructor = false;
         boolean hasDefaultConstructor = false;
-        for ( ExecutableElement constructor : ElementFilter.constructorsIn( decoratorElement.getEnclosedElements() ) ) {
-            if ( constructor.getParameters().isEmpty() ) {
-                hasDefaultConstructor = true;
-            }
-            else if ( constructor.getParameters().size() == 1 ) {
-                if ( typeUtils.isAssignable(
-                    element.asType(),
-                    first( constructor.getParameters() ).asType()
-                ) ) {
-                    hasDelegateConstructor = true;
+        if ( mapperTypeDescriptor != null ) {
+            for ( ExecutableDescriptor constructor : decoratorConstructors ) {
+                if ( constructor.parameters().isEmpty() ) {
+                    hasDefaultConstructor = true;
+                }
+                else if ( constructor.parameters().size() == 1 ) {
+                    ParameterDescriptor parameter = constructor.parameters().get( 0 );
+                    if ( langTypes.isAssignable( mapperTypeDescriptor, parameter.type() ) ) {
+                        hasDelegateConstructor = true;
+                    }
                 }
             }
         }
-
-        if ( !hasDelegateConstructor && !hasDefaultConstructor ) {
-            messager.printMessage( element, decoratedWith.mirror(), Message.DECORATOR_CONSTRUCTOR );
+        else {
+            hasDefaultConstructor = decoratorConstructors.stream().anyMatch( c -> c.parameters().isEmpty() );
         }
 
-        // Get annotations from the decorator class
-        Set<Annotation> decoratorAnnotations = additionalAnnotationsBuilder.getProcessedAnnotations( decoratorElement );
+        if ( !hasDelegateConstructor && !hasDefaultConstructor && decoratorAnnotation != null ) {
+            messager.printMessage( mapperDescriptor, decoratorAnnotation, Message.DECORATOR_CONSTRUCTOR );
+        }
+
+        Set<Annotation> decoratorAnnotations = additionalAnnotationsBuilder
+            .getProcessedAnnotations( decoratorDescriptor );
 
         Decorator decorator = new Decorator.Builder()
-            .elementUtils( elementUtils )
             .typeFactory( typeFactory )
-            .mapperElement( element )
-            .decoratedWith( decoratedWith )
+            .mapperDescriptor( mapperDescriptor )
+            .decoratorType( decoratorTypeDescriptor )
             .methods( mappingMethods )
             .hasDelegateConstructor( hasDelegateConstructor )
             .options( options )
             .versionInformation( versionInformation )
             .implName( mapperOptions.implementationName() )
             .implPackage( mapperOptions.implementationPackage() )
-            .extraImports( getExtraImports( element, mapperOptions ) )
+            .extraImports( getExtraImports( mapperDescriptor, mapperOptions ) )
             .suppressGeneratorTimestamp( mapperOptions.suppressTimestampInGenerated() )
             .additionalAnnotations( decoratorAnnotations )
             .build();
@@ -310,18 +388,21 @@ public class MapperCreationProcessor implements ModelElementProcessor<List<Sourc
         return decorator;
     }
 
-    private SortedSet<Type> getExtraImports(TypeElement element,  MapperOptions mapperOptions) {
+    private SortedSet<Type> getExtraImports(TypeElementDescriptor element, MapperOptions mapperOptions) {
         SortedSet<Type> extraImports = new TreeSet<>();
 
 
-        for ( TypeMirror extraImport : mapperOptions.imports() ) {
+        for ( TypeDescriptor extraImport : mapperOptions.imports() ) {
             Type type = typeFactory.getAlwaysImportedType( extraImport );
             extraImports.add( type );
         }
 
         // Add original package if a dest package has been set
-        if ( !"default".equals( mapperOptions.implementationPackage() ) ) {
-            extraImports.add( typeFactory.getType( element ) );
+        if ( element != null && !"default".equals( mapperOptions.implementationPackage() ) ) {
+            TypeDescriptor descriptor = element.asType();
+            if ( descriptor != null ) {
+                extraImports.add( typeFactory.getType( descriptor ) );
+            }
         }
 
         return extraImports;
@@ -449,19 +530,29 @@ public class MapperCreationProcessor implements ModelElementProcessor<List<Sourc
         return mappingMethods;
     }
 
-    private Javadoc getJavadoc(TypeElement element) {
-        JavadocGem javadocGem = JavadocGem.instanceOn( element );
+    private Javadoc getJavadoc(TypeElementDescriptor elementDescriptor) {
+        if ( elementDescriptor == null ) {
+            return null;
+        }
 
-        if ( javadocGem == null || !isConsistent( javadocGem, element, messager ) ) {
+        AnnotationDescriptor javadocAnnotation = AnnotationDescriptorUtils.findAnnotation(
+            langElements,
+            elementDescriptor,
+            "org.mapstruct.Javadoc"
+        ).orElse( null );
+
+        JavadocGem javadocGem = annotationGems.javadoc( javadocAnnotation );
+
+        if ( javadocGem == null || !isConsistent( javadocGem, elementDescriptor, javadocAnnotation, messager ) ) {
             return null;
         }
 
         Javadoc javadoc = new Javadoc.Builder()
-                .value( javadocGem.value().getValue() )
-                .authors( javadocGem.authors().getValue() )
-                .deprecated( javadocGem.deprecated().getValue() )
-                .since( javadocGem.since().getValue() )
-                .build();
+            .value( javadocGem.value().getValue() )
+            .authors( javadocGem.authors().getValue() )
+            .deprecated( javadocGem.deprecated().getValue() )
+            .since( javadocGem.since().getValue() )
+            .build();
 
         return javadoc;
     }
@@ -495,14 +586,14 @@ public class MapperCreationProcessor implements ModelElementProcessor<List<Sourc
 
     private void mergeInheritedOptions(SourceMethod method, MapperOptions mapperConfig,
                                        List<SourceMethod> availableMethods, List<SourceMethod> initializingMethods,
-                                       AnnotationMirror annotationMirror) {
+                                       AnnotationDescriptor annotationDescriptor) {
         if ( initializingMethods.contains( method ) ) {
             // cycle detected
 
             initializingMethods.add( method );
 
             messager.printMessage(
-                method.getExecutable(),
+                method.getExecutableDescriptor(),
                 Message.INHERITCONFIGURATION_CYCLE,
                 Strings.join( initializingMethods, " -> " ) );
             return;
@@ -530,10 +621,10 @@ public class MapperCreationProcessor implements ModelElementProcessor<List<Sourc
 
         // apply defined (@InheritConfiguration, @InheritInverseConfiguration) mappings
         if ( forwardTemplateMethod != null ) {
-            mappingOptions.applyInheritedOptions( method, forwardTemplateMethod, false, annotationMirror );
+            mappingOptions.applyInheritedOptions( method, forwardTemplateMethod, false, annotationDescriptor );
         }
         if ( inverseTemplateMethod != null ) {
-            mappingOptions.applyInheritedOptions( method, inverseTemplateMethod, true, annotationMirror );
+            mappingOptions.applyInheritedOptions( method, inverseTemplateMethod, true, annotationDescriptor );
         }
 
         // apply auto inherited options
@@ -544,27 +635,33 @@ public class MapperCreationProcessor implements ModelElementProcessor<List<Sourc
             if ( forwardTemplateMethod == null && inheritanceStrategy.isApplyForward() ) {
                 if ( applicablePrototypeMethods.size() == 1 ) {
                     mappingOptions.applyInheritedOptions( method, first( applicablePrototypeMethods ), false,
-                        annotationMirror );
+                        annotationDescriptor );
                 }
                 else if ( applicablePrototypeMethods.size() > 1 ) {
                     messager.printMessage(
-                        method.getExecutable(),
+                        method.getExecutableDescriptor(),
                         Message.INHERITCONFIGURATION_MULTIPLE_PROTOTYPE_METHODS_MATCH,
-                        Strings.join( applicablePrototypeMethods, ", " ) );
+                        Strings.join( applicablePrototypeMethods, ", " )
+                    );
                 }
             }
 
             // or no @InheritInverseConfiguration
             if ( inverseTemplateMethod == null && inheritanceStrategy.isApplyReverse() ) {
                 if ( applicableReversePrototypeMethods.size() == 1 ) {
-                    mappingOptions.applyInheritedOptions( method, first( applicableReversePrototypeMethods ), true,
-                        annotationMirror );
+                    mappingOptions.applyInheritedOptions(
+                        method,
+                        first( applicableReversePrototypeMethods ),
+                        true,
+                        annotationDescriptor
+                    );
                 }
                 else if ( applicableReversePrototypeMethods.size() > 1 ) {
                     messager.printMessage(
-                        method.getExecutable(),
+                        method.getExecutableDescriptor(),
                         Message.INHERITINVERSECONFIGURATION_MULTIPLE_PROTOTYPE_METHODS_MATCH,
-                        Strings.join( applicableReversePrototypeMethods, ", " ) );
+                        Strings.join( applicableReversePrototypeMethods, ", " )
+                    );
                 }
             }
         }
@@ -578,10 +675,14 @@ public class MapperCreationProcessor implements ModelElementProcessor<List<Sourc
     }
 
     private void reportErrorIfNoImplementationTypeIsRegisteredForInterfaceReturnType(Method method) {
-        if ( method.getReturnType().getTypeMirror().getKind() != TypeKind.VOID &&
+        if ( !method.getReturnType().isVoid() &&
             method.getReturnType().isInterface() &&
             method.getReturnType().getImplementationType() == null ) {
-            messager.printMessage( method.getExecutable(), Message.GENERAL_NO_IMPLEMENTATION, method.getReturnType() );
+            messager.printMessage(
+                method.getExecutableDescriptor(),
+                Message.GENERAL_NO_IMPLEMENTATION,
+                method.getReturnType()
+            );
         }
     }
 
@@ -594,8 +695,17 @@ public class MapperCreationProcessor implements ModelElementProcessor<List<Sourc
                                                   List<SourceMethod> initializingMethods,
                                                   MapperOptions mapperConfig) {
         SourceMethod resultMethod = null;
+
+        ExecutableDescriptor executable = method != null ? method.getExecutableDescriptor() : null;
+        AnnotationDescriptor inverseConfigurationAnnotation = executable != null
+            ? AnnotationDescriptorUtils.findAnnotation(
+                langElements,
+                executable,
+                "org.mapstruct.InheritInverseConfiguration"
+            ).orElse( null )
+            : null;
         InheritInverseConfigurationGem inverseConfiguration =
-            InheritInverseConfigurationGem.instanceOn( method.getExecutable() );
+            annotationGems.inheritInverseConfiguration( inverseConfigurationAnnotation );
 
         if ( inverseConfiguration != null ) {
 
@@ -617,7 +727,12 @@ public class MapperCreationProcessor implements ModelElementProcessor<List<Sourc
                     resultMethod = candidates.get( 0 );
                 }
                 else {
-                    reportErrorWhenNonMatchingName( candidates.get( 0 ), method, inverseConfiguration );
+                    reportErrorWhenNonMatchingName(
+                        candidates.get( 0 ),
+                        method,
+                        inverseConfiguration,
+                        inverseConfigurationAnnotation
+                    );
                 }
             }
             else if ( candidates.size() > 1 ) {
@@ -634,31 +749,42 @@ public class MapperCreationProcessor implements ModelElementProcessor<List<Sourc
                     resultMethod = nameFilteredcandidates.get( 0 );
                 }
                 else if ( nameFilteredcandidates.size() > 1 ) {
-                    reportErrorWhenSeveralNamesMatch( nameFilteredcandidates, method, inverseConfiguration );
+                    reportErrorWhenSeveralNamesMatch(
+                        nameFilteredcandidates,
+                        method,
+                        inverseConfiguration,
+                        inverseConfigurationAnnotation
+                    );
                 }
                 else {
-                    reportErrorWhenAmbiguousReverseMapping( candidates, method, inverseConfiguration );
+                    reportErrorWhenAmbiguousReverseMapping(
+                        candidates,
+                        method,
+                        inverseConfiguration,
+                        inverseConfigurationAnnotation
+                    );
                 }
             }
         }
 
-        return extractInitializedOptions( resultMethod, rawMethods, mapperConfig, initializingMethods,
-            getAnnotationMirror( inverseConfiguration ) );
-    }
-
-    private AnnotationMirror getAnnotationMirror(InheritInverseConfigurationGem inverseConfiguration) {
-        return inverseConfiguration == null ? null : inverseConfiguration.mirror();
+        return extractInitializedOptions(
+            resultMethod,
+            rawMethods,
+            mapperConfig,
+            initializingMethods,
+            inverseConfigurationAnnotation
+        );
     }
 
     private SourceMethod extractInitializedOptions(SourceMethod resultMethod,
-                                                     List<SourceMethod> rawMethods,
-                                                     MapperOptions mapperConfig,
-                                                     List<SourceMethod> initializingMethods,
-                                                     AnnotationMirror annotationMirror) {
+                                                   List<SourceMethod> rawMethods,
+                                                   MapperOptions mapperConfig,
+                                                   List<SourceMethod> initializingMethods,
+                                                   AnnotationDescriptor annotationDescriptor) {
         if ( resultMethod != null ) {
             if ( !resultMethod.getOptions().isFullyInitialized() ) {
                 mergeInheritedOptions( resultMethod, mapperConfig, rawMethods, initializingMethods,
-                    annotationMirror );
+                    annotationDescriptor );
             }
 
             return resultMethod;
@@ -677,8 +803,17 @@ public class MapperCreationProcessor implements ModelElementProcessor<List<Sourc
                                                   List<SourceMethod> initializingMethods,
                                                   MapperOptions mapperConfig) {
         SourceMethod resultMethod = null;
+
+        ExecutableDescriptor executable = method != null ? method.getExecutableDescriptor() : null;
+        AnnotationDescriptor inheritConfigurationAnnotation = executable != null
+            ? AnnotationDescriptorUtils.findAnnotation(
+                langElements,
+                executable,
+                "org.mapstruct.InheritConfiguration"
+            ).orElse( null )
+            : null;
         InheritConfigurationGem inheritConfiguration =
-            InheritConfigurationGem.instanceOn( method.getExecutable() );
+            annotationGems.inheritConfiguration( inheritConfigurationAnnotation );
 
         if ( inheritConfiguration != null ) {
 
@@ -701,7 +836,12 @@ public class MapperCreationProcessor implements ModelElementProcessor<List<Sourc
                     resultMethod = sourceMethod;
                 }
                 else {
-                    reportErrorWhenNonMatchingName( sourceMethod, method, inheritConfiguration );
+                    reportErrorWhenNonMatchingName(
+                        sourceMethod,
+                        method,
+                        inheritConfiguration,
+                        inheritConfigurationAnnotation
+                    );
                 }
             }
             else if ( candidates.size() > 1 ) {
@@ -718,24 +858,37 @@ public class MapperCreationProcessor implements ModelElementProcessor<List<Sourc
                     resultMethod = first( nameFilteredCandidates );
                 }
                 else if ( nameFilteredCandidates.size() > 1 ) {
-                    reportErrorWhenSeveralNamesMatch( nameFilteredCandidates, method, inheritConfiguration );
+                    reportErrorWhenSeveralNamesMatch(
+                        nameFilteredCandidates,
+                        method,
+                        inheritConfiguration,
+                        inheritConfigurationAnnotation
+                    );
                 }
                 else {
-                    reportErrorWhenAmbiguousMapping( candidates, method, inheritConfiguration );
+                    reportErrorWhenAmbiguousMapping(
+                        candidates,
+                        method,
+                        inheritConfiguration,
+                        inheritConfigurationAnnotation
+                    );
                 }
             }
         }
 
-        return extractInitializedOptions( resultMethod, rawMethods, mapperConfig, initializingMethods,
-                                          getAnnotationMirror( inheritConfiguration ) );
+        return extractInitializedOptions(
+            resultMethod,
+            rawMethods,
+            mapperConfig,
+            initializingMethods,
+            inheritConfigurationAnnotation
+        );
     }
 
-    private AnnotationMirror getAnnotationMirror(InheritConfigurationGem inheritConfiguration) {
-        return inheritConfiguration == null ? null : inheritConfiguration.mirror();
-    }
-
-    private void reportErrorWhenAmbiguousReverseMapping(List<SourceMethod> candidates, SourceMethod method,
-                                                        InheritInverseConfigurationGem inverseGem) {
+    private void reportErrorWhenAmbiguousReverseMapping(List<SourceMethod> candidates,
+                                                        SourceMethod method,
+                                                        InheritInverseConfigurationGem inverseGem,
+                                                        AnnotationDescriptor inverseAnnotation) {
 
         List<String> candidateNames = new ArrayList<>();
         for ( SourceMethod candidate : candidates ) {
@@ -744,16 +897,18 @@ public class MapperCreationProcessor implements ModelElementProcessor<List<Sourc
 
         String name = inverseGem.name().get();
         if ( name.isEmpty() ) {
-            messager.printMessage( method.getExecutable(),
-                inverseGem.mirror(),
+            messager.printMessage(
+                method.getExecutableDescriptor(),
+                inverseAnnotation,
                 Message.INHERITINVERSECONFIGURATION_DUPLICATES,
                 Strings.join( candidateNames, "(), " )
 
             );
         }
         else {
-            messager.printMessage( method.getExecutable(),
-                inverseGem.mirror(),
+            messager.printMessage(
+                method.getExecutableDescriptor(),
+                inverseAnnotation,
                 Message.INHERITINVERSECONFIGURATION_INVALID_NAME,
                 Strings.join( candidateNames, "(), " ),
                 name
@@ -762,11 +917,14 @@ public class MapperCreationProcessor implements ModelElementProcessor<List<Sourc
         }
     }
 
-    private void reportErrorWhenSeveralNamesMatch(List<SourceMethod> candidates, SourceMethod method,
-          InheritInverseConfigurationGem inverseGem) {
+    private void reportErrorWhenSeveralNamesMatch(List<SourceMethod> candidates,
+                                                  SourceMethod method,
+                                                  InheritInverseConfigurationGem inverseGem,
+                                                  AnnotationDescriptor inverseAnnotation) {
 
-        messager.printMessage( method.getExecutable(),
-            inverseGem.mirror(),
+        messager.printMessage(
+            method.getExecutableDescriptor(),
+            inverseAnnotation,
             Message.INHERITINVERSECONFIGURATION_DUPLICATE_MATCHES,
             inverseGem.name().get(),
             Strings.join( candidates, ", " )
@@ -774,19 +932,24 @@ public class MapperCreationProcessor implements ModelElementProcessor<List<Sourc
         );
     }
 
-    private void reportErrorWhenNonMatchingName(SourceMethod onlyCandidate, SourceMethod method,
-                                            InheritInverseConfigurationGem inverseGem) {
+    private void reportErrorWhenNonMatchingName(SourceMethod onlyCandidate,
+                                                SourceMethod method,
+                                                InheritInverseConfigurationGem inverseGem,
+                                                AnnotationDescriptor inverseAnnotation) {
 
-        messager.printMessage( method.getExecutable(),
-            inverseGem.mirror(),
+        messager.printMessage(
+            method.getExecutableDescriptor(),
+            inverseAnnotation,
             Message.INHERITINVERSECONFIGURATION_NO_NAME_MATCH,
             inverseGem.name().get(),
             onlyCandidate.getName()
         );
     }
 
-    private void reportErrorWhenAmbiguousMapping(List<SourceMethod> candidates, SourceMethod method,
-                                                 InheritConfigurationGem gem) {
+    private void reportErrorWhenAmbiguousMapping(List<SourceMethod> candidates,
+                                                 SourceMethod method,
+                                                 InheritConfigurationGem gem,
+                                                 AnnotationDescriptor annotation) {
 
         List<String> candidateNames = new ArrayList<>();
         for ( SourceMethod candidate : candidates ) {
@@ -795,16 +958,17 @@ public class MapperCreationProcessor implements ModelElementProcessor<List<Sourc
 
         String name = gem.name().get();
         if ( name.isEmpty() ) {
-            messager.printMessage( method.getExecutable(),
-                gem.mirror(),
+            messager.printMessage(
+                method.getExecutableDescriptor(),
+                annotation,
                 Message.INHERITCONFIGURATION_DUPLICATES,
                 Strings.join( candidateNames, "(), " )
             );
         }
         else {
             messager.printMessage(
-                method.getExecutable(),
-                gem.mirror(),
+                method.getExecutableDescriptor(),
+                annotation,
                 Message.INHERITCONFIGURATION_INVALIDNAME,
                 Strings.join( candidateNames, "(), " ),
                 name
@@ -812,36 +976,48 @@ public class MapperCreationProcessor implements ModelElementProcessor<List<Sourc
         }
     }
 
-    private void reportErrorWhenSeveralNamesMatch(List<SourceMethod> candidates, SourceMethod method,
-                                                  InheritConfigurationGem gem) {
+    private void reportErrorWhenSeveralNamesMatch(List<SourceMethod> candidates,
+                                                  SourceMethod method,
+                                                  InheritConfigurationGem gem,
+                                                  AnnotationDescriptor annotation) {
 
         messager.printMessage(
-            method.getExecutable(),
-            gem.mirror(),
+            method.getExecutableDescriptor(),
+            annotation,
             Message.INHERITCONFIGURATION_DUPLICATE_MATCHES,
             gem.name().get(),
             Strings.join( candidates, ", " )
         );
     }
 
-    private void reportErrorWhenNonMatchingName(SourceMethod onlyCandidate, SourceMethod method,
-                                                InheritConfigurationGem gem) {
+    private void reportErrorWhenNonMatchingName(SourceMethod onlyCandidate,
+                                                SourceMethod method,
+                                                InheritConfigurationGem gem,
+                                                AnnotationDescriptor annotation) {
 
         messager.printMessage(
-            method.getExecutable(),
-            gem.mirror(),
+            method.getExecutableDescriptor(),
+            annotation,
             Message.INHERITCONFIGURATION_NO_NAME_MATCH,
             gem.name().get(),
             onlyCandidate.getName()
         );
     }
 
-    private boolean isConsistent( JavadocGem gem, TypeElement element, FormattingMessager messager ) {
+    private boolean isConsistent(JavadocGem gem,
+                                 TypeElementDescriptor element,
+                                 AnnotationDescriptor annotation,
+                                 FormattingMessager messager) {
         if ( !gem.value().hasValue()
             && !gem.authors().hasValue()
             && !gem.deprecated().hasValue()
             && !gem.since().hasValue() ) {
-            messager.printMessage( element, gem.mirror(), Message.JAVADOC_NO_ELEMENTS );
+            if ( annotation != null ) {
+                messager.printMessage( element, annotation, Message.JAVADOC_NO_ELEMENTS );
+            }
+            else {
+                messager.printMessage( element, Message.JAVADOC_NO_ELEMENTS );
+            }
             return false;
         }
         return true;
