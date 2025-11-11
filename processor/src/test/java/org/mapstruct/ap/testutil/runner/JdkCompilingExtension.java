@@ -39,7 +39,8 @@ class JdkCompilingExtension extends CompilingExtension {
     private static final List<File> COMPILER_CLASSPATH_FILES = asFiles( TEST_COMPILATION_CLASSPATH );
 
     private static final ClassLoader DEFAULT_PROCESSOR_CLASSLOADER =
-        new ModifiableURLClassLoader( new FilteringParentClassLoader( "org.mapstruct." ) )
+        new ModifiableURLClassLoader( new FilteringParentClassLoader( "org.mapstruct." )
+            .allowingPackage( "org.mapstruct.ap.internal.version." ) )
                 .withPaths( PROCESSOR_CLASSPATH );
 
     JdkCompilingExtension() {
@@ -73,10 +74,15 @@ class JdkCompilingExtension extends CompilingExtension {
         }
         else {
             processorClassloader = new ModifiableURLClassLoader(
-                new FilteringParentClassLoader( "org.mapstruct." ) )
+                new FilteringParentClassLoader( "org.mapstruct." )
+                    .allowingPackage( "org.mapstruct.ap.internal.version." ) )
                     .withPaths( PROCESSOR_CLASSPATH )
                     .withPath( additionalCompilerClasspath )
                     .withOriginsOf( compilationRequest.getServices().values() );
+        }
+
+        if ( Boolean.getBoolean( "mapstruct.debug.compiler" ) ) {
+            System.out.println( "[JDK] options " + compilationRequest.getProcessorOptions() );
         }
 
         CompilationTask task =
@@ -92,6 +98,10 @@ class JdkCompilingExtension extends CompilingExtension {
             Arrays.asList( (Processor) loadAndInstantiate( processorClassloader, MappingProcessor.class ) ) );
 
         boolean compilationSuccessful = task.call();
+
+        if ( !compilationSuccessful && Boolean.getBoolean( "mapstruct.debug.compiler" ) ) {
+            diagnostics.getDiagnostics().forEach( d -> System.out.println( "[JDK diagnostic] " + d ) );
+        }
 
         return CompilationOutcomeDescriptor.forResult(
             SOURCE_DIR,

@@ -6,6 +6,7 @@
 package org.mapstruct.ap.test.annotatewith.deprecated.jdk11;
 
 import java.lang.reflect.Method;
+import org.junit.jupiter.api.Assumptions;
 import org.mapstruct.ap.test.annotatewith.CustomMethodOnlyAnnotation;
 import org.mapstruct.ap.testutil.ProcessorTest;
 import org.mapstruct.ap.testutil.WithClasses;
@@ -23,6 +24,7 @@ public class DeprecatedTest {
     @ProcessorTest
     @WithClasses({ DeprecatedMapperWithMethod.class, CustomMethodOnlyAnnotation.class})
     public void deprecatedWithMethodCorrectCopyForJdk11() throws NoSuchMethodException {
+        assumeDeprecatedEnhancements();
         DeprecatedMapperWithMethod mapper = Mappers.getMapper( DeprecatedMapperWithMethod.class );
         Method method = mapper.getClass().getMethod( "map", DeprecatedMapperWithMethod.Source.class );
         Deprecated annotation = method.getAnnotation( Deprecated.class );
@@ -34,6 +36,7 @@ public class DeprecatedTest {
     @ProcessorTest
     @WithClasses(DeprecatedMapperWithClass.class)
     public void deprecatedWithClassCorrectCopyForJdk11() {
+        assumeDeprecatedEnhancements();
         DeprecatedMapperWithClass mapper = Mappers.getMapper( DeprecatedMapperWithClass.class );
         Deprecated annotation = mapper.getClass().getAnnotation( Deprecated.class );
         assertThat( annotation ).isNotNull();
@@ -54,10 +57,26 @@ public class DeprecatedTest {
         }
     )
     public void bothExistPriorityAnnotateWithForJdk11() {
+        assumeDeprecatedEnhancements();
         RepeatDeprecatedMapperWithParams mapper = Mappers.getMapper( RepeatDeprecatedMapperWithParams.class );
         Deprecated deprecated = mapper.getClass().getAnnotation( Deprecated.class );
         assertThat( deprecated ).isNotNull();
         assertThat( deprecated.since() ).isEqualTo( "1.5" );
         assertThat( deprecated.forRemoval() ).isEqualTo( false );
+    }
+
+    private void assumeDeprecatedEnhancements() {
+        Assumptions.assumeTrue( hasDeprecatedEnhancements(), "Requires JDK 9+" );
+    }
+
+    private boolean hasDeprecatedEnhancements() {
+        try {
+            Deprecated.class.getMethod( "since" );
+            Deprecated.class.getMethod( "forRemoval" );
+            return true;
+        }
+        catch ( NoSuchMethodException e ) {
+            return false;
+        }
     }
 }

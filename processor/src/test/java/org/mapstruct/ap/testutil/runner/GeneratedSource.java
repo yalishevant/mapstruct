@@ -141,7 +141,7 @@ public class GeneratedSource implements BeforeTestExecutionCallback, AfterTestEx
 
     private URL getExpectedResource( String fixtureName ) {
         ClassLoader classLoader = getClass().getClassLoader();
-        for ( int version = Runtime.version().feature(); version >= 11 && compiler != Compiler.ECLIPSE; version-- ) {
+        for ( int version = runtimeFeatureVersion(); version >= 11 && compiler != Compiler.ECLIPSE; version-- ) {
             URL resource = classLoader.getResource( FIXTURES_ROOT + "/" + version + "/" + fixtureName );
             if ( resource != null ) {
                 return resource;
@@ -149,5 +149,21 @@ public class GeneratedSource implements BeforeTestExecutionCallback, AfterTestEx
         }
 
         return classLoader.getResource( FIXTURES_ROOT + fixtureName );
+    }
+
+    private int runtimeFeatureVersion() {
+        try {
+            java.lang.reflect.Method versionMethod = Runtime.class.getMethod( "version" );
+            Object runtimeVersion = versionMethod.invoke( Runtime.getRuntime() );
+            java.lang.reflect.Method featureMethod = runtimeVersion.getClass().getMethod( "feature" );
+            Object result = featureMethod.invoke( runtimeVersion );
+            if ( result instanceof Integer ) {
+                return (Integer) result;
+            }
+        }
+        catch ( ReflectiveOperationException | SecurityException ex ) {
+            // ignore and fall back to baseline version
+        }
+        return 8;
     }
 }

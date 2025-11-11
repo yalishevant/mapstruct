@@ -5,10 +5,9 @@
  */
 package org.mapstruct.ap.test.value.spi;
 
-import javax.lang.model.element.TypeElement;
-import javax.lang.model.type.TypeMirror;
-
 import org.mapstruct.MappingConstants;
+import org.mapstruct.ap.descriptor.TypeDescriptor;
+import org.mapstruct.ap.descriptor.TypeElementDescriptor;
 import org.mapstruct.ap.internal.gem.MappingConstantsGem;
 import org.mapstruct.ap.spi.DefaultEnumMappingStrategy;
 import org.mapstruct.ap.spi.EnumMappingStrategy;
@@ -20,7 +19,7 @@ import org.mapstruct.ap.test.value.CustomIllegalArgumentException;
 public class CustomEnumMappingStrategy extends DefaultEnumMappingStrategy implements EnumMappingStrategy {
 
     @Override
-    public String getDefaultNullEnumConstant(TypeElement enumType) {
+    public String getDefaultNullEnumConstant(TypeDescriptor enumType) {
         if ( isCustomThrowingEnum( enumType ) ) {
             return MappingConstants.THROW_EXCEPTION;
         }
@@ -33,7 +32,7 @@ public class CustomEnumMappingStrategy extends DefaultEnumMappingStrategy implem
     }
 
     @Override
-    public String getEnumConstant(TypeElement enumType, String enumConstant) {
+    public String getEnumConstant(TypeDescriptor enumType, String enumConstant) {
         if ( isCustomThrowingEnum( enumType ) ) {
             return getCustomEnumConstant( enumConstant );
         }
@@ -52,30 +51,39 @@ public class CustomEnumMappingStrategy extends DefaultEnumMappingStrategy implem
         return enumConstant.replace( "CUSTOM_", "" );
     }
 
-    protected boolean isCustomEnum(TypeElement enumType) {
-        for ( TypeMirror enumTypeInterface : enumType.getInterfaces() ) {
-            if ( typeUtils.asElement( enumTypeInterface ).getSimpleName().contentEquals( "CustomEnumMarker" ) ) {
-                return true;
-            }
-        }
-
-        return false;
+    protected boolean isCustomEnum(TypeDescriptor enumType) {
+        return hasMarkerInterface( enumType, "org.mapstruct.ap.test.value.spi.CustomEnumMarker" );
     }
 
-    protected boolean isCustomThrowingEnum(TypeElement enumType) {
-        for ( TypeMirror enumTypeInterface : enumType.getInterfaces() ) {
-            if ( typeUtils.asElement( enumTypeInterface )
-                .getSimpleName()
-                .contentEquals( "CustomThrowingEnumMarker" ) ) {
-                return true;
-            }
-        }
-
-        return false;
+    protected boolean isCustomThrowingEnum(TypeDescriptor enumType) {
+        return hasMarkerInterface( enumType, "org.mapstruct.ap.test.value.spi.CustomThrowingEnumMarker" );
     }
 
     @Override
     protected Class<? extends Exception> getUnexpectedValueMappingExceptionClass() {
         return CustomIllegalArgumentException.class;
+    }
+
+    private boolean hasMarkerInterface(TypeDescriptor enumType, String markerQualifiedName) {
+        if ( enumType == null || types == null ) {
+            return false;
+        }
+
+        for ( TypeDescriptor superType : types.directSupertypes( enumType ) ) {
+            if ( superType == null ) {
+                continue;
+            }
+
+            if ( superType.qualifiedName().filter( markerQualifiedName::equals ).isPresent() ) {
+                return true;
+            }
+
+            TypeElementDescriptor descriptor = types.asElement( superType );
+            if ( descriptor != null && markerQualifiedName.equals( descriptor.qualifiedName() ) ) {
+                return true;
+            }
+        }
+
+        return false;
     }
 }

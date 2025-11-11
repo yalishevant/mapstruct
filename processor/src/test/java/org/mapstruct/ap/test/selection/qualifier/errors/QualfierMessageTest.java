@@ -107,4 +107,28 @@ public class QualfierMessageTest {
     public void testNoQualifyingMethodByNamedForForgedIterableFound() {
     }
 
+    @ProcessorTest
+    @WithClasses({
+        ErroneousMessageFromConfigMapper.class
+    })
+    @ExpectedCompilationOutcome(
+        value = CompilationResult.FAILED,
+        diagnostics = {
+            @Diagnostic(
+                type = ErroneousMessageFromConfigMapper.class,
+                kind = ERROR,
+                line = 22,
+                message = "Qualifier error. No method found annotated with: [ @SelectMe ]. " +
+                    "See https://mapstruct.org/faq/#qualifier for more info."),
+            @Diagnostic(
+                type = ErroneousMessageFromConfigMapper.class,
+                kind = ERROR,
+                line = 22,
+                messageRegExp = "Can't map property.*")
+
+        }
+    )
+    public void testNoQualifyingMethodInheritedFromConfig() {
+    }
+
 }

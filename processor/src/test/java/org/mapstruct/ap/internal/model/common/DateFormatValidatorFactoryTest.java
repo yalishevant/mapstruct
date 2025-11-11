@@ -7,18 +7,11 @@ package org.mapstruct.ap.internal.model.common;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-import java.lang.annotation.Annotation;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.time.ZonedDateTime;
 import java.util.HashMap;
-import java.util.List;
-
-import javax.lang.model.element.AnnotationMirror;
-import javax.lang.model.type.TypeKind;
-import javax.lang.model.type.TypeMirror;
-import javax.lang.model.type.TypeVisitor;
 
 import org.junit.jupiter.api.Test;
 import org.mapstruct.ap.internal.util.JodaTimeConstants;
@@ -33,34 +26,6 @@ import org.mapstruct.ap.testutil.IssueKey;
 public class DateFormatValidatorFactoryTest {
 
     private static final String JAVA_LANG_STRING = "java.lang.String";
-
-    private TypeMirror voidTypeMirror = new TypeMirror() {
-
-        @Override
-        public List<? extends AnnotationMirror> getAnnotationMirrors() {
-            return null;
-        }
-
-        @Override
-        public <A extends Annotation> A getAnnotation(Class<A> annotationType) {
-            return null;
-        }
-
-        @Override
-        public <A extends Annotation> A[] getAnnotationsByType(Class<A> annotationType) {
-            return null;
-        }
-
-        @Override
-        public TypeKind getKind() {
-            return TypeKind.VOID;
-        }
-
-        @Override
-        public <R, P> R accept(TypeVisitor<R, P> v, P p) {
-            return null;
-        }
-    };
 
     @Test
     public void testUnsupportedTypes() {
@@ -155,29 +120,33 @@ public class DateFormatValidatorFactoryTest {
     }
 
     private Type typeWithFQN(String fullQualifiedName) {
+        String simpleName = fullQualifiedName.contains( "." )
+            ? fullQualifiedName.substring( fullQualifiedName.lastIndexOf( '.' ) + 1 )
+            : fullQualifiedName;
         return new Type(
-                        null,
-                        null,
-                        null,
-                        null,
-                        voidTypeMirror,
-                        null,
-                        null,
-                        null,
-                        null,
-                        null,
-                        null,
-                        fullQualifiedName,
-                        false,
-                        false,
-                        false,
-                        false,
-                        false,
-                        false,
-            new HashMap<>(  ),
-            new HashMap<>(  ),
-                        false,
-                        false, false
+            null,
+            null,
+            null,
+            null,
+            java.util.Collections.emptyList(),
+            null,
+            null,
+            null,
+            simpleName,
+            fullQualifiedName,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            new HashMap<>(),
+            new HashMap<>(),
+            Boolean.FALSE,
+            false,
+            false,
+            null,
+            null
         );
     }
 

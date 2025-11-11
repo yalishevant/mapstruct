@@ -238,7 +238,7 @@ public class DomainDtoWithNvmsNullMapperImpl implements DomainDtoWithNvmsNullMap
             return null;
         }
 
-        Set<Long> set = new LinkedHashSet<Long>( Math.max( (int) ( list.size() / .75f ) + 1, 16 ) );
+        Set<Long> set = LinkedHashSet.newLinkedHashSet( list.size() );
         for ( String string : list ) {
             set.add( Long.parseLong( string ) );
         }

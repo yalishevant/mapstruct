@@ -6,37 +6,44 @@
 package org.mapstruct.ap.testutil.runner;
 
 import java.io.File;
+import java.io.IOException;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
+import java.util.Collections;
 import java.util.List;
-import java.util.Set;
+import java.util.stream.Collectors;
 
-import javax.lang.model.SourceVersion;
+import javax.annotation.processing.Processor;
+import javax.tools.DiagnosticCollector;
+import javax.tools.JavaCompiler;
+import javax.tools.JavaCompiler.CompilationTask;
+import javax.tools.JavaFileManager.Location;
+import javax.tools.JavaFileObject;
+import javax.tools.StandardJavaFileManager;
+import javax.tools.StandardLocation;
 
-import org.codehaus.plexus.compiler.CompilerConfiguration;
-import org.codehaus.plexus.compiler.CompilerException;
-import org.codehaus.plexus.compiler.CompilerResult;
-import org.codehaus.plexus.logging.console.ConsoleLogger;
-import org.eclipse.tycho.compiler.jdt.JDTCompiler;
+import org.eclipse.jdt.internal.compiler.tool.EclipseCompiler;
 import org.mapstruct.ap.MappingProcessor;
 import org.mapstruct.ap.testutil.compilation.model.CompilationOutcomeDescriptor;
 
 /**
- * Extension that uses the Eclipse JDT compiler to compile.
+ * Extension that uses the Eclipse compiler (ECJ) to compile sources.
  *
- * @author Andreas Gudian
- * @author Filip Hrisafov
+ * @author MapStruct contributors
  */
 class EclipseCompilingExtension extends CompilingExtension {
 
-    private static final List<String> ECLIPSE_COMPILER_CLASSPATH = buildEclipseCompilerClasspath();
+    private static final List<File> COMPILER_CLASSPATH_FILES = asFiles( TEST_COMPILATION_CLASSPATH );
 
-    private static final ClassLoader DEFAULT_ECLIPSE_COMPILER_CLASSLOADER =
-        new ModifiableURLClassLoader( newFilteringClassLoaderForEclipse() )
-            .withPaths( ECLIPSE_COMPILER_CLASSPATH )
-            .withPaths( PROCESSOR_CLASSPATH )
-            .withOriginOf( ClassLoaderExecutor.class );
+    private static final ClassLoader DEFAULT_PROCESSOR_CLASSLOADER =
+        new ModifiableURLClassLoader( new FilteringParentClassLoader( "org.mapstruct." )
+            .allowingPackage( "org.mapstruct.ap.internal.version." ) )
+                .withPaths( PROCESSOR_CLASSPATH );
 
     EclipseCompilingExtension() {
         super( Compiler.ECLIPSE );
@@ -47,126 +54,251 @@ class EclipseCompilingExtension extends CompilingExtension {
                                                                        String sourceOutputDir,
                                                                        String classOutputDir,
                                                                        String additionalCompilerClasspath) {
-        ClassLoader compilerClassloader;
+        JavaCompiler compiler = new EclipseCompiler();
+        DiagnosticCollector<JavaFileObject> diagnostics = new DiagnosticCollector<>();
+        StandardJavaFileManager fileManager = compiler.getStandardFileManager( null, null, StandardCharsets.UTF_8 );
+
+        String release = determineReleaseVersion();
+
+        Iterable<? extends JavaFileObject> compilationUnits =
+            fileManager.getJavaFileObjectsFromFiles( getSourceFiles( compilationRequest.getSourceClasses() ) );
+
+        boolean isEclipseCompiler = fileManager.getClass().getName().contains( "org.eclipse.jdt" );
+        ModuleSetup moduleSetup;
+        try {
+            fileManager.setLocation( StandardLocation.CLASS_PATH, getCompilerClasspathFiles( compilationRequest ) );
+            fileManager.setLocation( StandardLocation.CLASS_OUTPUT, Arrays.asList( new File( classOutputDir ) ) );
+            fileManager.setLocation( StandardLocation.SOURCE_OUTPUT, Arrays.asList( new File( sourceOutputDir ) ) );
+            moduleSetup = configureJavaRuntime( fileManager, release, isEclipseCompiler );
+        }
+        catch ( IOException e ) {
+            throw new RuntimeException( e );
+        }
+
+        ClassLoader processorClassloader;
         if ( additionalCompilerClasspath == null ) {
-            compilerClassloader = DEFAULT_ECLIPSE_COMPILER_CLASSLOADER;
+            processorClassloader = DEFAULT_PROCESSOR_CLASSLOADER;
         }
         else {
-            ModifiableURLClassLoader loader = new ModifiableURLClassLoader(
-                newFilteringClassLoaderForEclipse()
-                .hidingClasses( compilationRequest.getServices().values() ) );
-
-            compilerClassloader = loader.withPaths( ECLIPSE_COMPILER_CLASSPATH )
-                  .withPaths( PROCESSOR_CLASSPATH )
-                  .withOriginOf( ClassLoaderExecutor.class )
-                  .withPath( additionalCompilerClasspath )
-                  .withOriginsOf( compilationRequest.getServices().values() );
+            processorClassloader = new ModifiableURLClassLoader(
+                new FilteringParentClassLoader( "org.mapstruct." )
+                    .allowingPackage( "org.mapstruct.ap.internal.version." ) )
+                    .withPaths( PROCESSOR_CLASSPATH )
+                    .withPath( additionalCompilerClasspath )
+                    .withOriginsOf( compilationRequest.getServices().values() );
         }
 
-        ClassLoaderHelper clHelper =
-            (ClassLoaderHelper) loadAndInstantiate( compilerClassloader, ClassLoaderExecutor.class );
+        List<String> options = new ArrayList<>( compilationRequest.getProcessorOptions() );
+        options.add( "-d" );
+        options.add( classOutputDir );
+        options.add( "-s" );
+        options.add( sourceOutputDir );
+        options.add( "-warn:-raw,-unchecked,-serial,-removal,-deprecation,-unused,-warningToken" );
+        options.add( "--release" );
+        options.add( release );
+        if ( !moduleSetup.modulePaths.isEmpty() ) {
+            options.add( "--module-path" );
+            options.add( joinPaths( moduleSetup.modulePaths ) );
+        }
+        if ( moduleSetup.systemRoot != null ) {
+            options.add( "--system" );
+            options.add( moduleSetup.systemRoot.toString() );
+        }
 
-        return clHelper.compileInOtherClassloader(
-            compilationRequest,
-            getTestCompilationClasspath( compilationRequest ),
-            getSourceFiles( compilationRequest.getSourceClasses() ),
+        if ( Boolean.getBoolean( "mapstruct.debug.compiler" ) ) {
+            System.out.println( "[" + compiler + "] options " + options );
+        }
+
+        CompilationTask task =
+            compiler.getTask(
+                null,
+                fileManager,
+                diagnostics,
+                options,
+                null,
+                compilationUnits );
+
+        task.setProcessors(
+            Arrays.asList( (Processor) loadAndInstantiate( processorClassloader, MappingProcessor.class ) ) );
+
+        boolean compilationSuccessful = task.call();
+
+        if ( !compilationSuccessful && Boolean.getBoolean( "mapstruct.debug.compiler" ) ) {
+            diagnostics.getDiagnostics().forEach( d -> System.out.println( "[ECJ diagnostic] " + d ) );
+        }
+
+        return CompilationOutcomeDescriptor.forResult(
             SOURCE_DIR,
-            sourceOutputDir,
-            classOutputDir );
+            compilationSuccessful,
+            diagnostics.getDiagnostics() );
     }
 
-    private static List<String> getTestCompilationClasspath(CompilationRequest request) {
+    private static List<File> getCompilerClasspathFiles(CompilationRequest request) {
         Collection<String> testDependencies = request.getTestDependencies();
         if ( testDependencies.isEmpty() ) {
-            return TEST_COMPILATION_CLASSPATH;
+            return COMPILER_CLASSPATH_FILES;
         }
 
-        List<String> testCompilationPaths = new ArrayList<>(
-            TEST_COMPILATION_CLASSPATH.size() + testDependencies.size() );
+        List<File> compilerClasspathFiles = new ArrayList<>(
+            COMPILER_CLASSPATH_FILES.size() + testDependencies.size() );
 
-        testCompilationPaths.addAll( TEST_COMPILATION_CLASSPATH );
-        testCompilationPaths.addAll( filterBootClassPath( testDependencies ) );
-        return testCompilationPaths;
-    }
-
-    private static FilteringParentClassLoader newFilteringClassLoaderForEclipse() {
-        return new FilteringParentClassLoader(
-            // reload eclipse compiler classes
-            "org.eclipse.",
-            // reload mapstruct processor classes
-            "org.mapstruct.ap.internal.",
-            "org.mapstruct.ap.spi.",
-            "org.mapstruct.ap.MappingProcessor")
-        .hidingClass( ClassLoaderExecutor.class );
-    }
-
-    public interface ClassLoaderHelper {
-        CompilationOutcomeDescriptor compileInOtherClassloader(CompilationRequest compilationRequest,
-                                                               List<String> testCompilationClasspath,
-                                                               Set<File> sourceFiles,
-                                                               String sourceDir,
-                                                               String sourceOutputDir,
-                                                               String classOutputDir);
-    }
-
-    public static final class ClassLoaderExecutor implements ClassLoaderHelper {
-        @Override
-        public CompilationOutcomeDescriptor compileInOtherClassloader(CompilationRequest compilationRequest,
-                                                                      List<String> testCompilationClasspath,
-                                                                      Set<File> sourceFiles,
-                                                                      String sourceDir,
-                                                                      String sourceOutputDir,
-                                                                      String classOutputDir) {
-            JDTCompiler compiler = new JDTCompiler();
-            compiler.enableLogging( new ConsoleLogger( 5, "JDT-Compiler" ) );
-
-            CompilerConfiguration config = new CompilerConfiguration();
-
-            config.setClasspathEntries( testCompilationClasspath );
-            config.setOutputLocation( classOutputDir );
-            config.setGeneratedSourcesDirectory( new File( sourceOutputDir ) );
-            config.setAnnotationProcessors( new String[] { MappingProcessor.class.getName() } );
-            config.setSourceFiles( sourceFiles );
-            String version = getSourceVersion();
-            config.setShowWarnings( false );
-            config.setSourceVersion( version );
-            config.setTargetVersion( version );
-
-            for ( String option : compilationRequest.getProcessorOptions() ) {
-                config.addCompilerCustomArgument( option, null );
-            }
-
-            CompilerResult compilerResult;
-            try {
-                compilerResult = compiler.performCompile( config );
-            }
-            catch ( CompilerException e ) {
-                throw new RuntimeException( e );
-            }
-
-            return CompilationOutcomeDescriptor.forResult(
-                sourceDir,
-                compilerResult );
+        compilerClasspathFiles.addAll( COMPILER_CLASSPATH_FILES );
+        for ( String testDependencyPath : filterBootClassPath( testDependencies ) ) {
+            compilerClasspathFiles.add( new File( testDependencyPath ) );
         }
 
-        private static String getSourceVersion() {
-            SourceVersion latest = SourceVersion.latest();
-            if ( latest == SourceVersion.RELEASE_8 ) {
-                return "1.8";
-            }
-            return "11";
-        }
-
+        return compilerClasspathFiles;
     }
 
-    private static List<String> buildEclipseCompilerClasspath() {
-        Collection<String> whitelist = Arrays.asList(
-                "tycho-compiler",
-                "ecj",
-                "plexus-compiler-api",
-                "plexus-component-annotations"
-        );
+    private static List<File> asFiles(List<String> paths) {
+        List<File> classpath = new ArrayList<>();
+        for ( String path : paths ) {
+            classpath.add( new File( path ) );
+        }
 
-        return filterBootClassPath( whitelist );
+        return classpath;
+    }
+
+    private static String determineReleaseVersion() {
+        String configured = System.getProperty( "maven.compiler.release" );
+        if ( configured != null && !configured.isEmpty() ) {
+            return configured;
+        }
+
+        String specVersion = System.getProperty( "java.specification.version" );
+        int feature = 8;
+        if ( specVersion != null && !specVersion.isEmpty() ) {
+            if ( specVersion.contains( "." ) ) {
+                String[] parts = specVersion.split( "\\." );
+                feature = Integer.parseInt( parts[parts.length - 1] );
+            }
+            else {
+                feature = Integer.parseInt( specVersion );
+            }
+        }
+
+        if ( feature >= 21 ) {
+            return "21";
+        }
+        return Integer.toString( feature );
+    }
+
+    private static ModuleSetup configureJavaRuntime(StandardJavaFileManager fileManager, String release,
+                                                   boolean configureSystemModules) throws IOException {
+        int releaseVersion = parseRelease( release );
+
+        if ( configureSystemModules && releaseVersion >= 9 ) {
+            List<Path> systemModulePaths = detectSystemModulePaths();
+            Location systemModulesLocation = resolveSystemModulesLocation();
+            if ( systemModulesLocation != null && !systemModulePaths.isEmpty() ) {
+                try {
+                    fileManager.setLocation(
+                        systemModulesLocation,
+                        toFiles( systemModulePaths )
+                    );
+                    return new ModuleSetup( systemModulePaths, Paths.get( System.getProperty( "java.home" ) ) );
+                }
+                catch ( UnsupportedOperationException | IllegalArgumentException ex ) {
+                    // Fallback to legacy configuration below when the compiler does not support module locations.
+                }
+            }
+        }
+
+        return ModuleSetup.none();
+    }
+
+    private static int parseRelease(String release) {
+        try {
+            return Integer.parseInt( release );
+        }
+        catch ( NumberFormatException ex ) {
+            return 8;
+        }
+    }
+
+    private static List<Path> detectSystemModulePaths() {
+        Path javaHome = Paths.get( System.getProperty( "java.home" ) );
+        List<Path> result = new ArrayList<>();
+
+        addIfExists( result, javaHome.resolve( "lib" ).resolve( "modules" ) );
+
+        Path parent = javaHome.getParent();
+        if ( parent != null ) {
+            addIfExists( result, parent.resolve( "lib" ).resolve( "modules" ) );
+        }
+
+        return result;
+    }
+
+    private static List<File> toFiles(List<Path> paths) {
+        List<File> files = new ArrayList<>( paths.size() );
+        for ( Path path : paths ) {
+            files.add( path.toFile() );
+        }
+        return files;
+    }
+
+    private static String joinPaths(List<Path> paths) {
+        return paths.stream()
+            .map( Path::toString )
+            .collect( Collectors.joining( File.pathSeparator ) );
+    }
+
+    private static Location resolveSystemModulesLocation() {
+        try {
+            return StandardLocation.valueOf( "SYSTEM_MODULES" );
+        }
+        catch ( IllegalArgumentException ex ) {
+            return null;
+        }
+    }
+
+    private static List<File> detectLegacyRuntimeClasspath() {
+        Path javaHome = Paths.get( System.getProperty( "java.home" ) );
+        List<File> result = new ArrayList<>();
+
+        addIfFile( result, javaHome.resolve( "lib" ).resolve( "rt.jar" ) );
+        addIfFile( result, javaHome.resolve( "lib" ).resolve( "jce.jar" ) );
+
+        Path parent = javaHome.getParent();
+        if ( parent != null ) {
+            addIfFile( result, parent.resolve( "lib" ).resolve( "rt.jar" ) );
+            addIfFile( result, parent.resolve( "lib" ).resolve( "jce.jar" ) );
+            addIfFile( result, parent.resolve( "Classes" ).resolve( "classes.jar" ) );
+        }
+
+        return result;
+    }
+
+    private static void addIfDirectory(List<Path> targets, Path candidate) {
+        if ( candidate != null && Files.isDirectory( candidate ) ) {
+            targets.add( candidate );
+        }
+    }
+
+    private static void addIfExists(List<Path> targets, Path candidate) {
+        if ( candidate != null && Files.exists( candidate ) ) {
+            targets.add( candidate );
+        }
+    }
+
+    private static void addIfFile(List<File> targets, Path candidate) {
+        if ( candidate != null && Files.isRegularFile( candidate ) ) {
+            targets.add( candidate.toFile() );
+        }
+    }
+
+    private static final class ModuleSetup {
+        private final List<Path> modulePaths;
+        private final Path systemRoot;
+
+        private ModuleSetup(List<Path> modulePaths, Path systemRoot) {
+            this.modulePaths = modulePaths;
+            this.systemRoot = systemRoot;
+        }
+
+        private static ModuleSetup none() {
+            return new ModuleSetup( Collections.emptyList(), null );
+        }
     }
 }

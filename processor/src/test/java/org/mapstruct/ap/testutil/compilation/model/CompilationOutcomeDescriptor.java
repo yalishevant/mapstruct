@@ -15,9 +15,6 @@ import java.util.stream.Stream;
 import javax.tools.Diagnostic;
 import javax.tools.Diagnostic.Kind;
 import javax.tools.JavaFileObject;
-
-import org.codehaus.plexus.compiler.CompilerMessage;
-import org.codehaus.plexus.compiler.CompilerResult;
 import org.mapstruct.ap.testutil.compilation.annotation.CompilationResult;
 import org.mapstruct.ap.testutil.compilation.annotation.ExpectedCompilationOutcome;
 import org.mapstruct.ap.testutil.compilation.annotation.ExpectedNote;
@@ -87,21 +84,6 @@ public class CompilationOutcomeDescriptor {
         }
 
         return new CompilationOutcomeDescriptor( compilationResult, diagnosticDescriptors, notes );
-    }
-
-    public static CompilationOutcomeDescriptor forResult(String sourceDir, CompilerResult compilerResult) {
-        CompilationResult compilationResult =
-            compilerResult.isSuccess() ? CompilationResult.SUCCEEDED : CompilationResult.FAILED;
-        List<DiagnosticDescriptor> diagnosticDescriptors = new ArrayList<>();
-
-        for ( CompilerMessage message : compilerResult.getCompilerMessages() ) {
-            if ( message.getKind() != CompilerMessage.Kind.NOTE ) {
-                diagnosticDescriptors.add( DiagnosticDescriptor.forCompilerMessage( sourceDir, message ) );
-            }
-            // the eclipse compiler does not support NOTE (it is never actually set).
-        }
-
-        return new CompilationOutcomeDescriptor( compilationResult, diagnosticDescriptors, Collections.emptyList() );
     }
 
     public CompilationResult getCompilationResult() {

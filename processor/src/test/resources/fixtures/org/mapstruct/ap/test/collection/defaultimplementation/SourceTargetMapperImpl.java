@@ -82,7 +82,7 @@ public class SourceTargetMapperImpl implements SourceTargetMapper {
             return null;
         }
 
-        Set<TargetFoo> set = new LinkedHashSet<TargetFoo>( Math.max( (int) ( foos.size() / .75f ) + 1, 16 ) );
+        Set<TargetFoo> set = LinkedHashSet.newLinkedHashSet( foos.size() );
         for ( SourceFoo sourceFoo : foos ) {
             set.add( sourceFooToTargetFoo( sourceFoo ) );
         }
@@ -178,7 +178,7 @@ public class SourceTargetMapperImpl implements SourceTargetMapper {
             return null;
         }
 
-        Map<String, TargetFoo> map = new LinkedHashMap<String, TargetFoo>( Math.max( (int) ( foos.size() / .75f ) + 1, 16 ) );
+        Map<String, TargetFoo> map = LinkedHashMap.newLinkedHashMap( foos.size() );
 
         for ( java.util.Map.Entry<Long, SourceFoo> entry : foos.entrySet() ) {
             String key = String.valueOf( entry.getKey() );

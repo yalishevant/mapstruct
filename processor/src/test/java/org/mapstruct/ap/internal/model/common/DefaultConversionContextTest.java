@@ -7,22 +7,18 @@ package org.mapstruct.ap.internal.model.common;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-import java.lang.annotation.Annotation;
 import java.time.ZonedDateTime;
+import java.util.Collections;
 import java.util.HashMap;
-import java.util.List;
 
-import javax.lang.model.element.AnnotationMirror;
-import javax.lang.model.element.AnnotationValue;
-import javax.lang.model.element.Element;
-import javax.lang.model.type.TypeKind;
-import javax.lang.model.type.TypeMirror;
-import javax.lang.model.type.TypeVisitor;
 import javax.tools.Diagnostic;
 
 import org.junit.jupiter.api.Test;
-import org.mapstruct.ap.internal.util.FormattingMessager;
 import org.mapstruct.ap.internal.util.Message;
+import org.mapstruct.ap.internal.util.FormattingMessager;
+import org.mapstruct.ap.descriptor.AnnotationDescriptor;
+import org.mapstruct.ap.descriptor.AnnotationValueDescriptor;
+import org.mapstruct.ap.descriptor.ElementDescriptor;
 import org.mapstruct.ap.testutil.IssueKey;
 
 /**
@@ -32,34 +28,6 @@ import org.mapstruct.ap.testutil.IssueKey;
  */
 @IssueKey( "224" )
 public class DefaultConversionContextTest {
-
-    private TypeMirror voidTypeMirror = new TypeMirror() {
-
-        @Override
-        public List<? extends AnnotationMirror> getAnnotationMirrors() {
-            return null;
-        }
-
-        @Override
-        public <A extends Annotation> A getAnnotation(Class<A> annotationType) {
-            return null;
-        }
-
-        @Override
-        public <A extends Annotation> A[] getAnnotationsByType(Class<A> annotationType) {
-            return null;
-        }
-
-        @Override
-        public TypeKind getKind() {
-            return TypeKind.VOID;
-        }
-
-        @Override
-        public <R, P> R accept(TypeVisitor<R, P> v, P p) {
-            return null;
-        }
-    };
 
     @Test
     public void testInvalidDateFormatValidation() {
@@ -103,29 +71,33 @@ public class DefaultConversionContextTest {
     }
 
     private Type typeWithFQN(String fullQualifiedName) {
+        String simpleName = fullQualifiedName.contains( "." )
+            ? fullQualifiedName.substring( fullQualifiedName.lastIndexOf( '.' ) + 1 )
+            : fullQualifiedName;
         return new Type(
-                        null,
-                        null,
-                        null,
-                        null,
-                        voidTypeMirror,
-                        null,
-                        null,
-                        null,
-                        null,
-                        null,
-                        null,
-                        fullQualifiedName,
-                        false,
-                        false,
-                        false,
-                        false,
-                        false,
-                        false,
-            new HashMap<>(  ),
-            new HashMap<>(  ),
-                        false,
-                        false, false
+            null,
+            null,
+            null,
+            null,
+            Collections.emptyList(),
+            null,
+            null,
+            null,
+            simpleName,
+            fullQualifiedName,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            new HashMap<>(),
+            new HashMap<>(),
+            Boolean.FALSE,
+            false,
+            false,
+            null,
+            null
         );
     }
 
@@ -139,17 +111,16 @@ public class DefaultConversionContextTest {
         }
 
         @Override
-        public void printMessage(Element e, Message msg, Object... arg) {
+        public void printMessage(ElementDescriptor element, Message msg, Object... arg) {
             throw new UnsupportedOperationException( "Should not be called" );
         }
 
         @Override
-        public void printMessage(Element e, AnnotationMirror a, Message msg, Object... arg) {
-            throw new UnsupportedOperationException( "Should not be called" );
-        }
-
-        @Override
-        public void printMessage(Element e, AnnotationMirror a, AnnotationValue v, Message msg, Object... arg) {
+        public void printMessage(ElementDescriptor element,
+                                 AnnotationDescriptor annotation,
+                                 AnnotationValueDescriptor value,
+                                 Message msg,
+                                 Object... arg) {
             lastKindPrinted = msg.getDiagnosticKind();
         }
 

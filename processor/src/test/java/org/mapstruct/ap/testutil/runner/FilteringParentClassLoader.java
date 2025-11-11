@@ -16,7 +16,8 @@ import java.util.Collection;
  * @author Andreas Gudian
  */
 final class FilteringParentClassLoader extends ClassLoader {
-    private Collection<String> excludedPrefixes;
+    private final Collection<String> excludedPrefixes;
+    private final Collection<String> allowedPrefixes = new ArrayList<>();
 
     /**
      * @param excludedPrefixes class name prefixes to exclude
@@ -52,14 +53,28 @@ final class FilteringParentClassLoader extends ClassLoader {
         return this;
     }
 
+    FilteringParentClassLoader allowingPackage(String prefix) {
+        allowedPrefixes.add( prefix );
+        return this;
+    }
+
     @Override
     protected Class<?> loadClass(String name, boolean resolve) throws ClassNotFoundException {
         for ( String excluded : excludedPrefixes ) {
-            if ( name.startsWith( excluded ) ) {
+            if ( name.startsWith( excluded ) && !isAllowed( name ) ) {
                 return null;
             }
         }
 
         return super.loadClass( name, resolve );
+    }
+
+    private boolean isAllowed(String className) {
+        for ( String allowed : allowedPrefixes ) {
+            if ( className.startsWith( allowed ) ) {
+                return true;
+            }
+        }
+        return false;
     }
 }

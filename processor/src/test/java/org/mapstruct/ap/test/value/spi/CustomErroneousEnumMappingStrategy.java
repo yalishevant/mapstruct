@@ -5,9 +5,8 @@
  */
 package org.mapstruct.ap.test.value.spi;
 
-import javax.lang.model.element.TypeElement;
-import javax.lang.model.type.TypeMirror;
-
+import org.mapstruct.ap.descriptor.TypeDescriptor;
+import org.mapstruct.ap.descriptor.TypeElementDescriptor;
 import org.mapstruct.ap.internal.gem.MappingConstantsGem;
 import org.mapstruct.ap.spi.DefaultEnumMappingStrategy;
 import org.mapstruct.ap.spi.EnumMappingStrategy;
@@ -18,7 +17,7 @@ import org.mapstruct.ap.spi.EnumMappingStrategy;
 public class CustomErroneousEnumMappingStrategy extends DefaultEnumMappingStrategy implements EnumMappingStrategy {
 
     @Override
-    public String getDefaultNullEnumConstant(TypeElement enumType) {
+    public String getDefaultNullEnumConstant(TypeDescriptor enumType) {
         if ( isCustomEnum( enumType ) ) {
             return "INCORRECT";
         }
@@ -27,7 +26,7 @@ public class CustomErroneousEnumMappingStrategy extends DefaultEnumMappingStrate
     }
 
     @Override
-    public String getEnumConstant(TypeElement enumType, String enumConstant) {
+    public String getEnumConstant(TypeDescriptor enumType, String enumConstant) {
         if ( isCustomEnum( enumType ) ) {
             return getCustomEnumConstant( enumConstant );
         }
@@ -42,9 +41,26 @@ public class CustomErroneousEnumMappingStrategy extends DefaultEnumMappingStrate
         return enumConstant.replace( "CUSTOM_", "" );
     }
 
-    protected boolean isCustomEnum(TypeElement enumType) {
-        for ( TypeMirror enumTypeInterface : enumType.getInterfaces() ) {
-            if ( typeUtils.asElement( enumTypeInterface ).getSimpleName().contentEquals( "CustomEnumMarker" ) ) {
+    protected boolean isCustomEnum(TypeDescriptor enumType) {
+        return hasMarkerInterface( enumType, "org.mapstruct.ap.test.value.spi.CustomEnumMarker" );
+    }
+
+    private boolean hasMarkerInterface(TypeDescriptor enumType, String markerQualifiedName) {
+        if ( enumType == null || types == null ) {
+            return false;
+        }
+
+        for ( TypeDescriptor superType : types.directSupertypes( enumType ) ) {
+            if ( superType == null ) {
+                continue;
+            }
+
+            if ( superType.qualifiedName().filter( markerQualifiedName::equals ).isPresent() ) {
+                return true;
+            }
+
+            TypeElementDescriptor descriptor = types.asElement( superType );
+            if ( descriptor != null && markerQualifiedName.equals( descriptor.qualifiedName() ) ) {
                 return true;
             }
         }

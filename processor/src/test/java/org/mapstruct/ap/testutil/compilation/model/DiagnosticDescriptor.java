@@ -14,7 +14,6 @@ import java.util.Objects;
 import javax.tools.Diagnostic.Kind;
 import javax.tools.JavaFileObject;
 
-import org.codehaus.plexus.compiler.CompilerMessage;
 import org.mapstruct.ap.testutil.compilation.annotation.Diagnostic;
 
 /**
@@ -68,36 +67,6 @@ public class DiagnosticDescriptor {
             diagnostic.getMessage( null ),
             null
         );
-    }
-
-    public static DiagnosticDescriptor forCompilerMessage(String sourceDir, CompilerMessage compilerMessage) {
-        String[] lines = compilerMessage.getMessage().split( System.lineSeparator() );
-        String message = lines[3];
-
-        return new DiagnosticDescriptor(
-            removeSourceDirPrefix( sourceDir, compilerMessage.getFile() ),
-            toJavaxKind( compilerMessage.getKind() ),
-            Long.valueOf( compilerMessage.getStartLine() ),
-            message,
-            null
-            );
-    }
-
-    private static Kind toJavaxKind(CompilerMessage.Kind kind) {
-        switch ( kind ) {
-            case ERROR:
-                return Kind.ERROR;
-            case MANDATORY_WARNING:
-                return Kind.MANDATORY_WARNING;
-            case NOTE:
-                return Kind.NOTE;
-            case OTHER:
-                return Kind.OTHER;
-            case WARNING:
-                return Kind.WARNING;
-            default:
-                return null;
-        }
     }
 
     private static String getSourceName(String sourceDir, javax.tools.Diagnostic<? extends JavaFileObject> diagnostic) {

@@ -423,7 +423,7 @@ public class SourceTargetMapperImpl implements SourceTargetMapper {
             return null;
         }
 
-        Map<String, String> map = new LinkedHashMap<String, String>( Math.max( (int) ( source.size() / .75f ) + 1, 16 ) );
+        Map<String, String> map = LinkedHashMap.newLinkedHashMap( source.size() );
 
         for ( java.util.Map.Entry<Float, Float> entry : source.entrySet() ) {
             String key = new DecimalFormat( "##.00" ).format( entry.getKey() );
@@ -440,7 +440,7 @@ public class SourceTargetMapperImpl implements SourceTargetMapper {
             return null;
         }
 
-        Map<String, String> map = new LinkedHashMap<String, String>( Math.max( (int) ( source.size() / .75f ) + 1, 16 ) );
+        Map<String, String> map = LinkedHashMap.newLinkedHashMap( source.size() );
 
         for ( java.util.Map.Entry<BigDecimal, BigDecimal> entry : source.entrySet() ) {
             String key = createDecimalFormatWithLocale( "#0.#E0", Locale.forLanguageTag( "fr" ) ).format( entry.getKey() );
@@ -457,7 +457,7 @@ public class SourceTargetMapperImpl implements SourceTargetMapper {
             return null;
         }
 
-        Map<Float, Float> map = new LinkedHashMap<Float, Float>( Math.max( (int) ( source.size() / .75f ) + 1, 16 ) );
+        Map<Float, Float> map = LinkedHashMap.newLinkedHashMap( source.size() );
 
         for ( java.util.Map.Entry<String, String> entry : source.entrySet() ) {
             Float key;
@@ -486,7 +486,7 @@ public class SourceTargetMapperImpl implements SourceTargetMapper {
             return null;
         }
 
-        Map<BigDecimal, BigDecimal> map = new LinkedHashMap<BigDecimal, BigDecimal>( Math.max( (int) ( source.size() / .75f ) + 1, 16 ) );
+        Map<BigDecimal, BigDecimal> map = LinkedHashMap.newLinkedHashMap( source.size() );
 
         for ( java.util.Map.Entry<String, String> entry : source.entrySet() ) {
             BigDecimal key;

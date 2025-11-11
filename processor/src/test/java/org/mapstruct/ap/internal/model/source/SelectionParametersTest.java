@@ -5,377 +5,224 @@
  */
 package org.mapstruct.ap.internal.model.source;
 
-import java.lang.annotation.Annotation;
-import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
-import javax.lang.model.element.AnnotationMirror;
-import javax.lang.model.element.Element;
-import javax.lang.model.element.TypeElement;
-import javax.lang.model.type.ArrayType;
-import javax.lang.model.type.DeclaredType;
-import javax.lang.model.type.ExecutableType;
-import javax.lang.model.type.NoType;
-import javax.lang.model.type.NullType;
-import javax.lang.model.type.PrimitiveType;
-import javax.lang.model.type.TypeKind;
-import javax.lang.model.type.TypeMirror;
-import javax.lang.model.type.TypeVisitor;
-import javax.lang.model.type.WildcardType;
+import java.util.Objects;
+import java.util.stream.Collectors;
 
 import org.junit.jupiter.api.Test;
-import org.mapstruct.ap.internal.util.TypeUtils;
+import org.mapstruct.ap.descriptor.LangTypeKind;
+import org.mapstruct.ap.descriptor.TypeDescriptor;
+import org.mapstruct.ap.descriptor.TypeElementDescriptor;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * @author Filip Hrisafov
+ * Unit tests for {@link SelectionParameters}.
  */
-public class SelectionParametersTest {
-
-    private static class TestTypeMirror implements TypeMirror {
-
-        private final String name;
-
-        private TestTypeMirror(String name) {
-            this.name = name;
-        }
-
-        @Override
-        public TypeKind getKind() {
-            return null;
-        }
-
-        @Override
-        public <R, P> R accept(TypeVisitor<R, P> v, P p) {
-            return null;
-        }
-
-        @Override
-        public List<? extends AnnotationMirror> getAnnotationMirrors() {
-            return null;
-        }
-
-        @Override
-        public <A extends Annotation> A getAnnotation(Class<A> annotationType) {
-            return null;
-        }
-
-        @Override
-        public <A extends Annotation> A[] getAnnotationsByType(Class<A> annotationType) {
-            return null;
-        }
-
-        @Override
-        public String toString() {
-            return name;
-        }
-    }
-
-    private final TypeUtils typeUtils = new TypeUtils() {
-        @Override
-        public boolean isSubtypeErased(TypeMirror t1, TypeMirror t2) {
-            throw new UnsupportedOperationException( "isSubTypeErased is not supported" );
-        }
-
-        @Override
-        public Element asElement(TypeMirror t) {
-            throw new UnsupportedOperationException( "asElement is not supported" );
-        }
-
-        @Override
-        public boolean isSameType(TypeMirror t1, TypeMirror t2) {
-            return t1.toString().equals( t2.toString() );
-        }
-
-        @Override
-        public boolean isSubtype(TypeMirror t1, TypeMirror t2) {
-            throw new UnsupportedOperationException( "isSubType is not supported" );
-        }
-
-        @Override
-        public boolean isAssignable(TypeMirror t1, TypeMirror t2) {
-            throw new UnsupportedOperationException( "isAssignable is not supported" );
-        }
-
-        @Override
-        public boolean contains(TypeMirror t1, TypeMirror t2) {
-            throw new UnsupportedOperationException( "contains is not supported" );
-        }
-
-        @Override
-        public boolean isSubsignature(ExecutableType m1, ExecutableType m2) {
-            throw new UnsupportedOperationException( "isSubSignature is not supported" );
-        }
-
-        @Override
-        public List<? extends TypeMirror> directSupertypes(TypeMirror t) {
-            throw new UnsupportedOperationException( "directSupertypes is not supported" );
-        }
-
-        @Override
-        public TypeMirror erasure(TypeMirror t) {
-            throw new UnsupportedOperationException( "erasure is not supported" );
-        }
-
-        @Override
-        public TypeElement boxedClass(PrimitiveType p) {
-            throw new UnsupportedOperationException( "boxedClass is not supported" );
-        }
-
-        @Override
-        public PrimitiveType unboxedType(TypeMirror t) {
-            throw new UnsupportedOperationException( "unboxedType is not supported" );
-        }
-
-        @Override
-        public TypeMirror capture(TypeMirror t) {
-            throw new UnsupportedOperationException( "capture is not supported" );
-        }
-
-        @Override
-        public PrimitiveType getPrimitiveType(TypeKind kind) {
-            throw new UnsupportedOperationException( "getPrimitiveType is not supported" );
-        }
-
-        @Override
-        public NullType getNullType() {
-            throw new UnsupportedOperationException( "nullType is not supported" );
-        }
-
-        @Override
-        public NoType getNoType(TypeKind kind) {
-            throw new UnsupportedOperationException( "noType is not supported" );
-        }
-
-        @Override
-        public ArrayType getArrayType(TypeMirror componentType) {
-            throw new UnsupportedOperationException( "getArrayType is not supported" );
-        }
-
-        @Override
-        public WildcardType getWildcardType(TypeMirror extendsBound, TypeMirror superBound) {
-            throw new UnsupportedOperationException( "getWildCardType is not supported" );
-        }
-
-        @Override
-        public DeclaredType getDeclaredType(TypeElement typeElem, TypeMirror... typeArgs) {
-            throw new UnsupportedOperationException( "getDeclaredType is not supported" );
-        }
-
-        @Override
-        public DeclaredType getDeclaredType(DeclaredType containing, TypeElement typeElem, TypeMirror... typeArgs) {
-            throw new UnsupportedOperationException( "getDeclaredType is not supported" );
-        }
-
-        @Override
-        public TypeMirror asMemberOf(DeclaredType containing, Element element) {
-            throw new UnsupportedOperationException( "asMemberOf is not supported" );
-        }
-    };
+class SelectionParametersTest {
 
     @Test
-    public void testGetters() {
-        List<String> qualifyingNames = Arrays.asList( "language", "german" );
-        TypeMirror resultType = new TestTypeMirror( "resultType" );
-        List<TypeMirror> qualifiers = new ArrayList<>();
-        qualifiers.add( new TestTypeMirror( "org.mapstruct.test.SomeType" ) );
-        qualifiers.add( new TestTypeMirror( "org.mapstruct.test.SomeOtherType" ) );
-        SelectionParameters params = new SelectionParameters( qualifiers, qualifyingNames, resultType, typeUtils );
+    void gettersExposeConstructorValues() {
+        SelectionParameters parameters = parameters(
+            Arrays.asList( "org.mapstruct.test.SomeQualifier", "org.mapstruct.test.OtherQualifier" ),
+            Arrays.asList( "language", "german" ),
+            "resultType"
+        );
 
-        assertThat( params.getResultType() ).isSameAs( resultType );
-        assertThat( params.getQualifiers() ).hasSameElementsAs( qualifiers );
-        assertThat( params.getQualifyingNames() ).hasSameElementsAs( qualifyingNames );
+        assertThat( parameters.getQualifyingNames() ).containsExactly( "language", "german" );
+        assertThat( descriptorsToIds( parameters.getQualifiers() ) )
+            .containsExactly( "org.mapstruct.test.SomeQualifier", "org.mapstruct.test.OtherQualifier" );
+        assertThat( parameters.getResultType().id() ).isEqualTo( "resultType" );
     }
 
     @Test
-    public void testHashCode() {
-        List<String> qualifyingNames = Arrays.asList( "language", "german" );
-        TypeMirror resultType = new TestTypeMirror( "resultType" );
-        SelectionParameters params = new SelectionParameters( null, qualifyingNames, resultType, null );
+    void hashCodeIncludesNamesAndResultType() {
+        SelectionParameters parameters = parameters(
+            Collections.singletonList( "Qualifier" ),
+            Collections.singletonList( "german" ),
+            "resultType"
+        );
 
-        int expectedHash = 3 * 97 + qualifyingNames.hashCode();
+        int expectedHash = 3;
+        expectedHash = 97 * expectedHash + Collections.singletonList( "german" ).hashCode();
         expectedHash = 97 * expectedHash + "resultType".hashCode();
-        assertThat( params.hashCode() ).as( "Expected HashCode" ).isEqualTo( expectedHash );
+
+        assertThat( parameters.hashCode() ).isEqualTo( expectedHash );
     }
 
     @Test
-    public void testHashCodeWithAllNulls() {
-        SelectionParameters params = new SelectionParameters( null, null, null, null );
+    void equalsRespectsQualifiersAndNames() {
+        SelectionParameters left = parameters(
+            Arrays.asList( "QualifierA", "QualifierB" ),
+            Arrays.asList( "foo", "bar" ),
+            "result"
+        );
 
-        assertThat( params.hashCode() ).as( "All nulls hashCode" ).isEqualTo( 3 * 97 * 97 );
+        SelectionParameters identical = parameters(
+            Arrays.asList( "QualifierA", "QualifierB" ),
+            Arrays.asList( "foo", "bar" ),
+            "result"
+        );
+
+        SelectionParameters differentQualifiers = parameters(
+            Arrays.asList( "QualifierA" ),
+            Arrays.asList( "foo", "bar" ),
+            "result"
+        );
+
+        SelectionParameters differentNames = parameters(
+            Arrays.asList( "QualifierA", "QualifierB" ),
+            Collections.singletonList( "foo" ),
+            "result"
+        );
+
+        SelectionParameters differentResult = parameters(
+            Arrays.asList( "QualifierA", "QualifierB" ),
+            Arrays.asList( "foo", "bar" ),
+            "otherResult"
+        );
+
+        assertThat( left ).isEqualTo( identical );
+        assertThat( left ).isNotEqualTo( differentQualifiers );
+        assertThat( left ).isNotEqualTo( differentNames );
+        assertThat( left ).isNotEqualTo( differentResult );
+        assertThat( left ).isNotEqualTo( null );
+        assertThat( left ).isNotEqualTo( "not-selection-parameters" );
     }
 
-    @Test
-    public void testHashCodeWithNullQualifyingNames() {
-        TypeMirror resultType = new TestTypeMirror( "someType" );
-        SelectionParameters params = new SelectionParameters( null, null, resultType, null );
+    private static SelectionParameters parameters(List<String> qualifierIds,
+                                                  List<String> qualifierNames,
+                                                  String resultId) {
+        List<TypeDescriptor> qualifiers = qualifierIds != null
+            ? qualifierIds.stream().map( SelectionParametersTest::descriptor ).collect( Collectors.toList() )
+            : null;
 
-        assertThat( params.hashCode() )
-            .as( "QualifyingNames null hashCode" )
-            .isEqualTo( 3 * 97 * 97 + "someType".hashCode() );
+        TypeDescriptor resultType = resultId != null ? descriptor( resultId ) : null;
+
+        return new SelectionParameters(
+            qualifiers,
+            qualifierNames,
+            Collections.emptyList(),
+            Collections.emptyList(),
+            resultType,
+            null
+        );
     }
 
-    @Test
-    public void testHashCodeWithNullResultType() {
-        List<String> qualifyingNames = Collections.singletonList( "mapstruct" );
-        SelectionParameters params = new SelectionParameters( null, qualifyingNames, null, null );
-
-        assertThat( params.hashCode() )
-            .as( "ResultType nulls hashCode" )
-            .isEqualTo( ( 3 * 97 + qualifyingNames.hashCode() ) * 97 );
+    private static List<String> descriptorsToIds(List<TypeDescriptor> descriptors) {
+        return descriptors.stream().map( TypeDescriptor::id ).collect( Collectors.toList() );
     }
 
-    @Test
-    public void testEqualsSameInstance() {
-        List<String> qualifyingNames = Arrays.asList( "language", "german" );
-        TypeMirror resultType = new TestTypeMirror( "resultType" );
-        List<TypeMirror> qualifiers = new ArrayList<>();
-        qualifiers.add( new TestTypeMirror( "org.mapstruct.test.SomeType" ) );
-        qualifiers.add( new TestTypeMirror( "org.mapstruct.test.SomeOtherType" ) );
-        SelectionParameters params = new SelectionParameters( qualifiers, qualifyingNames, resultType, typeUtils );
-
-        assertThat( params.equals( params ) ).as( "Self equals" ).isTrue();
+    private static TypeDescriptor descriptor(String id) {
+        return new TestTypeDescriptor( id );
     }
 
-    @Test
-    public void testEqualsWitNull() {
-        List<String> qualifyingNames = Arrays.asList( "language", "german" );
-        TypeMirror resultType = new TestTypeMirror( "resultType" );
-        List<TypeMirror> qualifiers = new ArrayList<>();
-        qualifiers.add( new TestTypeMirror( "org.mapstruct.test.SomeType" ) );
-        qualifiers.add( new TestTypeMirror( "org.mapstruct.test.SomeOtherType" ) );
-        SelectionParameters params = new SelectionParameters( qualifiers, qualifyingNames, resultType, typeUtils );
+    /**
+     * Minimal {@link TypeDescriptor} implementation for exercising {@link SelectionParameters}.
+     */
+    private static final class TestTypeDescriptor implements TypeDescriptor {
 
-        assertThat( params.equals( null ) ).as( "Equals with null" ).isFalse();
-    }
+        private final String id;
 
-    @Test
-    public void testEqualsQualifiersOneNull() {
-        List<String> qualifyingNames = Arrays.asList( "language", "german" );
-        TypeMirror resultType = new TestTypeMirror( "resultType" );
-        List<TypeMirror> qualifiers = new ArrayList<>();
-        qualifiers.add( new TestTypeMirror( "org.mapstruct.test.SomeType" ) );
-        qualifiers.add( new TestTypeMirror( "org.mapstruct.test.SomeOtherType" ) );
-        SelectionParameters params = new SelectionParameters( qualifiers, qualifyingNames, resultType, typeUtils );
-        SelectionParameters params2 = new SelectionParameters( null, qualifyingNames, resultType, typeUtils );
+        private TestTypeDescriptor(String id) {
+            this.id = Objects.requireNonNull( id );
+        }
 
-        assertThat( params.equals( params2 ) ).as( "Second null qualifiers" ).isFalse();
-        assertThat( params2.equals( params ) ).as( "First null qualifiers" ).isFalse();
-    }
+        @Override
+        public String id() {
+            return id;
+        }
 
-    @Test
-    public void testEqualsQualifiersInDifferentOrder() {
-        List<String> qualifyingNames = Arrays.asList( "language", "german" );
-        TypeMirror resultType = new TestTypeMirror( "resultType" );
-        List<TypeMirror> qualifiers = new ArrayList<>();
-        qualifiers.add( new TestTypeMirror( "org.mapstruct.test.SomeType" ) );
-        qualifiers.add( new TestTypeMirror( "org.mapstruct.test.SomeOtherType" ) );
-        SelectionParameters params = new SelectionParameters( qualifiers, qualifyingNames, resultType, typeUtils );
+        @Override
+        public LangTypeKind kind() {
+            return LangTypeKind.DECLARED;
+        }
 
-        List<TypeMirror> qualifiers2 = new ArrayList<>();
-        qualifiers2.add( new TestTypeMirror( "org.mapstruct.test.SomeOtherType" ) );
-        qualifiers2.add( new TestTypeMirror( "org.mapstruct.test.SomeType" ) );
-        SelectionParameters params2 = new SelectionParameters( qualifiers2, qualifyingNames, resultType, typeUtils );
+        @Override
+        public String displayName() {
+            return id;
+        }
 
-        assertThat( params.equals( params2 ) ).as( "Different order for qualifiers" ).isFalse();
-        assertThat( params2.equals( params ) ).as( "Different order for qualifiers" ).isFalse();
-    }
+        @Override
+        public java.util.Optional<String> qualifiedName() {
+            return java.util.Optional.of( id );
+        }
 
-    @Test
-    public void testEqualsQualifyingNamesOneNull() {
-        List<String> qualifyingNames = Arrays.asList( "language", "german" );
-        TypeMirror resultType = new TestTypeMirror( "resultType" );
-        List<TypeMirror> qualifiers = new ArrayList<>();
-        qualifiers.add( new TestTypeMirror( "org.mapstruct.test.SomeType" ) );
-        qualifiers.add( new TestTypeMirror( "org.mapstruct.test.SomeOtherType" ) );
-        SelectionParameters params = new SelectionParameters( qualifiers, qualifyingNames, resultType, typeUtils );
+        @Override
+        public java.util.Optional<String> packageName() {
+            return java.util.Optional.empty();
+        }
 
-        List<TypeMirror> qualifiers2 = new ArrayList<>();
-        qualifiers2.add( new TestTypeMirror( "org.mapstruct.test.SomeType" ) );
-        qualifiers2.add( new TestTypeMirror( "org.mapstruct.test.SomeOtherType" ) );
-        SelectionParameters params2 = new SelectionParameters( qualifiers2, null, resultType, typeUtils );
+        @Override
+        public java.util.Optional<TypeElementDescriptor> typeElement() {
+            return java.util.Optional.empty();
+        }
 
-        assertThat( params.equals( params2 ) ).as( "Second null qualifyingNames" ).isFalse();
-        assertThat( params2.equals( params ) ).as( "First null qualifyingNames" ).isFalse();
-    }
+        @Override
+        public java.util.Optional<TypeDescriptor> componentType() {
+            return java.util.Optional.empty();
+        }
 
-    @Test
-    public void testEqualsQualifyingNamesInDifferentOrder() {
-        List<String> qualifyingNames = Arrays.asList( "language", "german" );
-        TypeMirror resultType = new TestTypeMirror( "resultType" );
-        List<TypeMirror> qualifiers = new ArrayList<>();
-        qualifiers.add( new TestTypeMirror( "org.mapstruct.test.SomeType" ) );
-        qualifiers.add( new TestTypeMirror( "org.mapstruct.test.SomeOtherType" ) );
-        SelectionParameters params = new SelectionParameters( qualifiers, qualifyingNames, resultType, typeUtils );
+        @Override
+        public List<TypeDescriptor> typeArguments() {
+            return Collections.emptyList();
+        }
 
-        List<String> qualifyingNames2 = Arrays.asList( "german", "language" );
-        List<TypeMirror> qualifiers2 = new ArrayList<>();
-        qualifiers2.add( new TestTypeMirror( "org.mapstruct.test.SomeOtherType" ) );
-        qualifiers2.add( new TestTypeMirror( "org.mapstruct.test.SomeType" ) );
-        SelectionParameters params2 = new SelectionParameters( qualifiers2, qualifyingNames2, resultType, typeUtils );
+        @Override
+        public boolean isPrimitive() {
+            return false;
+        }
 
-        assertThat( params.equals( params2 ) ).as( "Different order for qualifyingNames" ).isFalse();
-        assertThat( params2.equals( params ) ).as( "Different order for qualifyingNames" ).isFalse();
-    }
+        @Override
+        public boolean isVoid() {
+            return false;
+        }
 
-    @Test
-    public void testEqualsResultTypeOneNull() {
-        List<String> qualifyingNames = Arrays.asList( "language", "german" );
-        TypeMirror resultType = new TestTypeMirror( "resultType" );
-        List<TypeMirror> qualifiers = new ArrayList<>();
-        qualifiers.add( new TestTypeMirror( "org.mapstruct.test.SomeType" ) );
-        qualifiers.add( new TestTypeMirror( "org.mapstruct.test.SomeOtherType" ) );
-        SelectionParameters params = new SelectionParameters( qualifiers, qualifyingNames, resultType, typeUtils );
+        @Override
+        public boolean isEnum() {
+            return false;
+        }
 
-        List<String> qualifyingNames2 = Arrays.asList( "language", "german" );
-        List<TypeMirror> qualifiers2 = new ArrayList<>();
-        qualifiers2.add( new TestTypeMirror( "org.mapstruct.test.SomeType" ) );
-        qualifiers2.add( new TestTypeMirror( "org.mapstruct.test.SomeOtherType" ) );
-        SelectionParameters params2 = new SelectionParameters( qualifiers2, qualifyingNames2, null, typeUtils );
+        @Override
+        public boolean isInterface() {
+            return false;
+        }
 
-        assertThat( params.equals( params2 ) ).as( "Second null resultType" ).isFalse();
-        assertThat( params2.equals( params ) ).as( "First null resultType" ).isFalse();
-    }
+        @Override
+        public java.util.Optional<TypeDescriptor> wildcardExtendsBound() {
+            return java.util.Optional.empty();
+        }
 
-    @Test
-    public void testAllEqual() {
-        List<String> qualifyingNames = Arrays.asList( "language", "german" );
-        TypeMirror resultType = new TestTypeMirror( "resultType" );
-        List<TypeMirror> qualifiers = new ArrayList<>();
-        qualifiers.add( new TestTypeMirror( "org.mapstruct.test.SomeType" ) );
-        qualifiers.add( new TestTypeMirror( "org.mapstruct.test.SomeOtherType" ) );
-        SelectionParameters params = new SelectionParameters( qualifiers, qualifyingNames, resultType, typeUtils );
+        @Override
+        public java.util.Optional<TypeDescriptor> wildcardSuperBound() {
+            return java.util.Optional.empty();
+        }
 
-        List<String> qualifyingNames2 = Arrays.asList( "language", "german" );
-        TypeMirror resultType2 = new TestTypeMirror( "resultType" );
-        List<TypeMirror> qualifiers2 = new ArrayList<>();
-        qualifiers2.add( new TestTypeMirror( "org.mapstruct.test.SomeType" ) );
-        qualifiers2.add( new TestTypeMirror( "org.mapstruct.test.SomeOtherType" ) );
-        SelectionParameters params2 = new SelectionParameters( qualifiers2, qualifyingNames2, resultType2, typeUtils );
+        @Override
+        public java.util.Optional<String> typeVariableName() {
+            return java.util.Optional.empty();
+        }
 
-        assertThat( params.equals( params2 ) ).as( "All equal" ).isTrue();
-        assertThat( params2.equals( params ) ).as( "All equal" ).isTrue();
-    }
+        @Override
+        public List<TypeDescriptor> typeVariableBounds() {
+            return Collections.emptyList();
+        }
 
-    @Test
-    public void testDifferentResultTypes() {
-        List<String> qualifyingNames = Arrays.asList( "language", "german" );
-        TypeMirror resultType = new TestTypeMirror( "resultType" );
-        List<TypeMirror> qualifiers = new ArrayList<>();
-        qualifiers.add( new TestTypeMirror( "org.mapstruct.test.SomeType" ) );
-        qualifiers.add( new TestTypeMirror( "org.mapstruct.test.SomeOtherType" ) );
-        SelectionParameters params = new SelectionParameters( qualifiers, qualifyingNames, resultType, typeUtils );
+        @Override
+        public TypeDescriptor erasure() {
+            return this;
+        }
 
-        List<String> qualifyingNames2 = Arrays.asList( "language", "german" );
-        TypeMirror resultType2 = new TestTypeMirror( "otherResultType" );
-        List<TypeMirror> qualifiers2 = new ArrayList<>();
-        qualifiers2.add( new TestTypeMirror( "org.mapstruct.test.SomeType" ) );
-        qualifiers2.add( new TestTypeMirror( "org.mapstruct.test.SomeOtherType" ) );
-        SelectionParameters params2 = new SelectionParameters( qualifiers2, qualifyingNames2, resultType2, typeUtils );
+        @Override
+        public Object unwrap() {
+            return null;
+        }
 
-        assertThat( params.equals( params2 ) ).as( "Different resultType" ).isFalse();
-        assertThat( params2.equals( params ) ).as( "Different resultType" ).isFalse();
+        @Override
+        public int compareTo(TypeDescriptor other) {
+            return id.compareTo( other.id() );
+        }
     }
 }

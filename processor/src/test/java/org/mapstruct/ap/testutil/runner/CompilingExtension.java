@@ -467,6 +467,7 @@ abstract class CompilingExtension implements BeforeEachCallback {
             getAdditionalTestDependencies( testMethod, testClass )
         );
 
+
         ExtensionContext.Store rootStore = context.getRoot().getStore( NAMESPACE );
 
         // We need to put the compilation request in the store, so the GeneratedSource can use it
@@ -523,16 +524,24 @@ abstract class CompilingExtension implements BeforeEachCallback {
     }
 
     private void createOutputDirs() {
+        boolean keepGenerated = Boolean.getBoolean( "mapstruct.debug.keepGenerated" );
+
         File directory = new File( classOutputDir );
-        deleteDirectory( directory );
+        if ( !keepGenerated ) {
+            deleteDirectory( directory );
+        }
         directory.mkdirs();
 
         directory = new File( sourceOutputDir );
-        deleteDirectory( directory );
+        if ( !keepGenerated ) {
+            deleteDirectory( directory );
+        }
         directory.mkdirs();
 
         directory = new File( additionalCompilerClasspath );
-        deleteDirectory( directory );
+        if ( !keepGenerated ) {
+            deleteDirectory( directory );
+        }
         directory.mkdirs();
     }
 
