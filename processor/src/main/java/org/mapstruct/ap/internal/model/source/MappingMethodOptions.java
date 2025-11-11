@@ -14,14 +14,13 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
-import javax.lang.model.element.AnnotationMirror;
-
 import org.mapstruct.ap.internal.gem.CollectionMappingStrategyGem;
 import org.mapstruct.ap.internal.model.common.Type;
 import org.mapstruct.ap.internal.model.common.TypeFactory;
 import org.mapstruct.ap.internal.util.FormattingMessager;
 import org.mapstruct.ap.internal.util.Message;
 import org.mapstruct.ap.internal.util.accessor.Accessor;
+import org.mapstruct.ap.descriptor.AnnotationDescriptor;
 
 /**
  * Encapsulates all options specifiable on a mapping method
@@ -128,7 +127,12 @@ public class MappingMethodOptions {
     }
 
     public void setValueMappings(List<ValueMappingOptions> valueMappings) {
-        this.valueMappings = valueMappings;
+        if ( valueMappings == null ) {
+            this.valueMappings = null;
+        }
+        else {
+            this.valueMappings = new java.util.ArrayList<>( valueMappings );
+        }
     }
 
     public MapperOptions getMapper() {
@@ -153,10 +157,10 @@ public class MappingMethodOptions {
      * @param sourceMethod the method which inherits the options.
      * @param templateMethod the template method with the options to inherit, may be {@code null}
      * @param isInverse if {@code true}, the specified options are from an inverse method
-     * @param annotationMirror the annotation on which the compile errors will be shown.
+     * @param annotation the annotation on which the compile errors will be shown.
      */
     public void applyInheritedOptions(SourceMethod sourceMethod, SourceMethod templateMethod, boolean isInverse,
-                                      AnnotationMirror annotationMirror) {
+                                      AnnotationDescriptor annotation) {
         MappingMethodOptions templateOptions = templateMethod.getOptions();
         if ( null != templateOptions ) {
             if ( !getIterableMapping().hasAnnotation() && templateOptions.getIterableMapping().hasAnnotation() ) {
@@ -209,7 +213,7 @@ public class MappingMethodOptions {
                 List<SubclassMappingOptions> inheritedMappings = SubclassMappingOptions.copyForInverseInheritance(
                                               templateOptions.getSubclassMappings(),
                                               getBeanMapping() );
-                addAllNonRedefined( sourceMethod, annotationMirror, inheritedMappings );
+                addAllNonRedefined( sourceMethod, annotation, inheritedMappings );
             }
             else if ( methodsHaveIdenticalSignature( templateMethod, sourceMethod ) ) {
                 List<SubclassMappingOptions> inheritedMappings =
@@ -217,7 +221,7 @@ public class MappingMethodOptions {
                                           .copyForInheritance(
                                               templateOptions.getSubclassMappings(),
                                               getBeanMapping() );
-                addAllNonRedefined( sourceMethod, annotationMirror, inheritedMappings );
+                addAllNonRedefined( sourceMethod, annotation, inheritedMappings );
             }
 
             Set<MappingOptions> newMappings = new LinkedHashSet<>();
@@ -262,15 +266,16 @@ public class MappingMethodOptions {
         return templateMethod.getResultType().equals( sourceMethod.getResultType() );
     }
 
-    private void addAllNonRedefined(SourceMethod sourceMethod, AnnotationMirror annotationMirror,
+    private void addAllNonRedefined(SourceMethod sourceMethod, AnnotationDescriptor annotation,
                                     List<SubclassMappingOptions> inheritedMappings) {
         Set<SubclassMappingOptions> redefinedSubclassMappings = new HashSet<>( subclassMappings );
         for ( SubclassMappingOptions subclassMappingOption : inheritedMappings ) {
             if ( !redefinedSubclassMappings.contains( subclassMappingOption ) ) {
                 if ( subclassValidator.isValidUsage(
-                                          sourceMethod.getExecutable(),
-                                          annotationMirror,
-                    subclassMappingOption.getSource() ) ) {
+                    sourceMethod.getExecutableDescriptor(),
+                    annotation,
+                    subclassMappingOption.getSourceType()
+                ) ) {
                     subclassMappings.add( subclassMappingOption );
                 }
             }
@@ -339,8 +344,8 @@ public class MappingMethodOptions {
             }
             else {
                 messager.printMessage(
-                    method.getExecutable(),
-                    getBeanMapping().getMirror(),
+                    method.getExecutableDescriptor(),
+                    getBeanMapping().getAnnotation(),
                     Message.BEANMAPPING_IGNORE_BY_DEFAULT_WITH_MAPPING_TARGET_THIS
                 );
                 // Nothing more to do if this is reached

@@ -11,18 +11,17 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 import java.util.stream.Collectors;
-import javax.lang.model.element.Element;
-import javax.lang.model.element.ExecutableElement;
-import javax.lang.model.element.Modifier;
 
-import org.mapstruct.ap.internal.gem.ObjectFactoryGem;
+import org.mapstruct.ap.internal.util.AnnotationDescriptorUtils;
 import org.mapstruct.ap.internal.model.common.Accessibility;
 import org.mapstruct.ap.internal.model.common.Parameter;
 import org.mapstruct.ap.internal.model.common.Type;
 import org.mapstruct.ap.internal.model.common.TypeFactory;
 import org.mapstruct.ap.internal.util.Executables;
 import org.mapstruct.ap.internal.util.Strings;
-import org.mapstruct.ap.internal.util.TypeUtils;
+import org.mapstruct.ap.descriptor.ExecutableDescriptor;
+import org.mapstruct.ap.langmodel.api.LangElements;
+import org.mapstruct.ap.descriptor.LangModifier;
 
 import static org.mapstruct.ap.internal.model.source.MappingMethodUtils.isEnumMapping;
 import static org.mapstruct.ap.internal.util.Collections.first;
@@ -38,11 +37,10 @@ import static org.mapstruct.ap.internal.util.Collections.first;
  */
 public class SourceMethod implements Method {
 
-    private final TypeUtils typeUtils;
     private final TypeFactory typeFactory;
 
     private final Type declaringMapper;
-    private final ExecutableElement executable;
+    private final ExecutableDescriptor executableDescriptor;
     private final List<Parameter> parameters;
     private final Parameter mappingTargetParameter;
     private final Parameter targetTypeParameter;
@@ -79,7 +77,7 @@ public class SourceMethod implements Method {
 
         private Type declaringMapper = null;
         private Type definingType = null;
-        private ExecutableElement executable;
+        private ExecutableDescriptor executableDescriptor;
         private List<Parameter> parameters;
         private Type returnType = null;
         private List<Type> exceptionTypes;
@@ -87,7 +85,6 @@ public class SourceMethod implements Method {
         private IterableMappingOptions iterableMapping = null;
         private MapMappingOptions mapMapping = null;
         private BeanMappingOptions beanMapping = null;
-        private TypeUtils typeUtils;
         private TypeFactory typeFactory = null;
         private MapperOptions mapper = null;
         private List<SourceMethod> prototypeMethods = Collections.emptyList();
@@ -106,8 +103,8 @@ public class SourceMethod implements Method {
             return this;
         }
 
-        public Builder setExecutable(ExecutableElement executable) {
-            this.executable = executable;
+        public Builder setExecutable(ExecutableDescriptor executable) {
+            this.executableDescriptor = executable;
             return this;
         }
 
@@ -163,11 +160,6 @@ public class SourceMethod implements Method {
 
         public Builder setSubclassValidator(SubclassValidator subclassValidator) {
             this.subclassValidator = subclassValidator;
-            return this;
-        }
-
-        public Builder setTypeUtils(TypeUtils typeUtils) {
-            this.typeUtils = typeUtils;
             return this;
         }
 
@@ -232,11 +224,12 @@ public class SourceMethod implements Method {
                 conditionOptions != null ? new ConditionMethodOptions( conditionOptions ) :
                     ConditionMethodOptions.empty();
 
-            this.typeParameters = this.executable.getTypeParameters()
-                .stream()
-                .map( Element::asType )
-                .map( typeFactory::getType )
-                .collect( Collectors.toList() );
+            this.typeParameters = this.executableDescriptor == null
+                ? Collections.emptyList()
+                : this.executableDescriptor.typeParameters()
+                    .stream()
+                    .map( typeFactory::getType )
+                    .collect( Collectors.toList() );
 
             return new SourceMethod( this, mappingMethodOptions, conditionMethodOptions );
         }
@@ -245,11 +238,19 @@ public class SourceMethod implements Method {
     private SourceMethod(Builder builder, MappingMethodOptions mappingMethodOptions,
                          ConditionMethodOptions conditionMethodOptions) {
         this.declaringMapper = builder.declaringMapper;
-        this.executable = builder.executable;
+        this.executableDescriptor = builder.executableDescriptor;
         this.parameters = builder.parameters;
         this.returnType = builder.returnType;
         this.exceptionTypes = builder.exceptionTypes;
-        this.accessibility = Accessibility.fromModifiers( builder.executable.getModifiers() );
+
+        this.typeFactory = builder.typeFactory;
+        this.prototypeMethods = builder.prototypeMethods;
+        this.mapperToImplement = builder.definingType;
+        this.verboseLogging = builder.verboseLogging;
+
+        this.accessibility = executableDescriptor != null
+            ? Accessibility.fromModifiers( executableDescriptor.modifiers() )
+            : Accessibility.PRIVATE;
 
         this.mappingMethodOptions = mappingMethodOptions;
         this.conditionMethodOptions = conditionMethodOptions;
@@ -263,15 +264,8 @@ public class SourceMethod implements Method {
         this.targetTypeParameter = Parameter.getTargetTypeParameter( parameters );
         this.sourcePropertyNameParameter = Parameter.getSourcePropertyNameParameter( parameters );
         this.targetPropertyNameParameter = Parameter.getTargetPropertyNameParameter( parameters );
-        this.hasObjectFactoryAnnotation = ObjectFactoryGem.instanceOn( executable ) != null;
+        this.hasObjectFactoryAnnotation = hasAnnotation( "org.mapstruct.ObjectFactory" );
         this.isObjectFactory = determineIfIsObjectFactory();
-
-        this.typeUtils = builder.typeUtils;
-        this.typeFactory = builder.typeFactory;
-        this.prototypeMethods = builder.prototypeMethods;
-        this.mapperToImplement = builder.definingType;
-
-        this.verboseLogging = builder.verboseLogging;
     }
 
     private boolean determineIfIsObjectFactory() {
@@ -290,13 +284,8 @@ public class SourceMethod implements Method {
     }
 
     @Override
-    public ExecutableElement getExecutable() {
-        return executable;
-    }
-
-    @Override
     public String getName() {
-        return executable.getSimpleName().toString();
+        return executableDescriptor != null ? executableDescriptor.simpleName().content() : "";
     }
 
     @Override
@@ -342,6 +331,15 @@ public class SourceMethod implements Method {
     @Override
     public Type getReturnType() {
         return returnType;
+    }
+
+    @Override
+    public ExecutableDescriptor getExecutable() {
+        return executableDescriptor;
+    }
+
+    public ExecutableDescriptor getExecutableDescriptor() {
+        return executableDescriptor;
     }
 
     @Override
@@ -516,12 +514,13 @@ public class SourceMethod implements Method {
      */
     @Override
     public boolean overridesMethod() {
-        return declaringMapper == null && executable.getModifiers().contains( Modifier.ABSTRACT );
+        Set<LangModifier> modifiers = executableDescriptor != null ? executableDescriptor.modifiers() : null;
+        return declaringMapper == null && modifiers != null && modifiers.contains( LangModifier.ABSTRACT );
     }
 
     @Override
     public boolean matches(List<Type> sourceTypes, Type targetType) {
-        MethodMatcher matcher = new MethodMatcher( typeUtils, typeFactory, this );
+        MethodMatcher matcher = new MethodMatcher( typeFactory, this );
         return matcher.matches( sourceTypes, targetType );
     }
 
@@ -551,12 +550,12 @@ public class SourceMethod implements Method {
 
     @Override
     public boolean isStatic() {
-        return executable.getModifiers().contains( Modifier.STATIC );
+        return executableDescriptor != null && executableDescriptor.modifiers().contains( LangModifier.STATIC );
     }
 
     @Override
     public boolean isDefault() {
-        return Executables.isDefaultMethod( executable );
+        return Executables.isDefaultMethod( executableDescriptor );
     }
 
     @Override
@@ -566,15 +565,15 @@ public class SourceMethod implements Method {
 
     @Override
     public boolean isLifecycleCallbackMethod() {
-        return Executables.isLifecycleCallbackMethod( getExecutable() );
+        return Executables.isLifecycleCallbackMethod( executableDescriptor, langElements() );
     }
 
     public boolean isAfterMappingMethod() {
-        return Executables.isAfterMappingMethod( getExecutable() );
+        return Executables.isAfterMappingMethod( executableDescriptor, langElements() );
     }
 
     public boolean isBeforeMappingMethod() {
-        return Executables.isBeforeMappingMethod( getExecutable() );
+        return Executables.isBeforeMappingMethod( executableDescriptor, langElements() );
     }
 
     /**
@@ -582,7 +581,7 @@ public class SourceMethod implements Method {
      * methods
      */
     public boolean isAbstract() {
-        return executable.getModifiers().contains( Modifier.ABSTRACT );
+        return executableDescriptor != null && executableDescriptor.modifiers().contains( LangModifier.ABSTRACT );
     }
 
     @Override
@@ -611,5 +610,16 @@ public class SourceMethod implements Method {
                 .collect( Collectors.joining( ", " ) );
             return getResultType().describe() + " " + mapper + getName() + "(" + sourceTypes + ")";
         }
+    }
+
+    private LangElements langElements() {
+        return typeFactory != null ? typeFactory.langElements() : null;
+    }
+
+    private boolean hasAnnotation(String annotationFqn) {
+        LangElements elements = langElements();
+        return executableDescriptor != null
+            && elements != null
+            && AnnotationDescriptorUtils.findAnnotation( elements, executableDescriptor, annotationFqn ).isPresent();
     }
 }

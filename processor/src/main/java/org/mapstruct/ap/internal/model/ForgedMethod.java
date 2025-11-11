@@ -11,9 +11,6 @@ import java.util.Iterator;
 import java.util.List;
 import java.util.Objects;
 import java.util.stream.Collectors;
-
-import javax.lang.model.element.ExecutableElement;
-
 import org.mapstruct.ap.internal.model.beanmapping.MappingReferences;
 import org.mapstruct.ap.internal.model.common.Accessibility;
 import org.mapstruct.ap.internal.model.common.Parameter;
@@ -22,6 +19,7 @@ import org.mapstruct.ap.internal.model.source.MappingMethodOptions;
 import org.mapstruct.ap.internal.model.source.Method;
 import org.mapstruct.ap.internal.model.source.ParameterProvidedMethods;
 import org.mapstruct.ap.internal.util.Strings;
+import org.mapstruct.ap.descriptor.ExecutableDescriptor;
 
 /**
  * This method will be generated in absence of a suitable abstract method to implement.
@@ -346,8 +344,13 @@ public class ForgedMethod implements Method {
     }
 
     @Override
-    public ExecutableElement getExecutable() {
-        return basedOn.getExecutable();
+    public ExecutableDescriptor getExecutable() {
+        return basedOn != null ? basedOn.getExecutable() : null;
+    }
+
+    @Override
+    public ExecutableDescriptor getExecutableDescriptor() {
+        return basedOn != null ? basedOn.getExecutableDescriptor() : null;
     }
 
     @Override

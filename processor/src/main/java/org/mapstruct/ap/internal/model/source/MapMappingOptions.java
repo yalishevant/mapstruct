@@ -5,17 +5,20 @@
  */
 package org.mapstruct.ap.internal.model.source;
 
+import java.util.Collections;
+import java.util.List;
 import java.util.Optional;
-import javax.lang.model.element.AnnotationMirror;
-import javax.lang.model.element.ExecutableElement;
 
 import org.mapstruct.ap.internal.gem.MapMappingGem;
 import org.mapstruct.ap.internal.gem.NullValueMappingStrategyGem;
 import org.mapstruct.ap.internal.model.common.FormattingParameters;
-import org.mapstruct.ap.internal.util.ElementUtils;
+import org.mapstruct.ap.internal.model.common.TypeFactory;
+import org.mapstruct.ap.internal.util.AnnotationValueUtils;
 import org.mapstruct.ap.internal.util.FormattingMessager;
 import org.mapstruct.ap.internal.util.Message;
-import org.mapstruct.ap.internal.util.TypeUtils;
+import org.mapstruct.ap.descriptor.AnnotationDescriptor;
+import org.mapstruct.ap.descriptor.ExecutableDescriptor;
+import org.mapstruct.ap.descriptor.TypeDescriptor;
 import org.mapstruct.tools.gem.GemValue;
 
 /**
@@ -30,10 +33,11 @@ public class MapMappingOptions extends DelegatingOptions {
     private final FormattingParameters keyFormattingParameters;
     private final FormattingParameters valueFormattingParameters;
     private final MapMappingGem mapMapping;
+    private final AnnotationDescriptor annotation;
 
     public static MapMappingOptions fromGem(MapMappingGem mapMapping, MapperOptions mapperOptions,
-                                            ExecutableElement method, FormattingMessager messager,
-                                            TypeUtils typeUtils) {
+                                            ExecutableDescriptor method, FormattingMessager messager,
+                                            TypeFactory typeFactory) {
 
         if ( mapMapping == null || !isConsistent( mapMapping, method, messager ) ) {
             MapMappingOptions options = new MapMappingOptions(
@@ -42,6 +46,7 @@ public class MapMappingOptions extends DelegatingOptions {
                 null,
                 SelectionParameters.empty(),
                 null,
+                null,
                 mapperOptions
             );
             return options;
@@ -49,25 +54,57 @@ public class MapMappingOptions extends DelegatingOptions {
 
         String locale = mapMapping.locale().getValue();
 
+        List<TypeDescriptor> keyQualifiers;
+        if ( mapMapping.keyQualifiedBy().hasValue() ) {
+            keyQualifiers = AnnotationValueUtils.asTypeList(
+                typeFactory.getDescriptorFactory()
+                    .annotationValueDescriptor( mapMapping.keyQualifiedBy().getAnnotationValue() ) );
+        }
+        else {
+            keyQualifiers = Collections.<TypeDescriptor>emptyList();
+        }
+        TypeDescriptor keyTarget = mapMapping.keyTargetType().hasValue()
+            ? AnnotationValueUtils.asType(
+                typeFactory.getDescriptorFactory()
+                    .annotationValueDescriptor( mapMapping.keyTargetType().getAnnotationValue() ) )
+            : null;
+
         SelectionParameters keySelection = new SelectionParameters(
-            mapMapping.keyQualifiedBy().get(),
+            keyQualifiers,
             mapMapping.keyQualifiedByName().get(),
-            mapMapping.keyTargetType().getValue(),
-            typeUtils
+            keyTarget
         );
 
+        List<TypeDescriptor> valueQualifiers;
+        if ( mapMapping.valueQualifiedBy().hasValue() ) {
+            valueQualifiers = AnnotationValueUtils.asTypeList(
+                typeFactory.getDescriptorFactory()
+                    .annotationValueDescriptor( mapMapping.valueQualifiedBy().getAnnotationValue() ) );
+        }
+        else {
+            valueQualifiers = Collections.<TypeDescriptor>emptyList();
+        }
+        TypeDescriptor valueTarget = mapMapping.valueTargetType().hasValue()
+            ? AnnotationValueUtils.asType(
+                typeFactory.getDescriptorFactory()
+                    .annotationValueDescriptor( mapMapping.valueTargetType().getAnnotationValue() ) )
+            : null;
+
         SelectionParameters valueSelection = new SelectionParameters(
-            mapMapping.valueQualifiedBy().get(),
+            valueQualifiers,
             mapMapping.valueQualifiedByName().get(),
-            mapMapping.valueTargetType().getValue(),
-            typeUtils
+            valueTarget
         );
+
+        AnnotationDescriptor annotationDescriptor =
+            typeFactory.getDescriptorFactory().annotationDescriptor( mapMapping.mirror() );
 
         FormattingParameters keyFormatting = new FormattingParameters(
             mapMapping.keyDateFormat().get(),
             mapMapping.keyNumberFormat().get(),
-            mapMapping.mirror(),
-            mapMapping.keyDateFormat().getAnnotationValue(),
+            annotationDescriptor,
+            typeFactory.getDescriptorFactory()
+                .annotationValueDescriptor( mapMapping.keyDateFormat().getAnnotationValue() ),
             method,
             locale
         );
@@ -75,8 +112,9 @@ public class MapMappingOptions extends DelegatingOptions {
         FormattingParameters valueFormatting = new FormattingParameters(
             mapMapping.valueDateFormat().get(),
             mapMapping.valueNumberFormat().get(),
-            mapMapping.mirror(),
-            mapMapping.valueDateFormat().getAnnotationValue(),
+            annotationDescriptor,
+            typeFactory.getDescriptorFactory()
+                .annotationValueDescriptor( mapMapping.valueDateFormat().getAnnotationValue() ),
             method,
             locale
         );
@@ -87,12 +125,13 @@ public class MapMappingOptions extends DelegatingOptions {
             valueFormatting,
             valueSelection,
             mapMapping,
+            annotationDescriptor,
             mapperOptions
         );
         return options;
     }
 
-    private static boolean isConsistent(MapMappingGem gem, ExecutableElement method,
+    private static boolean isConsistent(MapMappingGem gem, ExecutableDescriptor method,
                                         FormattingMessager messager) {
         if ( !gem.keyDateFormat().hasValue()
             && !gem.keyNumberFormat().hasValue()
@@ -113,13 +152,14 @@ public class MapMappingOptions extends DelegatingOptions {
 
     private MapMappingOptions(FormattingParameters keyFormatting, SelectionParameters keySelectionParameters,
                               FormattingParameters valueFormatting, SelectionParameters valueSelectionParameters,
-                              MapMappingGem mapMapping, DelegatingOptions next ) {
+                              MapMappingGem mapMapping, AnnotationDescriptor annotation, DelegatingOptions next ) {
         super( next );
         this.keyFormattingParameters = keyFormatting;
         this.keySelectionParameters = keySelectionParameters;
         this.valueFormattingParameters = valueFormatting;
         this.valueSelectionParameters = valueSelectionParameters;
         this.mapMapping = mapMapping;
+        this.annotation = annotation;
     }
 
     public FormattingParameters getKeyFormattingParameters() {
@@ -134,12 +174,12 @@ public class MapMappingOptions extends DelegatingOptions {
         return valueFormattingParameters;
     }
 
-    public SelectionParameters getValueSelectionParameters() {
-        return valueSelectionParameters;
+    public AnnotationDescriptor getAnnotation() {
+        return annotation;
     }
 
-    public AnnotationMirror getMirror() {
-        return Optional.ofNullable( mapMapping ).map( MapMappingGem::mirror ).orElse( null );
+    public SelectionParameters getValueSelectionParameters() {
+        return valueSelectionParameters;
     }
 
     @Override
@@ -151,20 +191,24 @@ public class MapMappingOptions extends DelegatingOptions {
             .orElse( next().getNullValueMapMappingStrategy() );
     }
 
-    public MappingControl getKeyMappingControl(ElementUtils elementUtils) {
+    public MappingControl getKeyMappingControl(TypeFactory typeFactory) {
         return Optional.ofNullable( mapMapping ).map( MapMappingGem::keyMappingControl )
             .filter( GemValue::hasValue )
             .map( GemValue::getValue )
-            .map( mc -> MappingControl.fromTypeMirror( mc, elementUtils ) )
-            .orElse( next().getMappingControl( elementUtils ) );
+            .map( mc -> MappingControl.fromTypeDescriptor(
+                typeFactory.getDescriptorFactory().typeDescriptor( mc ),
+                typeFactory.langElements() ) )
+            .orElse( next().getMappingControl( typeFactory ) );
     }
 
-    public MappingControl getValueMappingControl(ElementUtils elementUtils) {
+    public MappingControl getValueMappingControl(TypeFactory typeFactory) {
         return Optional.ofNullable( mapMapping ).map( MapMappingGem::valueMappingControl )
             .filter( GemValue::hasValue )
             .map( GemValue::getValue )
-            .map( mc -> MappingControl.fromTypeMirror( mc, elementUtils ) )
-            .orElse( next().getMappingControl( elementUtils ) );
+            .map( mc -> MappingControl.fromTypeDescriptor(
+                typeFactory.getDescriptorFactory().typeDescriptor( mc ),
+                typeFactory.langElements() ) )
+            .orElse( next().getMappingControl( typeFactory ) );
     }
 
     @Override

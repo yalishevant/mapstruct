@@ -5,11 +5,8 @@
  */
 package org.mapstruct.ap.internal.model;
 
+import java.util.List;
 import java.util.function.Predicate;
-import javax.lang.model.element.Element;
-import javax.lang.model.element.ElementKind;
-import javax.lang.model.element.ExecutableElement;
-import javax.lang.model.element.Modifier;
 
 import org.mapstruct.ap.internal.gem.CollectionMappingStrategyGem;
 import org.mapstruct.ap.internal.gem.NullValueCheckStrategyGem;
@@ -29,6 +26,13 @@ import org.mapstruct.ap.internal.model.source.SelectionParameters;
 import org.mapstruct.ap.internal.util.Message;
 import org.mapstruct.ap.internal.util.accessor.Accessor;
 import org.mapstruct.ap.internal.util.accessor.AccessorType;
+import org.mapstruct.ap.descriptor.ExecutableDescriptor;
+import org.mapstruct.ap.descriptor.LangElementKind;
+import org.mapstruct.ap.langmodel.api.LangElements;
+import org.mapstruct.ap.descriptor.LangModifier;
+import org.mapstruct.ap.descriptor.ParameterDescriptor;
+import org.mapstruct.ap.descriptor.TypeDescriptor;
+import org.mapstruct.ap.descriptor.TypeElementDescriptor;
 
 import static org.mapstruct.ap.internal.gem.NullValueCheckStrategyGem.ALWAYS;
 import static org.mapstruct.ap.internal.gem.NullValuePropertyMappingStrategyGem.IGNORE;
@@ -286,22 +290,25 @@ public class CollectionAssignmentBuilder {
         return checkConstructorForPredicate( this::hasNoArgsConstructor );
     }
 
-    private boolean checkConstructorForPredicate(Predicate<Element> predicate) {
+    private boolean checkConstructorForPredicate(Predicate<ExecutableDescriptor> predicate) {
         if ( targetType.isCollectionOrMapType() ) {
             if ( "java.util".equals( targetType.getPackageName() ) ) {
                 return true;
             }
             else {
-                Element sourceElement = targetType.getImplementationType() != null
-                                      ? targetType.getImplementationType().getTypeElement()
-                                      : targetType.getTypeElement();
-                if ( sourceElement != null ) {
-                    for ( Element element : sourceElement.getEnclosedElements() ) {
-                        if ( element.getKind() == ElementKind.CONSTRUCTOR
-                            && element.getModifiers().contains( Modifier.PUBLIC ) ) {
-                            if ( predicate.test( element ) ) {
-                                return true;
-                            }
+                TypeElementDescriptor implementationDescriptor = targetType.getImplementationType() != null
+                    ? targetType.getImplementationType().getTypeElementDescriptor()
+                    : null;
+                TypeElementDescriptor descriptor = implementationDescriptor != null
+                    ? implementationDescriptor
+                    : targetType.getTypeElementDescriptor();
+                if ( descriptor != null ) {
+                    LangElements langElements = ctx.getLangElements();
+                    for ( ExecutableDescriptor constructor : langElements.constructors( descriptor ) ) {
+                        if ( constructor.kind() == LangElementKind.CONSTRUCTOR
+                            && constructor.modifiers().contains( LangModifier.PUBLIC )
+                            && predicate.test( constructor ) ) {
+                            return true;
                         }
                     }
                 }
@@ -310,16 +317,21 @@ public class CollectionAssignmentBuilder {
         return false;
     }
 
-    private boolean hasNoArgsConstructor(Element element) {
-        return ( (ExecutableElement) element ).getParameters().isEmpty();
+    private boolean hasNoArgsConstructor(ExecutableDescriptor constructor) {
+        return constructor.parameters().isEmpty();
     }
 
-    private boolean hasCopyConstructor(Element element) {
-        if ( element instanceof ExecutableElement ) {
-            ExecutableElement ee = (ExecutableElement) element;
-            return ee.getParameters().size() == 1
-                && ctx.getTypeUtils().isAssignable( targetType.getTypeMirror(), ee.getParameters().get( 0 ).asType() );
+    private boolean hasCopyConstructor(ExecutableDescriptor constructor) {
+        List<ParameterDescriptor> parameters = constructor.parameters();
+        if ( parameters.size() != 1 ) {
+            return false;
         }
-        return false;
+        TypeDescriptor targetDescriptor = targetType.getTypeDescriptor();
+        if ( targetDescriptor == null ) {
+            return false;
+        }
+        TypeDescriptor parameterDescriptor = parameters.get( 0 ).type();
+        return parameterDescriptor != null
+            && ctx.getTypeFactory().langTypes().isAssignable( targetDescriptor, parameterDescriptor );
     }
 }

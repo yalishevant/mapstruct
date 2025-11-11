@@ -5,131 +5,184 @@
  */
 package org.mapstruct.ap.internal.model.source;
 
+import java.util.Objects;
 import java.util.Set;
-import javax.lang.model.element.AnnotationMirror;
-import javax.lang.model.element.Element;
-import javax.lang.model.element.TypeElement;
-import javax.lang.model.type.DeclaredType;
-import javax.lang.model.type.TypeKind;
-import javax.lang.model.type.TypeMirror;
-import org.mapstruct.ap.internal.util.ElementUtils;
 
-import org.mapstruct.ap.internal.option.Options;
 import org.mapstruct.ap.internal.gem.BuilderGem;
 import org.mapstruct.ap.internal.gem.CollectionMappingStrategyGem;
 import org.mapstruct.ap.internal.gem.InjectionStrategyGem;
-import org.mapstruct.ap.internal.gem.MapperConfigGem;
-import org.mapstruct.ap.internal.gem.MapperGem;
 import org.mapstruct.ap.internal.gem.MappingInheritanceStrategyGem;
 import org.mapstruct.ap.internal.gem.NullValueCheckStrategyGem;
 import org.mapstruct.ap.internal.gem.NullValueMappingStrategyGem;
 import org.mapstruct.ap.internal.gem.NullValuePropertyMappingStrategyGem;
 import org.mapstruct.ap.internal.gem.ReportingPolicyGem;
 import org.mapstruct.ap.internal.gem.SubclassExhaustiveStrategyGem;
+import org.mapstruct.ap.internal.model.common.TypeFactory;
+import org.mapstruct.ap.internal.option.Options;
+import org.mapstruct.ap.langmodel.AnnotationAttribute;
+import org.mapstruct.ap.descriptor.AnnotationDescriptor;
+import org.mapstruct.ap.langmodel.LangModelContext;
+import org.mapstruct.ap.langmodel.LangModelElementQuery;
+import org.mapstruct.ap.langmodel.MapperAnnotation;
+import org.mapstruct.ap.langmodel.MapperConfigAnnotation;
+import org.mapstruct.ap.descriptor.TypeDescriptor;
+import org.mapstruct.ap.descriptor.TypeElementDescriptor;
 
 public class MapperOptions extends DelegatingOptions {
 
-    private final MapperGem mapper;
-    private final DeclaredType mapperConfigType;
+    private final MapperAnnotation mapper;
+    private final TypeDescriptor mapperConfigType;
+    private final AnnotationDescriptor annotation;
 
-    public static MapperOptions getInstanceOn(TypeElement typeElement, Options options) {
-        MapperGem mapper = MapperGem.instanceOn( typeElement );
-        MapperOptions mapperAnnotation;
+    public static MapperOptions fromAnnotation(MapperAnnotation mapper,
+                                               TypeElementDescriptor mapperElement,
+                                               Options options,
+                                               LangModelContext<?, ?, ?, ?> langModelContext) {
         DelegatingOptions defaults = new DefaultOptions( mapper, options );
-        DeclaredType mapperConfigType;
-        if ( mapper.config().hasValue() && mapper.config().getValue().getKind() == TypeKind.DECLARED ) {
-            mapperConfigType = (DeclaredType) mapper.config().get();
+        TypeDescriptor mapperConfigType = null;
+        DelegatingOptions next = defaults;
+        boolean mapperAnnotationValid = mapper != null && mapper.isValid();
+        MapperConfigAnnotation mapperConfig = mapperAnnotationValid ? mapper.mapperConfig().orElse( null ) : null;
+        LangModelElementQuery elementQuery = langModelContext.elementQuery();
+        if ( mapperAnnotationValid && mapperConfig == null ) {
+            TypeDescriptor configType = mapper.config().valueOrDefault();
+            TypeDescriptor defaultConfigType = mapper.config().defaultValue();
+            boolean configDefined = configType != null && configType.typeElement().isPresent()
+                && ( defaultConfigType == null
+                    || !Objects.equals( configType.id(), defaultConfigType.id() ) );
+            if ( configDefined ) {
+                mapperConfig = elementQuery.mapperConfig( configType ).orElse( null );
+            }
         }
-        else {
-            mapperConfigType = null;
+        if ( mapperConfig == null ) {
+            TypeDescriptor configType = resolveConfigTypeFromElement( mapperElement, elementQuery );
+            if ( configType != null ) {
+                mapperConfig = elementQuery.mapperConfig( configType ).orElse( null );
+                if ( mapperConfig != null ) {
+                    mapperConfigType = configType;
+                }
+            }
         }
-        if ( mapperConfigType != null ) {
-            Element mapperConfigElement = mapperConfigType.asElement();
-            MapperConfigGem mapperConfig = MapperConfigGem.instanceOn( mapperConfigElement );
-            MapperConfigOptions mapperConfigAnnotation = new MapperConfigOptions( mapperConfig, defaults );
-            mapperAnnotation = new MapperOptions( mapper, mapperConfigType, mapperConfigAnnotation );
+        if ( mapperConfig != null ) {
+            if ( mapperConfigType == null ) {
+                mapperConfigType = mapperAnnotationValid ? mapper.config().value().orElse( null ) : null;
+            }
+            next = new MapperConfigOptions( mapperConfig, defaults );
         }
-        else {
-            mapperAnnotation = new MapperOptions( mapper, null, defaults );
-        }
-        return mapperAnnotation;
+        return new MapperOptions( mapper, mapperConfigType, next, mapper.descriptor() );
     }
 
-    private MapperOptions(MapperGem mapper, DeclaredType mapperConfigType, DelegatingOptions next) {
+    private static TypeDescriptor resolveConfigTypeFromElement(TypeElementDescriptor mapperElement,
+                                                               LangModelElementQuery elementQuery) {
+        if ( mapperElement == null ) {
+            return null;
+        }
+        MapperAnnotation mapper = elementQuery.mapperAnnotation( mapperElement );
+        if ( mapper == null || !mapper.isValid() ) {
+            return null;
+        }
+        AnnotationAttribute<TypeDescriptor> configAttribute = mapper.config();
+        if ( configAttribute.hasValue() ) {
+            return configAttribute.value().orElse( null );
+        }
+        return null;
+    }
+
+    private MapperOptions(MapperAnnotation mapper,
+                          TypeDescriptor mapperConfigType,
+                          DelegatingOptions next,
+                          AnnotationDescriptor annotation) {
         super( next );
         this.mapper = mapper;
         this.mapperConfigType = mapperConfigType;
+        this.annotation = annotation;
     }
 
     @Override
     public String implementationName() {
-        return mapper.implementationName().hasValue() ? mapper.implementationName().get() : next().implementationName();
+        return mapper.implementationName().hasValue() ?
+            mapper.implementationName().value().orElse( null ) :
+            next().implementationName();
     }
 
     @Override
     public String implementationPackage() {
-        return mapper.implementationPackage().hasValue() ? mapper.implementationPackage().get() :
+        return mapper.implementationPackage().hasValue() ?
+            mapper.implementationPackage().value().orElse( null ) :
             next().implementationPackage();
     }
 
     @Override
-    public Set<DeclaredType> uses() {
-        return toDeclaredTypes( mapper.uses().get(), next().uses() );
+    public Set<TypeDescriptor> uses() {
+        if ( mapper.uses().hasValue() ) {
+            return mergeTypeDescriptors( mapper.uses().value().orElse( null ), next().uses() );
+        }
+        return next().uses();
     }
 
     @Override
-    public Set<DeclaredType> imports() {
-        return toDeclaredTypes( mapper.imports().get(), next().imports() );
+    public Set<TypeDescriptor> imports() {
+        if ( mapper.imports().hasValue() ) {
+            return mergeTypeDescriptors( mapper.imports().value().orElse( null ), next().imports() );
+        }
+        return next().imports();
     }
 
     @Override
     public ReportingPolicyGem unmappedTargetPolicy() {
         return mapper.unmappedTargetPolicy().hasValue() ?
-            ReportingPolicyGem.valueOf( mapper.unmappedTargetPolicy().get() ) : next().unmappedTargetPolicy();
+            ReportingPolicyGem.valueOf( mapper.unmappedTargetPolicy().value().orElse( null ) ) :
+            next().unmappedTargetPolicy();
     }
 
     @Override
     public ReportingPolicyGem unmappedSourcePolicy() {
         return mapper.unmappedSourcePolicy().hasValue() ?
-            ReportingPolicyGem.valueOf( mapper.unmappedSourcePolicy().get() ) : next().unmappedSourcePolicy();
+            ReportingPolicyGem.valueOf( mapper.unmappedSourcePolicy().value().orElse( null ) ) :
+            next().unmappedSourcePolicy();
     }
 
     @Override
     public ReportingPolicyGem typeConversionPolicy() {
         return mapper.typeConversionPolicy().hasValue() ?
-            ReportingPolicyGem.valueOf( mapper.typeConversionPolicy().get() ) : next().typeConversionPolicy();
+            ReportingPolicyGem.valueOf( mapper.typeConversionPolicy().value().orElse( null ) ) :
+            next().typeConversionPolicy();
     }
 
     @Override
     public String componentModel() {
-        return mapper.componentModel().hasValue() ? mapper.componentModel().get() : next().componentModel();
+        return mapper.componentModel().hasValue() ?
+            mapper.componentModel().value().orElse( null ) :
+            next().componentModel();
     }
 
     @Override
     public boolean suppressTimestampInGenerated() {
-        return mapper.suppressTimestampInGenerated().hasValue() ?
-            mapper.suppressTimestampInGenerated().get() :
-            next().suppressTimestampInGenerated();
+        AnnotationAttribute<Boolean> attribute = mapper.suppressTimestampInGenerated();
+        if ( attribute.hasValue() ) {
+            return Boolean.TRUE.equals( attribute.value().orElse( null ) );
+        }
+        return next().suppressTimestampInGenerated();
     }
 
     @Override
     public MappingInheritanceStrategyGem getMappingInheritanceStrategy() {
         return mapper.mappingInheritanceStrategy().hasValue() ?
-            MappingInheritanceStrategyGem.valueOf( mapper.mappingInheritanceStrategy().get() ) :
+            MappingInheritanceStrategyGem.valueOf( mapper.mappingInheritanceStrategy().value().orElse( null ) ) :
             next().getMappingInheritanceStrategy();
     }
 
     @Override
     public InjectionStrategyGem getInjectionStrategy() {
         return mapper.injectionStrategy().hasValue() ?
-            InjectionStrategyGem.valueOf( mapper.injectionStrategy().get() ) :
+            InjectionStrategyGem.valueOf( mapper.injectionStrategy().value().orElse( null ) ) :
             next().getInjectionStrategy();
     }
 
     @Override
     public Boolean isDisableSubMappingMethodsGeneration() {
         return mapper.disableSubMappingMethodsGeneration().hasValue() ?
-            mapper.disableSubMappingMethodsGeneration().get() :
+            mapper.disableSubMappingMethodsGeneration().value().orElse( null ) :
             next().isDisableSubMappingMethodsGeneration();
     }
 
@@ -138,52 +191,58 @@ public class MapperOptions extends DelegatingOptions {
     @Override
     public CollectionMappingStrategyGem getCollectionMappingStrategy() {
         return mapper.collectionMappingStrategy().hasValue() ?
-            CollectionMappingStrategyGem.valueOf( mapper.collectionMappingStrategy().get() ) :
+            CollectionMappingStrategyGem.valueOf(
+                mapper.collectionMappingStrategy().value().orElse( null ) ) :
             next().getCollectionMappingStrategy();
     }
 
     @Override
     public NullValueCheckStrategyGem getNullValueCheckStrategy() {
         return mapper.nullValueCheckStrategy().hasValue() ?
-            NullValueCheckStrategyGem.valueOf( mapper.nullValueCheckStrategy().get() ) :
+            NullValueCheckStrategyGem.valueOf( mapper.nullValueCheckStrategy().value().orElse( null ) ) :
             next().getNullValueCheckStrategy();
     }
 
     @Override
     public NullValuePropertyMappingStrategyGem getNullValuePropertyMappingStrategy() {
-        return mapper.nullValuePropertyMappingStrategy().hasValue() ?
-            NullValuePropertyMappingStrategyGem.valueOf( mapper.nullValuePropertyMappingStrategy().get() ) :
-            next().getNullValuePropertyMappingStrategy();
+        if ( mapper.nullValuePropertyMappingStrategy().hasValue() ) {
+            return NullValuePropertyMappingStrategyGem.valueOf(
+                mapper.nullValuePropertyMappingStrategy().value().orElse( null ) );
+        }
+        return next().getNullValuePropertyMappingStrategy();
     }
 
     @Override
     public NullValueMappingStrategyGem getNullValueMappingStrategy() {
         return mapper.nullValueMappingStrategy().hasValue() ?
-            NullValueMappingStrategyGem.valueOf( mapper.nullValueMappingStrategy().get() ) :
+            NullValueMappingStrategyGem.valueOf( mapper.nullValueMappingStrategy().value().orElse( null ) ) :
             next().getNullValueMappingStrategy();
     }
 
     @Override
     public SubclassExhaustiveStrategyGem getSubclassExhaustiveStrategy() {
         return mapper.subclassExhaustiveStrategy().hasValue() ?
-            SubclassExhaustiveStrategyGem.valueOf( mapper.subclassExhaustiveStrategy().get() ) :
+            SubclassExhaustiveStrategyGem.valueOf(
+                mapper.subclassExhaustiveStrategy().value().orElse( null ) ) :
             next().getSubclassExhaustiveStrategy();
     }
 
     @Override
-    public TypeMirror getSubclassExhaustiveException() {
+    public TypeDescriptor getSubclassExhaustiveException() {
         return mapper.subclassExhaustiveException().hasValue() ?
-                mapper.subclassExhaustiveException().get() :
-                next().getSubclassExhaustiveException();
+            mapper.subclassExhaustiveException().value().orElse( null ) :
+            next().getSubclassExhaustiveException();
     }
 
     @Override
     public NullValueMappingStrategyGem getNullValueIterableMappingStrategy() {
         if ( mapper.nullValueIterableMappingStrategy().hasValue() ) {
-            return NullValueMappingStrategyGem.valueOf( mapper.nullValueIterableMappingStrategy().get() );
+            return NullValueMappingStrategyGem.valueOf(
+                mapper.nullValueIterableMappingStrategy().value().orElse( null ) );
         }
         if ( mapper.nullValueMappingStrategy().hasValue() ) {
-            return NullValueMappingStrategyGem.valueOf( mapper.nullValueMappingStrategy().get() );
+            return NullValueMappingStrategyGem.valueOf(
+                mapper.nullValueMappingStrategy().value().orElse( null ) );
         }
         return next().getNullValueIterableMappingStrategy();
     }
@@ -191,36 +250,44 @@ public class MapperOptions extends DelegatingOptions {
     @Override
     public NullValueMappingStrategyGem getNullValueMapMappingStrategy() {
         if ( mapper.nullValueMapMappingStrategy().hasValue() ) {
-            return NullValueMappingStrategyGem.valueOf( mapper.nullValueMapMappingStrategy().get() );
+            return NullValueMappingStrategyGem.valueOf(
+                mapper.nullValueMapMappingStrategy().value().orElse( null ) );
         }
         if ( mapper.nullValueMappingStrategy().hasValue() ) {
-            return NullValueMappingStrategyGem.valueOf( mapper.nullValueMappingStrategy().get() );
+            return NullValueMappingStrategyGem.valueOf(
+                mapper.nullValueMappingStrategy().value().orElse( null ) );
         }
         return next().getNullValueMapMappingStrategy();
     }
 
     @Override
     public BuilderGem getBuilder() {
-        return mapper.builder().hasValue() ? mapper.builder().get() : next().getBuilder();
+        return mapper.builder().hasValue() ?
+            mapper.builder().value().orElse( null ) :
+            next().getBuilder();
     }
 
     @Override
-    public MappingControl getMappingControl(ElementUtils elementUtils) {
-        return mapper.mappingControl().hasValue() ?
-            MappingControl.fromTypeMirror( mapper.mappingControl().getValue(), elementUtils ) :
-            next().getMappingControl( elementUtils );
+    public MappingControl getMappingControl(TypeFactory typeFactory) {
+        if ( mapper.mappingControl().hasValue() ) {
+            return MappingControl.fromTypeDescriptor(
+                mapper.mappingControl().value().orElse( null ),
+                typeFactory.langElements()
+            );
+        }
+        return next().getMappingControl( typeFactory );
     }
 
     @Override
-    public TypeMirror getUnexpectedValueMappingException() {
+    public TypeDescriptor getUnexpectedValueMappingException() {
         return mapper.unexpectedValueMappingException().hasValue() ?
-            mapper.unexpectedValueMappingException().get() :
+            mapper.unexpectedValueMappingException().value().orElse( null ) :
             next().getUnexpectedValueMappingException();
     }
 
     // @Mapper specific
 
-    public DeclaredType mapperConfigType() {
+    public TypeDescriptor mapperConfigType() {
         return mapperConfigType;
     }
 
@@ -229,16 +296,16 @@ public class MapperOptions extends DelegatingOptions {
     }
 
     public boolean isValid() {
-        return mapper.isValid();
+        return mapper != null && mapper.isValid();
     }
 
-    public AnnotationMirror getAnnotationMirror() {
-        return mapper.mirror();
+    public AnnotationDescriptor annotation() {
+        return annotation;
     }
 
     @Override
     public boolean hasAnnotation() {
-        return true;
+        return mapper != null;
     }
 
 }

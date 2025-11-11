@@ -6,12 +6,14 @@
 package org.mapstruct.ap.internal.model.common;
 
 import java.util.Collection;
-import javax.lang.model.element.ElementKind;
-import javax.lang.model.element.ExecutableElement;
-import javax.lang.model.type.TypeMirror;
-import org.mapstruct.ap.internal.util.TypeUtils;
+import java.util.Collections;
 
-import org.mapstruct.ap.spi.BuilderInfo;
+import org.mapstruct.ap.descriptor.BuilderDescriptor;
+import org.mapstruct.ap.descriptor.ExecutableDescriptor;
+import org.mapstruct.ap.descriptor.LangElementKind;
+import org.mapstruct.ap.langmodel.api.LangTypes;
+import org.mapstruct.ap.descriptor.ElementDescriptor;
+import org.mapstruct.ap.descriptor.TypeDescriptor;
 
 /**
  * @author Filip Hrisafov
@@ -21,21 +23,21 @@ public class BuilderType {
     private final Type builder;
     private final Type owningType;
     private final Type buildingType;
-    private final ExecutableElement builderCreationMethod;
-    private final Collection<ExecutableElement> buildMethods;
+    private final ExecutableDescriptor builderCreationMethod;
+    private final Collection<ExecutableDescriptor> buildMethods;
 
     private BuilderType(
         Type builder,
         Type owningType,
         Type buildingType,
-        ExecutableElement builderCreationMethod,
-        Collection<ExecutableElement> buildMethods
+        ExecutableDescriptor builderCreationMethod,
+        Collection<ExecutableDescriptor> buildMethods
     ) {
         this.builder = builder;
         this.owningType = owningType;
         this.buildingType = buildingType;
         this.builderCreationMethod = builderCreationMethod;
-        this.buildMethods = buildMethods;
+        this.buildMethods = Collections.unmodifiableCollection( buildMethods );
     }
 
     /**
@@ -71,7 +73,7 @@ public class BuilderType {
      *
      * @return the creation method for the builder
      */
-    public ExecutableElement getBuilderCreationMethod() {
+    public ExecutableDescriptor getBuilderCreationMethod() {
         return builderCreationMethod;
     }
 
@@ -79,33 +81,40 @@ public class BuilderType {
      * The build methods that can be invoked to create the type being built.
      * @return the build methods that can be invoked to create the type being built
      */
-    public Collection<ExecutableElement> getBuildMethods() {
+    public Collection<ExecutableDescriptor> getBuildMethods() {
         return buildMethods;
     }
 
-    public static BuilderType create(BuilderInfo builderInfo, Type typeToBuild, TypeFactory typeFactory,
-        TypeUtils typeUtils) {
-        if ( builderInfo == null ) {
+    public static BuilderType create(BuilderDescriptor builderDescriptor,
+                                     Type typeToBuild,
+                                     TypeFactory typeFactory,
+                                     LangTypes langTypes) {
+        if ( builderDescriptor == null || builderDescriptor.creationMethod() == null ) {
             return null;
         }
 
-        Type builder = typeFactory.getType( builderInfo.getBuilderCreationMethod().getReturnType() );
-        ExecutableElement builderCreationMethod = builderInfo.getBuilderCreationMethod();
-        Type owner;
-        TypeMirror builderCreationOwner = builderCreationMethod.getEnclosingElement().asType();
-        if ( typeUtils.isSameType( builderCreationOwner, typeToBuild.getTypeMirror() ) ) {
-            owner = typeToBuild;
-        }
-        else if ( typeUtils.isSameType( builder.getTypeMirror(), builderCreationOwner ) ) {
-            owner = builder;
-        }
-        else {
-            owner = typeFactory.getType( builderCreationOwner );
+        ExecutableDescriptor creationMethod = builderDescriptor.creationMethod();
+        TypeDescriptor creationOwnerDescriptor = creationMethod.enclosingElement()
+            .map( ElementDescriptor::asType )
+            .orElse( null );
+
+        Type owner = creationOwnerDescriptor != null ? typeFactory.getType( creationOwnerDescriptor ) : null;
+
+        Type builder = null;
+        if ( creationMethod.kind() != LangElementKind.CONSTRUCTOR ) {
+            builder = typeFactory.getType( creationMethod.returnType() );
         }
 
-        // When the builderCreationMethod is constructor, its return type is Void. In this case the
-        // builder type should be the owner type.
-        if (builderInfo.getBuilderCreationMethod().getKind() == ElementKind.CONSTRUCTOR) {
+        if ( typeToBuild != null && creationOwnerDescriptor != null
+            && langTypes.isSameType( creationOwnerDescriptor, typeToBuild.getTypeDescriptor() ) ) {
+            owner = typeToBuild;
+        }
+        else if ( builder != null && creationOwnerDescriptor != null
+            && langTypes.isSameType( creationOwnerDescriptor, builder.getTypeDescriptor() ) ) {
+            owner = builder;
+        }
+
+        if ( creationMethod.kind() == LangElementKind.CONSTRUCTOR ) {
             builder = owner;
         }
 
@@ -113,8 +122,8 @@ public class BuilderType {
             builder,
             owner,
             typeToBuild,
-            builderCreationMethod,
-            builderInfo.getBuildMethods()
+            creationMethod,
+            builderDescriptor.buildMethods()
         );
     }
 }

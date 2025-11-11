@@ -8,10 +8,10 @@ package org.mapstruct.ap.internal.model.source.selector;
 import java.util.ArrayList;
 import java.util.List;
 
-import javax.lang.model.type.TypeMirror;
-import org.mapstruct.ap.internal.util.TypeUtils;
-
+import org.mapstruct.ap.internal.model.common.Type;
 import org.mapstruct.ap.internal.model.source.Method;
+import org.mapstruct.ap.langmodel.api.LangTypes;
+import org.mapstruct.ap.descriptor.TypeDescriptor;
 
 /**
  * This selector selects a best match based on the result type.
@@ -23,10 +23,10 @@ import org.mapstruct.ap.internal.model.source.Method;
  */
 public class TargetTypeSelector implements MethodSelector {
 
-    private final TypeUtils typeUtils;
+    private final LangTypes langTypes;
 
-    public TargetTypeSelector( TypeUtils typeUtils ) {
-        this.typeUtils = typeUtils;
+    public TargetTypeSelector(LangTypes langTypes) {
+        this.langTypes = langTypes;
     }
 
     @Override
@@ -34,15 +34,16 @@ public class TargetTypeSelector implements MethodSelector {
                                                                          SelectionContext context) {
         SelectionCriteria criteria = context.getSelectionCriteria();
 
-        TypeMirror qualifyingTypeMirror = criteria.getQualifyingResultType();
-        if ( qualifyingTypeMirror != null && !criteria.isLifecycleCallbackRequired() ) {
+        TypeDescriptor qualifyingType = criteria.getQualifyingResultType();
+        if ( qualifyingType != null && !qualifyingType.isVoid() && !criteria.isLifecycleCallbackRequired() ) {
 
             List<SelectedMethod<T>> candidatesWithQualifyingTargetType =
                 new ArrayList<>( methods.size() );
 
             for ( SelectedMethod<T> method : methods ) {
-                TypeMirror resultTypeMirror = method.getMethod().getResultType().getTypeElement().asType();
-                if ( typeUtils.isSameType( qualifyingTypeMirror, resultTypeMirror ) ) {
+                Type resultType = method.getMethod().getResultType();
+                TypeDescriptor resultTypeDescriptor = resultType != null ? resultType.getTypeDescriptor() : null;
+                if ( resultTypeDescriptor != null && langTypes.isSameType( qualifyingType, resultTypeDescriptor ) ) {
                     candidatesWithQualifyingTargetType.add( method );
                 }
             }
@@ -54,4 +55,3 @@ public class TargetTypeSelector implements MethodSelector {
         }
     }
 }
-

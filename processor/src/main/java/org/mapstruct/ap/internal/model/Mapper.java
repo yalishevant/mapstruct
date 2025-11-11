@@ -8,14 +8,17 @@ package org.mapstruct.ap.internal.model;
 import java.util.List;
 import java.util.Set;
 import java.util.SortedSet;
-import javax.lang.model.element.Element;
-import javax.lang.model.element.TypeElement;
 
 import org.mapstruct.ap.internal.model.common.Accessibility;
 import org.mapstruct.ap.internal.model.common.Type;
 import org.mapstruct.ap.internal.model.common.TypeFactory;
 import org.mapstruct.ap.internal.option.Options;
 import org.mapstruct.ap.internal.version.VersionInformation;
+import org.mapstruct.ap.descriptor.ElementDescriptor;
+import org.mapstruct.ap.langmodel.api.LangElements;
+import org.mapstruct.ap.langmodel.api.PackageDescriptor;
+import org.mapstruct.ap.descriptor.TypeDescriptor;
+import org.mapstruct.ap.descriptor.TypeElementDescriptor;
 
 /**
  * Represents a type implementing a mapper interface (annotated with {@code @Mapper}). This is the root object of the
@@ -32,7 +35,7 @@ public class Mapper extends GeneratedType {
 
     public static class Builder extends GeneratedTypeBuilder<Builder> {
 
-        private TypeElement element;
+        private TypeElementDescriptor elementDescriptor;
         private List<Field> fields;
         private Set<SupportingConstructorFragment> fragments;
 
@@ -49,8 +52,8 @@ public class Mapper extends GeneratedType {
             super( Builder.class );
         }
 
-        public Builder element(TypeElement element) {
-            this.element = element;
+        public Builder element(TypeElementDescriptor elementDescriptor) {
+            this.elementDescriptor = elementDescriptor;
             return this;
         }
 
@@ -97,17 +100,28 @@ public class Mapper extends GeneratedType {
         }
 
         public Mapper build() {
-            String implementationName = implName.replace( CLASS_NAME_PLACEHOLDER, getFlatName( element ) ) +
+            String implementationName = implName.replace(
+                CLASS_NAME_PLACEHOLDER,
+                getFlatName( elementDescriptor )
+            ) +
                 ( decorator == null ? "" : "_" );
 
-            String elementPackage = elementUtils.getPackageOf( element ).getQualifiedName().toString();
+            LangElements langElements = typeFactory.langElements();
+            PackageDescriptor packageDescriptor = elementDescriptor != null
+                ? langElements.packageOf( elementDescriptor )
+                : null;
+            String elementPackage = packageDescriptor != null ? packageDescriptor.qualifiedName() : "";
             String packageName = implPackage.replace( PACKAGE_NAME_PLACEHOLDER, elementPackage );
             Constructor constructor = null;
             if ( !fragments.isEmpty() ) {
                 constructor = new NoArgumentConstructor( implementationName, fragments );
             }
 
-            Type definitionType = typeFactory.getType( element );
+            TypeDescriptor elementTypeDescriptor = elementDescriptor != null ? elementDescriptor.asType() : null;
+            Type definitionType = elementTypeDescriptor != null ? typeFactory.getType( elementTypeDescriptor ) : null;
+            Accessibility accessibility = elementDescriptor != null
+                ? Accessibility.fromModifiers( elementDescriptor.modifiers() )
+                : Accessibility.DEFAULT;
 
             return new Mapper(
                 typeFactory,
@@ -121,7 +135,7 @@ public class Mapper extends GeneratedType {
                 options,
                 versionInformation,
                 suppressGeneratorTimestamp,
-                Accessibility.fromModifiers( element.getModifiers() ),
+                accessibility,
                 fields,
                 constructor,
                 decorator,
@@ -187,26 +201,27 @@ public class Mapper extends GeneratedType {
     }
 
     @Override
-    protected String getTemplateName() {
+    public String getTemplateName() {
         return getTemplateNameForClass( GeneratedType.class );
     }
 
     /**
      * Returns the same as {@link Class#getName()} but without the package declaration.
      *
-     * @param element the element that should be flattened
+     * @param descriptor the descriptor that should be flattened
      *
      * @return the flat name for the type element
      */
-    public static String getFlatName(TypeElement element) {
-        if (!(element.getEnclosingElement() instanceof TypeElement)) {
-            return element.getSimpleName().toString();
+    public static String getFlatName(TypeElementDescriptor descriptor) {
+        if ( descriptor == null ) {
+            return "";
         }
-        StringBuilder nameBuilder = new StringBuilder( element.getSimpleName().toString() );
-        for (Element enclosing = element.getEnclosingElement(); enclosing instanceof TypeElement; enclosing =
-                enclosing.getEnclosingElement()) {
+        StringBuilder nameBuilder = new StringBuilder( descriptor.simpleName().content() );
+        ElementDescriptor enclosing = descriptor.enclosingElement().orElse( null );
+        while ( enclosing instanceof TypeElementDescriptor ) {
             nameBuilder.insert( 0, '$' );
-            nameBuilder.insert( 0, enclosing.getSimpleName().toString() );
+            nameBuilder.insert( 0, enclosing.simpleName().content() );
+            enclosing = enclosing.enclosingElement().orElse( null );
         }
         return nameBuilder.toString();
     }

@@ -9,9 +9,6 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
-import javax.lang.model.element.AnnotationMirror;
-import javax.lang.model.element.ExecutableElement;
-import javax.lang.model.type.TypeMirror;
 
 import org.mapstruct.ap.internal.gem.BeanMappingGem;
 import org.mapstruct.ap.internal.gem.BuilderGem;
@@ -21,10 +18,12 @@ import org.mapstruct.ap.internal.gem.NullValuePropertyMappingStrategyGem;
 import org.mapstruct.ap.internal.gem.ReportingPolicyGem;
 import org.mapstruct.ap.internal.gem.SubclassExhaustiveStrategyGem;
 import org.mapstruct.ap.internal.model.common.TypeFactory;
-import org.mapstruct.ap.internal.util.ElementUtils;
+import org.mapstruct.ap.internal.util.AnnotationValueUtils;
 import org.mapstruct.ap.internal.util.FormattingMessager;
 import org.mapstruct.ap.internal.util.Message;
-import org.mapstruct.ap.internal.util.TypeUtils;
+import org.mapstruct.ap.descriptor.AnnotationDescriptor;
+import org.mapstruct.ap.descriptor.ExecutableDescriptor;
+import org.mapstruct.ap.descriptor.TypeDescriptor;
 import org.mapstruct.tools.gem.GemValue;
 
 /**
@@ -37,6 +36,8 @@ public class BeanMappingOptions extends DelegatingOptions {
     private final SelectionParameters selectionParameters;
     private final List<String> ignoreUnmappedSourceProperties;
     private final BeanMappingGem beanMapping;
+    private final AnnotationDescriptor annotation;
+    private final TypeDescriptor subclassExhaustiveException;
 
     /**
      * creates a mapping for inheritance. Will set
@@ -51,6 +52,8 @@ public class BeanMappingOptions extends DelegatingOptions {
             SelectionParameters.forInheritance( beanMapping.selectionParameters ),
             isInverse ? Collections.emptyList() : beanMapping.ignoreUnmappedSourceProperties,
             beanMapping.beanMapping,
+            beanMapping.annotation,
+            beanMapping.subclassExhaustiveException,
             beanMapping
         );
         return options;
@@ -62,6 +65,8 @@ public class BeanMappingOptions extends DelegatingOptions {
                 SelectionParameters.withoutResultType( beanMapping.selectionParameters ) : SelectionParameters.empty(),
             Collections.emptyList(),
             beanMapping.beanMapping,
+            beanMapping.annotation,
+            beanMapping.subclassExhaustiveException,
             beanMapping
         );
         return options;
@@ -74,17 +79,26 @@ public class BeanMappingOptions extends DelegatingOptions {
                 SelectionParameters.withoutResultType( beanMapping.selectionParameters ) : null,
             beanMapping.ignoreUnmappedSourceProperties,
             beanMapping.beanMapping,
+            beanMapping.annotation,
+            beanMapping.subclassExhaustiveException,
             beanMapping
         );
     }
 
     public static BeanMappingOptions empty(DelegatingOptions delegatingOptions) {
-        return new BeanMappingOptions( SelectionParameters.empty(), Collections.emptyList(), null, delegatingOptions );
+        return new BeanMappingOptions(
+            SelectionParameters.empty(),
+            Collections.emptyList(),
+            null,
+            null,
+            null,
+            delegatingOptions
+        );
     }
 
     public static BeanMappingOptions getInstanceOn(BeanMappingGem beanMapping, MapperOptions mapperOptions,
-                                                   ExecutableElement method, FormattingMessager messager,
-                                                   TypeUtils typeUtils, TypeFactory typeFactory
+                                                   ExecutableDescriptor method, FormattingMessager messager,
+                                                   TypeFactory typeFactory
     ) {
         if ( beanMapping == null || !isConsistent( beanMapping, method, messager ) ) {
             return empty( mapperOptions );
@@ -93,27 +107,51 @@ public class BeanMappingOptions extends DelegatingOptions {
         Objects.requireNonNull( method );
         Objects.requireNonNull( messager );
         Objects.requireNonNull( method );
-        Objects.requireNonNull( typeUtils );
         Objects.requireNonNull( typeFactory );
 
+        List<TypeDescriptor> qualifiers;
+        if ( beanMapping.qualifiedBy().hasValue() ) {
+            qualifiers = AnnotationValueUtils.asTypeList(
+                typeFactory.getDescriptorFactory()
+                    .annotationValueDescriptor( beanMapping.qualifiedBy().getAnnotationValue() ) );
+        }
+        else {
+            qualifiers = Collections.<TypeDescriptor>emptyList();
+        }
+        TypeDescriptor resultType = beanMapping.resultType().hasValue()
+            ? AnnotationValueUtils.asType(
+                typeFactory.getDescriptorFactory()
+                    .annotationValueDescriptor( beanMapping.resultType().getAnnotationValue() )
+            )
+            : null;
+
         SelectionParameters selectionParameters = new SelectionParameters(
-            beanMapping.qualifiedBy().get(),
+            qualifiers,
             beanMapping.qualifiedByName().get(),
-            beanMapping.resultType().getValue(),
-            typeUtils
+            resultType
         );
 
         //TODO Do we want to add the reporting policy to the BeanMapping as well? To give more granular support?
+        AnnotationDescriptor annotationDescriptor =
+            typeFactory.getDescriptorFactory().annotationDescriptor( beanMapping.mirror() );
+
+        TypeDescriptor subclassException = beanMapping.subclassExhaustiveException().hasValue()
+            ? typeFactory.getDescriptorFactory()
+                .typeDescriptor( beanMapping.subclassExhaustiveException().getValue() )
+            : null;
+
         BeanMappingOptions options = new BeanMappingOptions(
             selectionParameters,
             beanMapping.ignoreUnmappedSourceProperties().get(),
             beanMapping,
+            annotationDescriptor,
+            subclassException,
             mapperOptions
         );
         return options;
     }
 
-    private static boolean isConsistent(BeanMappingGem gem, ExecutableElement method,
+    private static boolean isConsistent(BeanMappingGem gem, ExecutableDescriptor method,
                                         FormattingMessager messager) {
         if ( !gem.resultType().hasValue()
             && !gem.mappingControl().hasValue()
@@ -138,11 +176,15 @@ public class BeanMappingOptions extends DelegatingOptions {
     private BeanMappingOptions(SelectionParameters selectionParameters,
                                List<String> ignoreUnmappedSourceProperties,
                                BeanMappingGem beanMapping,
+                               AnnotationDescriptor annotation,
+                               TypeDescriptor subclassExhaustiveException,
                                DelegatingOptions next) {
         super( next );
         this.selectionParameters = selectionParameters;
         this.ignoreUnmappedSourceProperties = ignoreUnmappedSourceProperties;
         this.beanMapping = beanMapping;
+        this.annotation = annotation;
+        this.subclassExhaustiveException = subclassExhaustiveException;
     }
 
     // @Mapping, @BeanMapping
@@ -184,11 +226,11 @@ public class BeanMappingOptions extends DelegatingOptions {
     }
 
     @Override
-    public TypeMirror getSubclassExhaustiveException() {
-        return Optional.ofNullable( beanMapping ).map( BeanMappingGem::subclassExhaustiveException )
-                .filter( GemValue::hasValue )
-                .map( GemValue::getValue )
-                .orElse( next().getSubclassExhaustiveException() );
+    public TypeDescriptor getSubclassExhaustiveException() {
+        if ( subclassExhaustiveException != null ) {
+            return subclassExhaustiveException;
+        }
+        return next().getSubclassExhaustiveException();
     }
 
     @Override
@@ -218,12 +260,14 @@ public class BeanMappingOptions extends DelegatingOptions {
     }
 
     @Override
-    public MappingControl getMappingControl(ElementUtils elementUtils) {
+    public MappingControl getMappingControl(TypeFactory typeFactory) {
         return Optional.ofNullable( beanMapping ).map( BeanMappingGem::mappingControl )
             .filter( GemValue::hasValue )
             .map( GemValue::getValue )
-            .map( mc -> MappingControl.fromTypeMirror( mc, elementUtils ) )
-            .orElse( next().getMappingControl( elementUtils ) );
+            .map( mc -> MappingControl.fromTypeDescriptor(
+                typeFactory.getDescriptorFactory().typeDescriptor( mc ),
+                typeFactory.langElements() ) )
+            .orElse( next().getMappingControl( typeFactory ) );
     }
 
     // @BeanMapping specific
@@ -242,8 +286,8 @@ public class BeanMappingOptions extends DelegatingOptions {
         return ignoreUnmappedSourceProperties;
     }
 
-    public AnnotationMirror getMirror() {
-        return Optional.ofNullable( beanMapping ).map( BeanMappingGem::mirror ).orElse( null );
+    public AnnotationDescriptor getAnnotation() {
+        return annotation;
     }
 
     @Override

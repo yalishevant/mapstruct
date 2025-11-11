@@ -20,6 +20,7 @@ public enum MappingOption {
     ALWAYS_GENERATE_SERVICE_FILE("mapstruct.alwaysGenerateServicesFile"),
     DISABLE_BUILDERS("mapstruct.disableBuilders"),
     VERBOSE("mapstruct.verbose"),
+    LANG_MODEL_BACKEND("mapstruct.langModelBackend"),
     NULL_VALUE_ITERABLE_MAPPING_STRATEGY("mapstruct.nullValueIterableMappingStrategy"),
     NULL_VALUE_MAP_MAPPING_STRATEGY("mapstruct.nullValueMapMappingStrategy"),
     DISABLE_LIFECYCLE_OVERLOAD_DEDUPLICATE_SELECTOR("mapstruct.disableLifecycleOverloadDeduplicateSelector"),

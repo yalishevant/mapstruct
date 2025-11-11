@@ -9,14 +9,10 @@ import java.util.List;
 import java.util.Objects;
 import java.util.Set;
 import java.util.stream.Collectors;
-import javax.lang.model.element.Element;
-import javax.lang.model.element.VariableElement;
-
-import org.mapstruct.ap.internal.gem.ContextGem;
-import org.mapstruct.ap.internal.gem.MappingTargetGem;
-import org.mapstruct.ap.internal.gem.SourcePropertyNameGem;
-import org.mapstruct.ap.internal.gem.TargetPropertyNameGem;
-import org.mapstruct.ap.internal.gem.TargetTypeGem;
+import org.mapstruct.ap.descriptor.AnnotationDescriptor;
+import org.mapstruct.ap.descriptor.ElementDescriptor;
+import org.mapstruct.ap.descriptor.ParameterDescriptor;
+import org.mapstruct.ap.descriptor.TypeElementDescriptor;
 import org.mapstruct.ap.internal.util.Collections;
 
 /**
@@ -26,7 +22,7 @@ import org.mapstruct.ap.internal.util.Collections;
  */
 public class Parameter extends ModelElement {
 
-    private final Element element;
+    private final ParameterDescriptor descriptor;
     private final String name;
     private final String originalName;
     private final Type type;
@@ -38,23 +34,23 @@ public class Parameter extends ModelElement {
 
     private final boolean varArgs;
 
-    private Parameter(Element element, Type type, boolean varArgs) {
-        this.element = element;
-        this.name = element.getSimpleName().toString();
-        this.originalName = name;
+    private Parameter(ParameterDescriptor descriptor, Type type, boolean varArgs) {
+        this.descriptor = descriptor;
+        this.name = descriptor != null ? descriptor.name() : null;
+        this.originalName = this.name;
         this.type = type;
-        this.mappingTarget = MappingTargetGem.instanceOn( element ) != null;
-        this.targetType = TargetTypeGem.instanceOn( element ) != null;
-        this.mappingContext = ContextGem.instanceOn( element ) != null;
-        this.sourcePropertyName = SourcePropertyNameGem.instanceOn( element ) != null;
-        this.targetPropertyName = TargetPropertyNameGem.instanceOn( element ) != null;
+        this.mappingTarget = hasAnnotation( descriptor, "org.mapstruct.MappingTarget" );
+        this.targetType = hasAnnotation( descriptor, "org.mapstruct.TargetType" );
+        this.mappingContext = hasAnnotation( descriptor, "org.mapstruct.Context" );
+        this.sourcePropertyName = hasAnnotation( descriptor, "org.mapstruct.SourcePropertyName" );
+        this.targetPropertyName = hasAnnotation( descriptor, "org.mapstruct.TargetPropertyName" );
         this.varArgs = varArgs;
     }
 
     private Parameter(String name, Type type, boolean mappingTarget, boolean targetType, boolean mappingContext,
                       boolean sourcePropertyName, boolean targetPropertyName,
                       boolean varArgs) {
-        this.element = null;
+        this.descriptor = null;
         this.name = name;
         this.originalName = name;
         this.type = type;
@@ -70,8 +66,12 @@ public class Parameter extends ModelElement {
         this( name, type, false, false, false, false, false, false );
     }
 
-    public Element getElement() {
-        return element;
+    public ElementDescriptor getElement() {
+        return descriptor;
+    }
+
+    public ParameterDescriptor getDescriptor() {
+        return descriptor;
     }
 
     public String getName() {
@@ -166,11 +166,14 @@ public class Parameter extends ModelElement {
 
     }
 
-    public static Parameter forElementAndType(VariableElement element, Type parameterType, boolean isVarArgs) {
+    public static Parameter forDescriptor(ParameterDescriptor descriptor, Type parameterType) {
+        if ( descriptor == null ) {
+            throw new IllegalArgumentException( "Parameter descriptor must not be null for descriptor-based creation" );
+        }
         return new Parameter(
-            element,
+            descriptor,
             parameterType,
-            isVarArgs
+            descriptor.isVarArgs()
         );
     }
 
@@ -230,6 +233,19 @@ public class Parameter extends ModelElement {
 
     public static Parameter getTargetPropertyNameParameter(List<Parameter> parameters) {
       return parameters.stream().filter( Parameter::isTargetPropertyName ).findAny().orElse( null );
+    }
+
+    private static boolean hasAnnotation(ParameterDescriptor descriptor, String annotationFqn) {
+        if ( descriptor == null ) {
+            return false;
+        }
+        for ( AnnotationDescriptor annotation : descriptor.annotations() ) {
+            TypeElementDescriptor annotationType = annotation.annotationType();
+            if ( annotationType != null && annotationFqn.equals( annotationType.qualifiedName() ) ) {
+                return true;
+            }
+        }
+        return false;
     }
 
 }

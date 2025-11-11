@@ -8,8 +8,6 @@ package org.mapstruct.ap.internal.model;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.stream.Collectors;
-import javax.lang.model.element.ElementKind;
-import javax.lang.model.element.ExecutableElement;
 
 import org.mapstruct.ap.internal.model.common.BuilderType;
 import org.mapstruct.ap.internal.model.common.Parameter;
@@ -22,6 +20,8 @@ import org.mapstruct.ap.internal.model.source.selector.MethodSelectors;
 import org.mapstruct.ap.internal.model.source.selector.SelectedMethod;
 import org.mapstruct.ap.internal.model.source.selector.SelectionContext;
 import org.mapstruct.ap.internal.util.Message;
+import org.mapstruct.ap.descriptor.ExecutableDescriptor;
+import org.mapstruct.ap.descriptor.LangElementKind;
 
 import static org.mapstruct.ap.internal.util.Collections.first;
 
@@ -125,7 +125,7 @@ public class ObjectFactoryMethodResolver {
         MappingBuilderContext ctx) {
 
         MethodSelectors selectors =
-            new MethodSelectors( ctx.getTypeUtils(), ctx.getElementUtils(), ctx.getMessager(), null );
+            new MethodSelectors( ctx.getTypeFactory(), ctx.getMessager(), null );
 
         return selectors.getMatchingMethods(
             getAllAvailableMethods( method, ctx.getSourceModel() ),
@@ -142,8 +142,8 @@ public class ObjectFactoryMethodResolver {
             return null;
         }
 
-        ExecutableElement builderCreationMethod = builder.getBuilderCreationMethod();
-        if ( builderCreationMethod.getKind() == ElementKind.CONSTRUCTOR ) {
+        ExecutableDescriptor builderCreationMethod = builder.getBuilderCreationMethod();
+        if ( builderCreationMethod.kind() == LangElementKind.CONSTRUCTOR ) {
             // If the builder creation method is a constructor it would be handled properly down the line
             return null;
         }
@@ -154,7 +154,7 @@ public class ObjectFactoryMethodResolver {
         }
 
         return MethodReference.forStaticBuilder(
-            builderCreationMethod.getSimpleName().toString(),
+            builderCreationMethod.simpleName().content(),
             builder.getOwningType()
         );
     }

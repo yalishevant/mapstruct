@@ -6,7 +6,7 @@
 package org.mapstruct.ap.internal.model;
 
 import java.util.function.Supplier;
-import javax.lang.model.element.AnnotationMirror;
+import org.mapstruct.ap.descriptor.AnnotationDescriptor;
 
 import org.mapstruct.ap.internal.model.common.Assignment;
 import org.mapstruct.ap.internal.model.common.BuilderType;
@@ -153,7 +153,7 @@ class AbstractBaseBuilder<B extends AbstractBaseBuilder<B>> {
     void reportCannotCreateMapping(Method method, String sourceErrorMessagePart, Type sourceType, Type targetType,
                                    String targetPropertyName) {
         ctx.getMessager().printMessage(
-            method.getExecutable(),
+            method.getExecutableDescriptor(),
             Message.PROPERTYMAPPING_MAPPING_NOT_FOUND,
             sourceErrorMessagePart,
             targetType.describe(),
@@ -173,11 +173,11 @@ class AbstractBaseBuilder<B extends AbstractBaseBuilder<B>> {
      * @param targetType the type of the target mapping
      * @param targetPropertyName the name of the target property
      */
-    void reportCannotCreateMapping(Method method, AnnotationMirror posHint, String sourceErrorMessagePart,
+    void reportCannotCreateMapping(Method method, AnnotationDescriptor posHint, String sourceErrorMessagePart,
                                    Type sourceType, Type targetType,
         String targetPropertyName) {
         ctx.getMessager().printMessage(
-            method.getExecutable(),
+            method.getExecutableDescriptor(),
             posHint,
             Message.PROPERTYMAPPING_MAPPING_NOT_FOUND,
             sourceErrorMessagePart,

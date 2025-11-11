@@ -13,8 +13,6 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Set;
 
-import javax.lang.model.element.ExecutableElement;
-
 import org.mapstruct.ap.internal.model.common.Accessibility;
 import org.mapstruct.ap.internal.model.common.ConstructorFragment;
 import org.mapstruct.ap.internal.model.common.ConversionContext;
@@ -25,6 +23,7 @@ import org.mapstruct.ap.internal.model.source.MappingMethodOptions;
 import org.mapstruct.ap.internal.model.source.Method;
 import org.mapstruct.ap.internal.model.source.ParameterProvidedMethods;
 import org.mapstruct.ap.internal.util.Strings;
+import org.mapstruct.ap.descriptor.ExecutableDescriptor;
 
 /**
  * Represents a "built-in" mapping method which will be added as private method to the generated mapper. Built-in
@@ -234,7 +233,7 @@ public abstract class BuiltInMethod implements Method {
     }
 
     @Override
-    public ExecutableElement getExecutable() {
+    public ExecutableDescriptor getExecutable() {
         return null;
     }
 
@@ -268,10 +267,20 @@ public abstract class BuiltInMethod implements Method {
         return MappingMethodOptions.empty();
     }
 
+    /**
+     * Returns the field reference backing this built-in method, if any.
+     *
+     * @return field reference or {@code null} when the method does not use an injected field
+     */
     public FieldReference getFieldReference() {
         return null;
     }
 
+    /**
+     * Returns the constructor fragment that initialises any state required by this built-in method.
+     *
+     * @return constructor fragment or {@code null} when no explicit initialisation is required
+     */
     public ConstructorFragment getConstructorFragment() {
         return null;
     }

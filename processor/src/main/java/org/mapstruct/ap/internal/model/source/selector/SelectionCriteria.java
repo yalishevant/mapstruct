@@ -8,11 +8,10 @@ package org.mapstruct.ap.internal.model.source.selector;
 import java.util.Collections;
 import java.util.List;
 
-import javax.lang.model.type.TypeMirror;
-
 import org.mapstruct.ap.internal.model.common.SourceRHS;
 import org.mapstruct.ap.internal.model.source.MappingControl;
 import org.mapstruct.ap.internal.model.source.SelectionParameters;
+import org.mapstruct.ap.descriptor.TypeDescriptor;
 
 /**
  * This class groups the selection criteria in one class
@@ -88,7 +87,7 @@ public class SelectionCriteria {
         this.ignoreQualifiers = ignoreQualifiers;
     }
 
-    public List<TypeMirror> getQualifiers() {
+    public List<TypeDescriptor> getQualifiers() {
         return ignoreQualifiers ? Collections.emptyList() : qualifyingInfo.qualifiers();
     }
 
@@ -100,7 +99,7 @@ public class SelectionCriteria {
         return targetPropertyName;
     }
 
-    public TypeMirror getQualifyingResultType() {
+    public TypeDescriptor getQualifyingResultType() {
         return qualifyingInfo.qualifyingResultType();
     }
 
@@ -196,18 +195,18 @@ public class SelectionCriteria {
             null
         );
 
-        private final List<TypeMirror> qualifiers;
+        private final List<TypeDescriptor> qualifiers;
         private final List<String> qualifiedByNames;
-        private final TypeMirror qualifyingResultType;
+        private final TypeDescriptor qualifyingResultType;
 
-        private QualifyingInfo(List<TypeMirror> qualifiers, List<String> qualifiedByNames,
-                               TypeMirror qualifyingResultType) {
+        private QualifyingInfo(List<TypeDescriptor> qualifiers, List<String> qualifiedByNames,
+                               TypeDescriptor qualifyingResultType) {
             this.qualifiers = qualifiers;
             this.qualifiedByNames = qualifiedByNames;
             this.qualifyingResultType = qualifyingResultType;
         }
 
-        public List<TypeMirror> qualifiers() {
+        public List<TypeDescriptor> qualifiers() {
             return qualifiers;
         }
 
@@ -215,7 +214,7 @@ public class SelectionCriteria {
             return qualifiedByNames;
         }
 
-        public TypeMirror qualifyingResultType() {
+        public TypeDescriptor qualifyingResultType() {
             return qualifyingResultType;
         }
 

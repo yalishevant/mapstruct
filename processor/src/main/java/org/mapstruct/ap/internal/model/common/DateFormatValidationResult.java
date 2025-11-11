@@ -5,12 +5,11 @@
  */
 package org.mapstruct.ap.internal.model.common;
 
-import javax.lang.model.element.AnnotationMirror;
-import javax.lang.model.element.AnnotationValue;
-import javax.lang.model.element.Element;
-
 import org.mapstruct.ap.internal.util.FormattingMessager;
 import org.mapstruct.ap.internal.util.Message;
+import org.mapstruct.ap.descriptor.AnnotationDescriptor;
+import org.mapstruct.ap.descriptor.AnnotationValueDescriptor;
+import org.mapstruct.ap.descriptor.ElementDescriptor;
 
 /**
  * Reflects the result of a date format validation
@@ -46,8 +45,10 @@ final class DateFormatValidationResult {
      * @param annotation the positionHint of the annotation that had an error
      * @param value the value of the annotation that had an error
      */
-    public void printErrorMessage(FormattingMessager messager, Element element, AnnotationMirror annotation,
-        AnnotationValue value) {
+    public void printErrorMessage(FormattingMessager messager,
+                                  ElementDescriptor element,
+                                  AnnotationDescriptor annotation,
+                                  AnnotationValueDescriptor value) {
         messager.printMessage( element, annotation, value, validationInfo, validationInfoArgs );
     }
 

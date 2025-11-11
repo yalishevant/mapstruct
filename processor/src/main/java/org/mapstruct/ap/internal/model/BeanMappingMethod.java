@@ -21,15 +21,6 @@ import java.util.Map.Entry;
 import java.util.Objects;
 import java.util.Set;
 import java.util.stream.Collectors;
-import javax.lang.model.element.AnnotationMirror;
-import javax.lang.model.element.AnnotationValue;
-import javax.lang.model.element.Element;
-import javax.lang.model.element.ExecutableElement;
-import javax.lang.model.element.Modifier;
-import javax.lang.model.element.VariableElement;
-import javax.lang.model.type.DeclaredType;
-import javax.lang.model.type.TypeMirror;
-import javax.lang.model.util.ElementFilter;
 import javax.tools.Diagnostic;
 
 import org.mapstruct.ap.internal.gem.CollectionMappingStrategyGem;
@@ -61,6 +52,8 @@ import org.mapstruct.ap.internal.model.source.SourceMethod;
 import org.mapstruct.ap.internal.model.source.SubclassMappingOptions;
 import org.mapstruct.ap.internal.model.source.selector.SelectedMethod;
 import org.mapstruct.ap.internal.model.source.selector.SelectionCriteria;
+import org.mapstruct.ap.internal.util.AnnotationDescriptorUtils;
+import org.mapstruct.ap.internal.util.AnnotationValueUtils;
 import org.mapstruct.ap.internal.util.Message;
 import org.mapstruct.ap.internal.util.Strings;
 import org.mapstruct.ap.internal.util.accessor.Accessor;
@@ -68,6 +61,15 @@ import org.mapstruct.ap.internal.util.accessor.AccessorType;
 import org.mapstruct.ap.internal.util.accessor.ElementAccessor;
 import org.mapstruct.ap.internal.util.accessor.PresenceCheckAccessor;
 import org.mapstruct.ap.internal.util.accessor.ReadAccessor;
+import org.mapstruct.ap.descriptor.AnnotationDescriptor;
+import org.mapstruct.ap.descriptor.ElementDescriptor;
+import org.mapstruct.ap.descriptor.ExecutableDescriptor;
+import org.mapstruct.ap.langmodel.api.LangElements;
+import org.mapstruct.ap.descriptor.LangModifier;
+import org.mapstruct.ap.langmodel.api.LangTypes;
+import org.mapstruct.ap.descriptor.RecordComponentDescriptor;
+import org.mapstruct.ap.descriptor.TypeDescriptor;
+import org.mapstruct.ap.descriptor.TypeElementDescriptor;
 
 import static org.mapstruct.ap.internal.model.beanmapping.MappingReferences.forSourceMethod;
 import static org.mapstruct.ap.internal.util.Collections.first;
@@ -393,10 +395,12 @@ public class BeanMappingMethod extends NormalTypeMappingMethod {
 
             }
 
-            TypeMirror subclassExhaustiveException = method.getOptions()
+            TypeDescriptor subclassExhaustiveExceptionDescriptor = method.getOptions()
                 .getBeanMapping()
                 .getSubclassExhaustiveException();
-            Type subclassExhaustiveExceptionType = ctx.getTypeFactory().getType( subclassExhaustiveException );
+            Type subclassExhaustiveExceptionType = subclassExhaustiveExceptionDescriptor != null
+                ? ctx.getTypeFactory().getType( subclassExhaustiveExceptionDescriptor )
+                : null;
 
             List<SubclassMapping> subclasses = new ArrayList<>();
             for ( SubclassMappingOptions subclassMappingOptions : method.getOptions().getSubclassMappings() ) {
@@ -528,7 +532,7 @@ public class BeanMappingMethod extends NormalTypeMappingMethod {
                 SelectionCriteria
                     .forSubclassMappingMethods(
                         subclassMappingOptions.getSelectionParameters().withSourceRHS( rightHandSide ),
-                        subclassMappingOptions.getMappingControl( ctx.getElementUtils() )
+                        subclassMappingOptions.getMappingControl( typeFactory )
                     );
             Assignment assignment = ctx
                                    .getMappingResolver()
@@ -539,7 +543,7 @@ public class BeanMappingMethod extends NormalTypeMappingMethod {
                                        FormattingParameters.EMPTY,
                                        criteria,
                                        rightHandSide,
-                                       subclassMappingOptions.getMirror(),
+                                       subclassMappingOptions.getAnnotation(),
                                            () -> forgeSubclassMapping(
                                                rightHandSide,
                                                sourceType,
@@ -547,9 +551,7 @@ public class BeanMappingMethod extends NormalTypeMappingMethod {
                                                mappingReferences ) );
             String sourceArgument = null;
             for ( Parameter parameter : method.getSourceParameters() ) {
-                if ( ctx
-                    .getTypeUtils()
-                    .isAssignable( sourceType.getTypeMirror(), parameter.getType().getTypeMirror() ) ) {
+                if ( sourceType.isAssignableTo( parameter.getType() ) ) {
                     sourceArgument = parameter.getName();
                     if ( assignment != null ) {
                         assignment.setSourceLocalVarName(
@@ -573,20 +575,20 @@ public class BeanMappingMethod extends NormalTypeMappingMethod {
 
         private boolean isCorrectlySealed(Type mappingSourceType) {
             if ( mappingSourceType.isSealed() ) {
-                List<? extends TypeMirror> unusedPermittedSubclasses =
+                List<Type> unusedPermittedSubclasses =
                     new ArrayList<>( mappingSourceType.getPermittedSubclasses() );
                 method.getOptions().getSubclassMappings().forEach( subClassOption -> {
-                    for (Iterator<? extends TypeMirror> iterator = unusedPermittedSubclasses.iterator();
+                    Type sourceSubclassType = ctx.getTypeFactory().getType( subClassOption.getSource() );
+                    for (Iterator<Type> iterator = unusedPermittedSubclasses.iterator();
                          iterator.hasNext(); ) {
-                        if ( ctx.getTypeUtils().isSameType( iterator.next(), subClassOption.getSource() ) ) {
+                        if ( iterator.next().equals( sourceSubclassType ) ) {
                             iterator.remove();
                         }
                     }
                 } );
-                for ( Iterator<? extends TypeMirror> iterator = unusedPermittedSubclasses.iterator();
+                for ( Iterator<Type> iterator = unusedPermittedSubclasses.iterator();
                                 iterator.hasNext(); ) {
-                    TypeMirror typeMirror = iterator.next();
-                    Type type = ctx.getTypeFactory().getType( typeMirror );
+                    Type type = iterator.next();
                     if ( type.isAbstract() && isCorrectlySealed( type ) ) {
                         iterator.remove();
                     }
@@ -753,7 +755,7 @@ public class BeanMappingMethod extends NormalTypeMappingMethod {
             if ( resultType.isAbstract() ) {
                 ctx.getMessager().printMessage(
                     method.getExecutable(),
-                    method.getOptions().getBeanMapping().getMirror(),
+                    method.getOptions().getBeanMapping().getAnnotation(),
                     BEANMAPPING_ABSTRACT,
                     resultType.describe(),
                     method.getResultType().describe()
@@ -763,7 +765,7 @@ public class BeanMappingMethod extends NormalTypeMappingMethod {
             else if ( !resultType.isAssignableTo( method.getResultType() ) ) {
                 ctx.getMessager().printMessage(
                     method.getExecutable(),
-                    method.getOptions().getBeanMapping().getMirror(),
+                    method.getOptions().getBeanMapping().getAnnotation(),
                     BEANMAPPING_NOT_ASSIGNABLE,
                     resultType.describe(),
                     method.getResultType().describe()
@@ -773,7 +775,7 @@ public class BeanMappingMethod extends NormalTypeMappingMethod {
             else if ( !resultType.hasAccessibleConstructor() ) {
                 ctx.getMessager().printMessage(
                     method.getExecutable(),
-                    method.getOptions().getBeanMapping().getMirror(),
+                    method.getOptions().getBeanMapping().getAnnotation(),
                     Message.GENERAL_NO_SUITABLE_CONSTRUCTOR,
                     resultType.describe()
                 );
@@ -869,95 +871,90 @@ public class BeanMappingMethod extends NormalTypeMappingMethod {
                 return null;
             }
 
+            TypeFactory typeFactory = ctx.getTypeFactory();
+            LangElements langElements = typeFactory.langElements();
+            LangTypes langTypes = typeFactory.langTypes();
+            TypeElementDescriptor typeElementDescriptor = type.getTypeElementDescriptor();
+            List<ExecutableDescriptor> constructorDescriptors = typeElementDescriptor != null
+                ? langElements.constructors( typeElementDescriptor )
+                : Collections.emptyList();
+
+            TypeDescriptor typeDescriptor = type.getTypeDescriptor();
+
             if ( type.isRecord() ) {
-
-                List<ExecutableElement> constructors = ElementFilter.constructorsIn( type.getTypeElement()
-                    .getEnclosedElements() );
-
-                for ( ExecutableElement constructor : constructors ) {
-                    if ( constructor.getModifiers().contains( Modifier.PRIVATE ) ) {
+                for ( ExecutableDescriptor constructor : constructorDescriptors ) {
+                    if ( constructor.modifiers().contains( LangModifier.PRIVATE ) ) {
                         continue;
                     }
 
-                    // prefer constructor annotated with @Default
                     if ( hasDefaultAnnotationFromAnyPackage( constructor ) ) {
                         return getConstructorAccessor( type, constructor );
                     }
                 }
 
-
-                // Other than that, just get the record components and use them
-                List<Element> recordComponents = type.getRecordComponents();
+                List<RecordComponentDescriptor> recordComponents = type.getRecordComponents();
                 List<ParameterBinding> parameterBindings = new ArrayList<>( recordComponents.size() );
                 Map<String, Accessor> constructorAccessors = new LinkedHashMap<>();
-                for ( Element recordComponent : recordComponents ) {
-                    TypeMirror recordComponentMirror = ctx.getTypeUtils()
-                        .asMemberOf( (DeclaredType) type.getTypeMirror(), recordComponent );
-                    String parameterName = recordComponent.getSimpleName().toString();
+                for ( RecordComponentDescriptor recordComponent : recordComponents ) {
+                    TypeDescriptor componentDescriptor = typeDescriptor != null
+                        ? langTypes.asMemberOf( typeDescriptor, recordComponent )
+                        : null;
+                    if ( componentDescriptor == null ) {
+                        componentDescriptor = recordComponent.componentType();
+                    }
+                    String parameterName = recordComponent.simpleName().content();
                     Accessor accessor = createConstructorAccessor(
                         recordComponent,
-                        recordComponentMirror,
+                        componentDescriptor,
                         parameterName
                     );
-                    constructorAccessors.put(
-                        parameterName,
-                        accessor
-                    );
+                    constructorAccessors.put( parameterName, accessor );
 
+                    Type componentType = componentDescriptor != null
+                        ? typeFactory.getType( componentDescriptor )
+                        : null;
                     parameterBindings.add( ParameterBinding.fromTypeAndName(
-                        ctx.getTypeFactory().getType( recordComponentMirror ),
+                        componentType,
                         accessor.getSimpleName()
                     ) );
                 }
                 return new ConstructorAccessor( parameterBindings, constructorAccessors );
             }
 
-            List<ExecutableElement> constructors = ElementFilter.constructorsIn( type.getTypeElement()
-                .getEnclosedElements() );
+            ExecutableDescriptor defaultAnnotatedConstructor = null;
+            ExecutableDescriptor parameterLessConstructor = null;
+            List<ExecutableDescriptor> accessibleConstructors = new ArrayList<>( constructorDescriptors.size() );
+            List<ExecutableDescriptor> publicConstructors = new ArrayList<>();
 
-            // The rules for picking a constructor are the following:
-            // 1. Constructor annotated with @Default (from any package) has highest precedence
-            // 2. If there is a single public constructor then it would be used to construct the object
-            // 3. If a parameterless constructor exists then it would be used to construct the object, and the other
-            // constructors will be ignored
-            ExecutableElement defaultAnnotatedConstructor = null;
-            ExecutableElement parameterLessConstructor = null;
-            List<ExecutableElement> accessibleConstructors = new ArrayList<>( constructors.size() );
-            List<ExecutableElement> publicConstructors = new ArrayList<>( );
-
-            for ( ExecutableElement constructor : constructors ) {
-                if ( constructor.getModifiers().contains( Modifier.PRIVATE ) ) {
+            for ( ExecutableDescriptor constructor : constructorDescriptors ) {
+                if ( constructor.modifiers().contains( LangModifier.PRIVATE ) ) {
                     continue;
                 }
 
                 if ( hasDefaultAnnotationFromAnyPackage( constructor ) ) {
-                    // We found a constructor annotated with @Default everything else is irrelevant
                     defaultAnnotatedConstructor = constructor;
                     break;
                 }
 
-                if ( constructor.getParameters().isEmpty() ) {
+                if ( constructor.parameters().isEmpty() ) {
                     parameterLessConstructor = constructor;
                 }
                 else {
                     accessibleConstructors.add( constructor );
                 }
 
-                if ( constructor.getModifiers().contains( Modifier.PUBLIC ) ) {
+                if ( constructor.modifiers().contains( LangModifier.PUBLIC ) ) {
                     publicConstructors.add( constructor );
                 }
             }
 
             if ( defaultAnnotatedConstructor != null ) {
-                // If a default annotated constructor exists it will be used, it has highest precedence
                 return getConstructorAccessor( type, defaultAnnotatedConstructor );
             }
 
             if ( publicConstructors.size() == 1 ) {
-                // If there is a single public constructor then use that one
-                ExecutableElement publicConstructor = publicConstructors.get( 0 );
-                if ( publicConstructor.getParameters().isEmpty() ) {
-                    // The public parameterless constructor
+                ExecutableDescriptor publicConstructor = publicConstructors.get( 0 );
+                if ( publicConstructor.parameters().isEmpty() ) {
                     return null;
                 }
 
@@ -965,7 +962,6 @@ public class BeanMappingMethod extends NormalTypeMappingMethod {
             }
 
             if ( parameterLessConstructor != null ) {
-                // If there is a constructor without parameters use it
                 return null;
             }
 
@@ -974,65 +970,60 @@ public class BeanMappingMethod extends NormalTypeMappingMethod {
             }
 
             if ( accessibleConstructors.size() > 1 ) {
-
                 ctx.getMessager().printMessage(
                     method.getExecutable(),
                     GENERAL_AMBIGUOUS_CONSTRUCTORS,
                     type,
-                    constructors.stream()
-                        .map( ExecutableElement::getParameters )
-                        .map( ps -> ps.stream()
-                            .map( VariableElement::asType )
-                            .map( String::valueOf )
-                            .collect( Collectors.joining( ", ", type.getName() + "(", ")" ) )
-                        )
+                    accessibleConstructors.stream()
+                        .map( constructor -> renderConstructorSignature( type, constructor ) )
                         .collect( Collectors.joining( ", " ) )
                 );
                 return new ConstructorAccessor( true, Collections.emptyList(), Collections.emptyMap() );
             }
-            else {
-                return getConstructorAccessor( type, accessibleConstructors.get( 0 ) );
-            }
+
+            return getConstructorAccessor( type, accessibleConstructors.get( 0 ) );
 
         }
 
-        private ConstructorAccessor getConstructorAccessor(Type type, ExecutableElement constructor) {
-            List<Parameter> constructorParameters = ctx.getTypeFactory()
-                .getParameters( (DeclaredType) type.getTypeMirror(), constructor );
+        private ConstructorAccessor getConstructorAccessor(Type type, ExecutableDescriptor constructor) {
+            TypeFactory typeFactory = ctx.getTypeFactory();
+            List<Parameter> constructorParameters = typeFactory
+                .getParameters( type.getTypeDescriptor(), constructor );
 
-            List<String> constructorProperties = null;
-            for ( AnnotationMirror annotationMirror : constructor.getAnnotationMirrors() ) {
-                if ( annotationMirror.getAnnotationType()
-                    .asElement()
-                    .getSimpleName()
-                    .contentEquals( "ConstructorProperties" ) ) {
-                    for ( Entry<? extends ExecutableElement, ? extends AnnotationValue> entry : annotationMirror
-                        .getElementValues()
-                        .entrySet() ) {
-                        if ( entry.getKey().getSimpleName().contentEquals( "value" ) ) {
-                            constructorProperties = getArrayValues( entry.getValue() );
-                            break;
-                        }
-                    }
-                    break;
-                }
+            AnnotationDescriptor constructorPropertiesAnnotation = AnnotationDescriptorUtils.findAnnotation(
+                typeFactory.langElements(),
+                constructor,
+                "java.beans.ConstructorProperties"
+            ).orElse( null );
+            if ( constructorPropertiesAnnotation == null ) {
+                constructorPropertiesAnnotation = AnnotationDescriptorUtils.findAnnotationBySimpleName(
+                    typeFactory.langElements(),
+                    constructor,
+                    "ConstructorProperties"
+                ).orElse( null );
             }
 
-            if ( constructorProperties == null ) {
+            List<String> constructorProperties = constructorPropertiesAnnotation != null
+                ? AnnotationValueUtils.asStringList( constructorPropertiesAnnotation.elementValues().get( "value" ) )
+                : null;
+
+            if ( constructorProperties == null || constructorProperties.isEmpty() ) {
                 Map<String, Accessor> constructorAccessors = new LinkedHashMap<>();
                 List<ParameterBinding> parameterBindings = new ArrayList<>( constructorParameters.size() );
                 for ( Parameter constructorParameter : constructorParameters ) {
                     String parameterName = constructorParameter.getName();
-                    Element parameterElement = constructorParameter.getElement();
+                    ElementDescriptor parameterElement = constructorParameter.getElement();
+                    TypeDescriptor accessedType = constructorParameter.getType() != null
+                        ? constructorParameter.getType().getTypeDescriptor()
+                        : constructorParameter.getDescriptor() != null
+                            ? constructorParameter.getDescriptor().type()
+                            : null;
                     Accessor constructorAccessor = createConstructorAccessor(
                         parameterElement,
-                        constructorParameter.getType().getTypeMirror(),
+                        accessedType,
                         parameterName
                     );
-                    constructorAccessors.put(
-                        parameterName,
-                        constructorAccessor
-                    );
+                    constructorAccessors.put( parameterName, constructorAccessor );
                     parameterBindings.add( ParameterBinding.fromTypeAndName(
                         constructorParameter.getType(),
                         constructorAccessor.getSimpleName()
@@ -1055,16 +1046,18 @@ public class BeanMappingMethod extends NormalTypeMappingMethod {
                 for ( int i = 0; i < constructorProperties.size(); i++ ) {
                     String parameterName = constructorProperties.get( i );
                     Parameter constructorParameter = constructorParameters.get( i );
-                    Element parameterElement = constructorParameter.getElement();
+                    ElementDescriptor parameterElement = constructorParameter.getElement();
+                    TypeDescriptor accessedType = constructorParameter.getType() != null
+                        ? constructorParameter.getType().getTypeDescriptor()
+                        : constructorParameter.getDescriptor() != null
+                            ? constructorParameter.getDescriptor().type()
+                            : null;
                     Accessor constructorAccessor = createConstructorAccessor(
                         parameterElement,
-                        constructorParameter.getType().getTypeMirror(),
+                        accessedType,
                         parameterName
                     );
-                    constructorAccessors.put(
-                        parameterName,
-                        constructorAccessor
-                    );
+                    constructorAccessors.put( parameterName, constructorAccessor );
                     parameterBindings.add( ParameterBinding.fromTypeAndName(
                         constructorParameter.getType(),
                         constructorAccessor.getSimpleName()
@@ -1075,7 +1068,31 @@ public class BeanMappingMethod extends NormalTypeMappingMethod {
             }
         }
 
-        private Accessor createConstructorAccessor(Element element, TypeMirror accessedType, String parameterName) {
+        private String renderConstructorSignature(Type type, ExecutableDescriptor constructor) {
+            List<Parameter> constructorParameters = ctx.getTypeFactory()
+                .getParameters( type.getTypeDescriptor(), constructor );
+            String parameterTypes = constructorParameters.stream()
+                .map( parameter -> {
+                    Type parameterType = parameter.getType();
+                    if ( parameterType != null ) {
+                        return parameterType.getFullyQualifiedName();
+                    }
+                    if ( parameter.getDescriptor() != null && parameter.getDescriptor().type() != null ) {
+                        Type resolved = ctx.getTypeFactory().getType( parameter.getDescriptor().type() );
+                        if ( resolved != null ) {
+                            return resolved.getFullyQualifiedName();
+                        }
+                        return parameter.getDescriptor().type().displayName();
+                    }
+                    return "java.lang.Object";
+                } )
+                .collect( Collectors.joining( ", " ) );
+            return type.getName() + "(" + parameterTypes + ")";
+        }
+
+        private Accessor createConstructorAccessor(ElementDescriptor element,
+                                                   TypeDescriptor accessedType,
+                                                   String parameterName) {
             String safeParameterName = Strings.getSafeVariableName(
                 parameterName,
                 existingVariableNames
@@ -1084,42 +1101,19 @@ public class BeanMappingMethod extends NormalTypeMappingMethod {
             return new ElementAccessor( element, accessedType, safeParameterName );
         }
 
-        private boolean hasDefaultAnnotationFromAnyPackage(Element element) {
-            for ( AnnotationMirror annotationMirror : element.getAnnotationMirrors() ) {
-                if ( annotationMirror.getAnnotationType()
-                    .asElement()
-                    .getSimpleName()
-                    .contentEquals( "Default" ) ) {
+        private boolean hasDefaultAnnotationFromAnyPackage(ElementDescriptor element) {
+            if ( element == null ) {
+                return false;
+            }
+            LangElements langElements = ctx.getTypeFactory().langElements();
+            for ( AnnotationDescriptor annotation : langElements.annotationMirrors( element ) ) {
+                TypeElementDescriptor annotationType = annotation.annotationType();
+                if ( annotationType != null && "Default".equals( annotationType.simpleName().content() ) ) {
                     return true;
                 }
             }
 
             return false;
-        }
-
-        private List<String> getArrayValues(AnnotationValue av) {
-
-            if ( av.getValue() instanceof List ) {
-                List<String> result = new ArrayList<>();
-                for ( AnnotationValue v : getValueAsList( av ) ) {
-                    Object value = v.getValue();
-                    if ( value instanceof String ) {
-                        result.add( (String) value );
-                    }
-                    else {
-                        return null;
-                    }
-                }
-                return result;
-            }
-            else {
-                return null;
-            }
-        }
-
-        @SuppressWarnings("unchecked")
-        private List<AnnotationValue> getValueAsList(AnnotationValue av) {
-            return (List<AnnotationValue>) av.getValue();
         }
 
         /**
@@ -1251,7 +1245,7 @@ public class BeanMappingMethod extends NormalTypeMappingMethod {
                 if ( !targetProperties.contains( dependency ) ) {
                     ctx.getMessager().printMessage(
                         method.getExecutable(),
-                        mapping.getMirror(),
+                        mapping.getAnnotation(),
                         mapping.getDependsOnAnnotationValue(),
                         Message.BEANMAPPING_UNKNOWN_PROPERTY_IN_DEPENDS_ON,
                         dependency
@@ -1301,7 +1295,7 @@ public class BeanMappingMethod extends NormalTypeMappingMethod {
                     Set<String> readAccessors = resultTypeToMap.getPropertyReadAccessors().keySet();
                     String mostSimilarProperty = Strings.getMostSimilarWord( targetPropertyName, readAccessors );
 
-                    Element elementForMessage = mapping.getElement();
+                    ElementDescriptor elementForMessage = mapping.getElement();
                     if ( elementForMessage == null ) {
                         elementForMessage = method.getExecutable();
                     }
@@ -1339,7 +1333,7 @@ public class BeanMappingMethod extends NormalTypeMappingMethod {
                     ctx.getMessager()
                         .printMessage(
                             elementForMessage,
-                            mapping.getMirror(),
+                            mapping.getAnnotation(),
                             mapping.getTargetAnnotationValue(),
                             msg,
                             args
@@ -1373,7 +1367,7 @@ public class BeanMappingMethod extends NormalTypeMappingMethod {
                     ctx.getMessager()
                         .printMessage(
                             mapping.getElement(),
-                            mapping.getMirror(),
+                            mapping.getAnnotation(),
                             mapping.getTargetAnnotationValue(),
                             msg,
                             args
@@ -1398,7 +1392,7 @@ public class BeanMappingMethod extends NormalTypeMappingMethod {
                         .existingVariableNames( existingVariableNames )
                         .target( targetPropertyName, targetReadAccessor, targetWriteAccessor )
                         .dependsOn( mapping.getDependsOn() )
-                        .mirror( mapping.getMirror() )
+                        .mirror( mapping.getAnnotation() )
                         .build();
                 }
                 handledTargets.add( targetPropertyName );
@@ -1419,7 +1413,7 @@ public class BeanMappingMethod extends NormalTypeMappingMethod {
                     .options( mapping )
                     .existingVariableNames( existingVariableNames )
                     .dependsOn( mapping.getDependsOn() )
-                    .mirror( mapping.getMirror() )
+                    .mirror( mapping.getAnnotation() )
                     .build();
                 handledTargets.add( targetPropertyName );
             }
@@ -1436,7 +1430,7 @@ public class BeanMappingMethod extends NormalTypeMappingMethod {
                     .existingVariableNames( existingVariableNames )
                     .target( targetPropertyName, targetReadAccessor, targetWriteAccessor )
                     .dependsOn( mapping.getDependsOn() )
-                    .mirror( mapping.getMirror() )
+                    .mirror( mapping.getAnnotation() )
                     .build();
                 handledTargets.add( targetPropertyName );
             }
@@ -1463,7 +1457,7 @@ public class BeanMappingMethod extends NormalTypeMappingMethod {
                                 ctx.getMessager()
                                     .printMessage(
                                         method.getExecutable(),
-                                        mappingRef.getMapping().getMirror(),
+                                        mappingRef.getMapping().getAnnotation(),
                                         Message.BEANMAPPING_SEVERAL_POSSIBLE_SOURCES,
                                         targetPropertyName
                                     );
@@ -1509,7 +1503,7 @@ public class BeanMappingMethod extends NormalTypeMappingMethod {
                             .defaultValue( mapping.getDefaultValue() )
                             .defaultJavaExpression( mapping.getDefaultJavaExpression() )
                             .conditionJavaExpression( mapping.getConditionJavaExpression() )
-                            .mirror( mapping.getMirror() )
+                            .mirror( mapping.getAnnotation() )
                             .options( mapping )
                             .build();
                         handledTargets.add( targetPropertyName );
@@ -1535,7 +1529,7 @@ public class BeanMappingMethod extends NormalTypeMappingMethod {
                         ctx.getMessager()
                             .printMessage(
                                 method.getExecutable(),
-                                mapping.getMirror(),
+                                mapping.getAnnotation(),
                                 mapping.getTargetAnnotationValue(),
                                 PROPERTYMAPPING_CANNOT_DETERMINE_SOURCE_PROPERTY_FROM_TARGET,
                                 method.getSourceParameters().get( 0 ).getName(),
@@ -1546,7 +1540,7 @@ public class BeanMappingMethod extends NormalTypeMappingMethod {
                         ctx.getMessager()
                             .printMessage(
                                 method.getExecutable(),
-                                mapping.getMirror(),
+                                mapping.getAnnotation(),
                                 mapping.getTargetAnnotationValue(),
                                 PROPERTYMAPPING_CANNOT_DETERMINE_SOURCE_PARAMETER_FROM_TARGET,
                                 targetPropertyName
@@ -1737,8 +1731,10 @@ public class BeanMappingMethod extends NormalTypeMappingMethod {
                 PresenceCheckAccessor sourcePresenceChecker =
                     sourceParameter.getType().getPresenceChecker( targetPropertyName );
 
-                DeclaredType declaredSourceType = (DeclaredType) sourceParameter.getType().getTypeMirror();
-                Type returnType = ctx.getTypeFactory().getReturnType( declaredSourceType, sourceReadAccessor );
+                Type returnType = ctx.getTypeFactory().getReturnType(
+                    sourceParameter.getType().getTypeDescriptor(),
+                    sourceReadAccessor
+                );
                 sourceRef = new SourceReference.BuilderFromProperty().sourceParameter( sourceParameter )
                                                                      .type( returnType )
                                                                      .readAccessor( sourceReadAccessor )

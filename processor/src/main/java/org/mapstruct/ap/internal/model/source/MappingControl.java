@@ -6,19 +6,21 @@
 package org.mapstruct.ap.internal.model.source;
 
 import java.util.HashSet;
+import java.util.List;
+import java.util.Objects;
 import java.util.Set;
-import javax.lang.model.element.AnnotationMirror;
-import javax.lang.model.element.Element;
-import javax.lang.model.element.ElementKind;
-import javax.lang.model.element.TypeElement;
-import javax.lang.model.type.DeclaredType;
-import javax.lang.model.type.TypeKind;
-import javax.lang.model.type.TypeMirror;
-import org.mapstruct.ap.internal.util.ElementUtils;
 
-import org.mapstruct.ap.internal.gem.MappingControlGem;
 import org.mapstruct.ap.internal.gem.MappingControlUseGem;
-import org.mapstruct.ap.internal.gem.MappingControlsGem;
+import org.mapstruct.ap.internal.util.AnnotationDescriptorUtils;
+import org.mapstruct.ap.internal.util.AnnotationValueUtils;
+import org.mapstruct.ap.descriptor.AnnotationDescriptor;
+import org.mapstruct.ap.descriptor.AnnotationValueDescriptor;
+import org.mapstruct.ap.descriptor.LangElementKind;
+import org.mapstruct.ap.langmodel.api.LangElements;
+import org.mapstruct.ap.descriptor.LangTypeKind;
+import org.mapstruct.ap.langmodel.api.PackageDescriptor;
+import org.mapstruct.ap.descriptor.TypeDescriptor;
+import org.mapstruct.ap.descriptor.TypeElementDescriptor;
 
 public class MappingControl {
 
@@ -27,20 +29,44 @@ public class MappingControl {
     private static final String MAPPING_CONTROL_FQN = "org.mapstruct.control.MappingControl";
     private static final String MAPPING_CONTROLS_FQN = "org.mapstruct.control.MappingControls";
 
-    private boolean allowDirect = false;
-    private boolean allowTypeConversion = false;
-    private boolean allowMappingMethod = false;
-    private boolean allow2Steps = false;
+    private boolean allowDirect;
+    private boolean allowTypeConversion;
+    private boolean allowMappingMethod;
+    private boolean allow2Steps;
 
-    public static MappingControl fromTypeMirror(TypeMirror mirror, ElementUtils elementUtils) {
-        MappingControl mappingControl = new MappingControl();
-        if ( TypeKind.DECLARED == mirror.getKind() ) {
-            resolveControls( mappingControl, ( (DeclaredType) mirror ).asElement(), new HashSet<>(), elementUtils );
+    public static MappingControl fromTypeDescriptor(TypeDescriptor descriptor, LangElements langElements) {
+        if ( descriptor == null || langElements == null ) {
+            return enabledByDefault();
         }
+
+        if ( descriptor.kind() != LangTypeKind.DECLARED ) {
+            return enabledByDefault();
+        }
+
+        TypeElementDescriptor annotationType = descriptor.typeElement().orElse( null );
+        if ( annotationType == null ) {
+            return enabledByDefault();
+        }
+
+        MappingControl mappingControl = disabled();
+        resolveControls( mappingControl, annotationType, new HashSet<>(), langElements );
         return mappingControl;
     }
 
-    private MappingControl() {
+    private MappingControl(boolean allowDirect, boolean allowTypeConversion, boolean allowMappingMethod,
+                           boolean allow2Steps) {
+        this.allowDirect = allowDirect;
+        this.allowTypeConversion = allowTypeConversion;
+        this.allowMappingMethod = allowMappingMethod;
+        this.allow2Steps = allow2Steps;
+    }
+
+    private static MappingControl enabledByDefault() {
+        return new MappingControl( true, true, true, true );
+    }
+
+    private static MappingControl disabled() {
+        return new MappingControl( false, false, false, false );
     }
 
     public boolean allowDirect() {
@@ -59,61 +85,92 @@ public class MappingControl {
         return allow2Steps;
     }
 
-    private static void resolveControls(MappingControl control, Element element, Set<Element> handledElements,
-                                       ElementUtils elementUtils) {
-        for ( AnnotationMirror annotationMirror : element.getAnnotationMirrors() ) {
-            Element lElement = annotationMirror.getAnnotationType().asElement();
-            if ( isAnnotation( lElement, MAPPING_CONTROL_FQN ) ) {
-                determineMappingControl( control, MappingControlGem.instanceOn( element ) );
+    private static void resolveControls(MappingControl control,
+                                        TypeElementDescriptor element,
+                                        Set<String> handledElements,
+                                        LangElements langElements) {
+        List<AnnotationDescriptor> annotations = langElements.annotationMirrors( element );
+        for ( AnnotationDescriptor annotation : annotations ) {
+            TypeElementDescriptor annotationType = annotation.annotationType();
+            if ( annotationType == null ) {
+                continue;
             }
-            else if ( isAnnotation( lElement, MAPPING_CONTROLS_FQN ) ) {
-                MappingControlsGem.instanceOn( element )
-                    .value()
-                    .get()
-                    .forEach( m -> determineMappingControl( control, m ) );
+
+            String qualifiedName = annotationType.qualifiedName();
+            if ( Objects.equals( qualifiedName, MAPPING_CONTROL_FQN ) ) {
+                applyMappingControl( control, annotation );
             }
-            else if ( !isAnnotationInPackage( lElement, JAVA_LANG_ANNOTATION_PGK, elementUtils )
-                && !isAnnotationInPackage( lElement, ORG_MAPSTRUCT_PKG, elementUtils )
-                && !handledElements.contains( lElement )
-            ) {
-                // recur over annotation mirrors
-                handledElements.add( lElement );
-                resolveControls( control, lElement, handledElements, elementUtils );
+            else if ( Objects.equals( qualifiedName, MAPPING_CONTROLS_FQN ) ) {
+                for ( AnnotationDescriptor nested :
+                    AnnotationDescriptorUtils.getAnnotationList( annotation, "value" ) ) {
+                    applyMappingControl( control, nested );
+                }
+            }
+            else if ( shouldRecurse( annotationType, handledElements, langElements ) ) {
+                handledElements.add( annotationType.id() );
+                resolveControls( control, annotationType, handledElements, langElements );
             }
         }
     }
 
-    private static void determineMappingControl(MappingControl in, MappingControlGem gem) {
-        MappingControlUseGem use = MappingControlUseGem.valueOf( gem.value().get() );
+    private static boolean shouldRecurse(TypeElementDescriptor annotationType,
+                                         Set<String> handledElements,
+                                         LangElements langElements) {
+        if ( annotationType.kind() != LangElementKind.ANNOTATION_TYPE ) {
+            return false;
+        }
+        if ( handledElements.contains( annotationType.id() ) ) {
+            return false;
+        }
+        PackageDescriptor pkg = langElements.packageOf( annotationType );
+        String packageName = pkg != null ? pkg.qualifiedName() : "";
+        if ( Objects.equals( packageName, JAVA_LANG_ANNOTATION_PGK ) ) {
+            return false;
+        }
+        if ( Objects.equals( packageName, ORG_MAPSTRUCT_PKG ) ) {
+            return false;
+        }
+        return true;
+    }
+
+    private static void applyMappingControl(MappingControl control, AnnotationDescriptor annotation) {
+        AnnotationValueDescriptor valueDescriptor = AnnotationDescriptorUtils.getValue( annotation, "value" );
+        String enumConstant = enumConstantName( valueDescriptor );
+        if ( enumConstant == null ) {
+            return;
+        }
+
+        MappingControlUseGem use = MappingControlUseGem.valueOf( enumConstant );
         switch ( use ) {
             case DIRECT:
-                in.allowDirect = true;
+                control.allowDirect = true;
                 break;
             case MAPPING_METHOD:
-                in.allowMappingMethod = true;
+                control.allowMappingMethod = true;
                 break;
             case BUILT_IN_CONVERSION:
-                in.allowTypeConversion = true;
+                control.allowTypeConversion = true;
                 break;
             case COMPLEX_MAPPING:
-                in.allow2Steps = true;
+                control.allow2Steps = true;
                 break;
             default:
         }
     }
 
-    private static boolean isAnnotationInPackage(Element element, String packageFQN, ElementUtils elementUtils) {
-        if ( ElementKind.ANNOTATION_TYPE == element.getKind() ) {
-            return packageFQN.equals( elementUtils.getPackageOf( element ).getQualifiedName().toString() );
+    private static String enumConstantName(AnnotationValueDescriptor descriptor) {
+        if ( descriptor == null ) {
+            return null;
         }
-        return false;
-    }
-
-    private static boolean isAnnotation(Element element, String annotationFQN) {
-        if ( ElementKind.ANNOTATION_TYPE == element.getKind() ) {
-            return annotationFQN.equals( ( (TypeElement) element ).getQualifiedName().toString() );
+        String representation = AnnotationValueUtils.asString( descriptor );
+        if ( representation == null ) {
+            return null;
         }
-        return false;
+        int lastDot = representation.lastIndexOf( '.' );
+        if ( lastDot >= 0 && lastDot + 1 < representation.length() ) {
+            return representation.substring( lastDot + 1 );
+        }
+        return representation;
     }
 
 }

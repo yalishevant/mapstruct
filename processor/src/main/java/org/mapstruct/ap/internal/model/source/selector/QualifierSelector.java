@@ -9,17 +9,18 @@ import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
-import javax.lang.model.element.AnnotationMirror;
-import javax.lang.model.type.DeclaredType;
-import javax.lang.model.type.TypeMirror;
-import org.mapstruct.ap.internal.util.ElementUtils;
-import org.mapstruct.ap.internal.util.TypeUtils;
 
 import org.mapstruct.ap.internal.model.common.Type;
+import org.mapstruct.ap.internal.model.common.TypeFactory;
 import org.mapstruct.ap.internal.model.source.Method;
 import org.mapstruct.ap.internal.model.source.SourceMethod;
-import org.mapstruct.ap.internal.gem.NamedGem;
-import org.mapstruct.ap.internal.gem.QualifierGem;
+import org.mapstruct.ap.internal.util.AnnotationDescriptorUtils;
+import org.mapstruct.ap.internal.util.AnnotationValueUtils;
+import org.mapstruct.ap.descriptor.AnnotationDescriptor;
+import org.mapstruct.ap.langmodel.api.LangElements;
+import org.mapstruct.ap.langmodel.api.LangTypes;
+import org.mapstruct.ap.descriptor.TypeDescriptor;
+import org.mapstruct.ap.descriptor.TypeElementDescriptor;
 
 /**
  * This selector selects a best match based on qualifier annotations.
@@ -40,12 +41,18 @@ import org.mapstruct.ap.internal.gem.QualifierGem;
  */
 public class QualifierSelector implements MethodSelector {
 
-    private final TypeUtils typeUtils;
-    private final TypeMirror namedAnnotationTypeMirror;
+    private static final String MAPSTRUCT_QUALIFIER = "org.mapstruct.Qualifier";
 
-    public QualifierSelector(TypeUtils typeUtils, ElementUtils elementUtils ) {
-        this.typeUtils = typeUtils;
-        namedAnnotationTypeMirror = elementUtils.getTypeElement( "org.mapstruct.Named" ).asType();
+    private final LangTypes langTypes;
+    private final LangElements langElements;
+    private final TypeFactory typeFactory;
+    private final TypeDescriptor namedAnnotationType;
+
+    public QualifierSelector(TypeFactory typeFactory) {
+        this.langTypes = typeFactory.langTypes();
+        this.langElements = typeFactory.langElements();
+        this.typeFactory = typeFactory;
+        this.namedAnnotationType = resolveNamedAnnotationType();
     }
 
     @Override
@@ -55,44 +62,40 @@ public class QualifierSelector implements MethodSelector {
 
         int numberOfQualifiersToMatch = 0;
 
-        // Define some local collections and make sure that they are defined.
-        List<TypeMirror> qualifierTypes = new ArrayList<>();
+        List<TypeDescriptor> qualifierTypes = new ArrayList<>();
         if ( criteria.getQualifiers() != null ) {
             qualifierTypes.addAll( criteria.getQualifiers() );
             numberOfQualifiersToMatch += criteria.getQualifiers().size();
         }
-        List<String> qualfiedByNames = new ArrayList<>();
+
+        List<String> qualifiedByNames = new ArrayList<>();
         if ( criteria.getQualifiedByNames() != null ) {
-            qualfiedByNames.addAll( criteria.getQualifiedByNames() );
+            qualifiedByNames.addAll( criteria.getQualifiedByNames() );
             numberOfQualifiersToMatch += criteria.getQualifiedByNames().size();
         }
 
-        // add the mapstruct @Named annotation as annotation to look for
-        if ( !qualfiedByNames.isEmpty() ) {
-            qualifierTypes.add( namedAnnotationTypeMirror );
+        if ( !qualifiedByNames.isEmpty() && namedAnnotationType != null ) {
+            qualifierTypes.add( namedAnnotationType );
         }
 
-        // Check there are qualfiers for this mapping: Mapping#qualifier or Mapping#qualfiedByName
         if ( qualifierTypes.isEmpty() ) {
-            // When no qualifiers, disqualify all methods marked with a qualifier by removing them from the candidates
-            List<SelectedMethod<T>> nonQualiferAnnotatedMethods = new ArrayList<>( methods.size() );
+            List<SelectedMethod<T>> nonQualifierAnnotatedMethods = new ArrayList<>( methods.size() );
             for ( SelectedMethod<T> candidate : methods ) {
 
                 if ( candidate.getMethod() instanceof SourceMethod ) {
-                    Set<AnnotationMirror> qualifierAnnotations = getQualifierAnnotationMirrors( candidate.getMethod() );
+                    Set<AnnotationDescriptor> qualifierAnnotations = getQualifierAnnotations( candidate.getMethod() );
                     if ( qualifierAnnotations.isEmpty() ) {
-                        nonQualiferAnnotatedMethods.add( candidate );
+                        nonQualifierAnnotatedMethods.add( candidate );
                     }
                 }
                 else {
-                    nonQualiferAnnotatedMethods.add( candidate );
+                    nonQualifierAnnotatedMethods.add( candidate );
                 }
 
             }
-            return nonQualiferAnnotatedMethods;
+            return nonQualifierAnnotatedMethods;
         }
         else {
-            // Check all methods marked with qualfier (or methods in Mappers marked wiht a qualfier) for matches.
             List<SelectedMethod<T>> matches = new ArrayList<>( methods.size() );
             for ( SelectedMethod<T> candidate : methods ) {
 
@@ -100,39 +103,28 @@ public class QualifierSelector implements MethodSelector {
                     continue;
                 }
 
-                // retrieve annotations
-                Set<AnnotationMirror> qualifierAnnotationMirrors =
-                    getQualifierAnnotationMirrors( candidate.getMethod() );
-
-                // now count if all qualifiers are matched
+                Set<AnnotationDescriptor> qualifierAnnotations = getQualifierAnnotations( candidate.getMethod() );
                 int matchingQualifierCounter = 0;
-                    for ( AnnotationMirror qualifierAnnotationMirror : qualifierAnnotationMirrors ) {
-                for ( TypeMirror qualifierType : qualifierTypes ) {
 
-                        // get the type of the annotation positionHint.
-                        DeclaredType qualifierAnnotationType = qualifierAnnotationMirror.getAnnotationType();
-                        if ( typeUtils.isSameType( qualifierType, qualifierAnnotationType ) ) {
-                            // Match! we have an annotation which has the @Qualifer marker ( could be @Named as well )
-                            if ( typeUtils.isSameType( qualifierAnnotationType, namedAnnotationTypeMirror ) ) {
-                                // Match! its an @Named, so do the additional check on name.
-                                NamedGem named = NamedGem.instanceOn( qualifierAnnotationMirror );
-                                if ( named.value().hasValue() && qualfiedByNames.contains( named.value().get() ) ) {
-                                    // Match! its an @Name and the value matches as well. Oh boy.
+                for ( AnnotationDescriptor qualifierAnnotation : qualifierAnnotations ) {
+                    TypeDescriptor annotationType = qualifierAnnotation.annotationType().asType();
+                    for ( TypeDescriptor qualifierType : qualifierTypes ) {
+                        if ( isSameType( qualifierType, annotationType ) ) {
+                            if ( isNamedAnnotation( annotationType ) ) {
+                                String namedValue = namedValue( qualifierAnnotation );
+                                if ( namedValue != null && qualifiedByNames.contains( namedValue ) ) {
                                     matchingQualifierCounter++;
                                 }
                             }
                             else {
-                                // Match! its a self declared qualifer annoation (marked with @Qualifier)
                                 matchingQualifierCounter++;
                             }
                             break;
                         }
-
                     }
                 }
 
                 if ( matchingQualifierCounter == numberOfQualifiersToMatch ) {
-                    // Only if all qualifiers are matched with a qualifying annotation, add candidate
                     matches.add( candidate );
                 }
             }
@@ -140,35 +132,95 @@ public class QualifierSelector implements MethodSelector {
         }
     }
 
-    private Set<AnnotationMirror> getQualifierAnnotationMirrors( Method candidate ) {
+    private boolean isSameType(TypeDescriptor left, TypeDescriptor right) {
+        if ( left == null || right == null ) {
+            return false;
+        }
+        return langTypes.isSameType( left, right );
+    }
 
-        // retrieve annotations
-        Set<AnnotationMirror> qualiferAnnotations = new HashSet<>();
+    private boolean isNamedAnnotation(TypeDescriptor annotationType) {
+        return namedAnnotationType != null && isSameType( namedAnnotationType, annotationType );
+    }
 
-        // first from the method itself
-        SourceMethod candidateSM = (SourceMethod) candidate;
-        List<? extends AnnotationMirror> methodAnnotations = candidateSM.getExecutable().getAnnotationMirrors();
-        for ( AnnotationMirror methodAnnotation : methodAnnotations ) {
-            addOnlyWhenQualifier( qualiferAnnotations, methodAnnotation );
+    private String namedValue(AnnotationDescriptor annotation) {
+        return AnnotationValueUtils.asString( AnnotationDescriptorUtils.getValue( annotation, "value" ) );
+    }
+
+    private Set<AnnotationDescriptor> getQualifierAnnotations(Method candidate) {
+        Set<AnnotationDescriptor> qualifierAnnotations = new HashSet<>();
+
+        if ( !( candidate instanceof SourceMethod ) ) {
+            return qualifierAnnotations;
         }
 
-        // then from the mapper (if declared)
-        Type mapper = candidate.getDeclaringMapper();
-        if ( mapper != null ) {
-            List<? extends AnnotationMirror> mapperAnnotations = mapper.getTypeElement().getAnnotationMirrors();
-            for ( AnnotationMirror mapperAnnotation : mapperAnnotations ) {
-                addOnlyWhenQualifier( qualiferAnnotations, mapperAnnotation );
+        SourceMethod sourceMethod = (SourceMethod) candidate;
+        if ( langElements != null ) {
+            for ( AnnotationDescriptor methodAnnotation :
+                langElements.annotationMirrors( sourceMethod.getExecutableDescriptor() ) ) {
+                addOnlyWhenQualifier( qualifierAnnotations, methodAnnotation );
             }
         }
 
-        return qualiferAnnotations;
+        Type mapper = candidate.getDeclaringMapper();
+        if ( mapper != null ) {
+            TypeDescriptor mapperDescriptor = mapper.getTypeDescriptor();
+            if ( mapperDescriptor != null ) {
+                mapperDescriptor.typeElement().ifPresent( typeElementDescriptor -> {
+                    if ( langElements != null ) {
+                        for ( AnnotationDescriptor mapperAnnotation :
+                            langElements.annotationMirrors( typeElementDescriptor ) ) {
+                            addOnlyWhenQualifier( qualifierAnnotations, mapperAnnotation );
+                        }
+                    }
+                } );
+            }
+        }
+
+        return qualifierAnnotations;
     }
 
-    private void addOnlyWhenQualifier( Set<AnnotationMirror> annotationSet, AnnotationMirror candidate ) {
-        // only add the candidate annotation when the candidate itself has the annotation 'Qualifier'
-        if ( QualifierGem.instanceOn( candidate.getAnnotationType().asElement() ) != null ) {
+    private void addOnlyWhenQualifier(Set<AnnotationDescriptor> annotationSet, AnnotationDescriptor candidate) {
+        if ( candidate == null ) {
+            return;
+        }
+        if ( isQualifierAnnotation( candidate ) ) {
             annotationSet.add( candidate );
         }
     }
 
+    private boolean isQualifierAnnotation(AnnotationDescriptor candidate) {
+        if ( candidate == null || langElements == null ) {
+            return false;
+        }
+        TypeElementDescriptor annotationType = candidate.annotationType();
+        if ( annotationType == null ) {
+            return false;
+        }
+        for ( AnnotationDescriptor meta : langElements.annotationMirrors( annotationType ) ) {
+            if ( AnnotationDescriptorUtils.hasQualifiedName( meta, MAPSTRUCT_QUALIFIER ) ) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private TypeDescriptor resolveNamedAnnotationType() {
+        if ( langElements == null ) {
+            return resolveNamedAnnotationViaTypeFactory();
+        }
+        TypeElementDescriptor namedElement = langElements.typeElement( "org.mapstruct.Named" );
+        if ( namedElement != null ) {
+            return namedElement.asType();
+        }
+        return resolveNamedAnnotationViaTypeFactory();
+    }
+
+    private TypeDescriptor resolveNamedAnnotationViaTypeFactory() {
+        if ( typeFactory == null ) {
+            return null;
+        }
+        Type namedType = typeFactory.getType( "org.mapstruct.Named" );
+        return namedType != null ? namedType.getTypeDescriptor() : null;
+    }
 }

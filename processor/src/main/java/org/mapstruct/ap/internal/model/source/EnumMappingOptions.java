@@ -6,14 +6,17 @@
 package org.mapstruct.ap.internal.model.source;
 
 import java.util.Map;
-import java.util.Optional;
-import javax.lang.model.element.AnnotationMirror;
-import javax.lang.model.element.ExecutableElement;
-import javax.lang.model.type.TypeMirror;
 
 import org.mapstruct.ap.internal.gem.EnumMappingGem;
+import org.mapstruct.ap.internal.util.AnnotationDescriptorUtils;
+import org.mapstruct.ap.internal.util.AnnotationValueUtils;
 import org.mapstruct.ap.internal.util.FormattingMessager;
 import org.mapstruct.ap.internal.util.Strings;
+import org.mapstruct.ap.descriptor.AnnotationDescriptor;
+import org.mapstruct.ap.descriptor.AnnotationValueDescriptor;
+import org.mapstruct.ap.descriptor.ExecutableDescriptor;
+import org.mapstruct.ap.langmodel.AnnotationGemFactory;
+import org.mapstruct.ap.descriptor.TypeDescriptor;
 import org.mapstruct.ap.spi.EnumTransformationStrategy;
 
 import static org.mapstruct.ap.internal.util.Message.ENUMMAPPING_INCORRECT_TRANSFORMATION_STRATEGY;
@@ -28,17 +31,23 @@ public class EnumMappingOptions extends DelegatingOptions {
     private final EnumMappingGem enumMapping;
     private final boolean inverse;
     private final boolean valid;
+    private final AnnotationDescriptor annotation;
 
-    private EnumMappingOptions(EnumMappingGem enumMapping, boolean inverse, boolean valid, DelegatingOptions next) {
+    private EnumMappingOptions(EnumMappingGem enumMapping,
+                               AnnotationDescriptor annotation,
+                               boolean inverse,
+                               boolean valid,
+                               DelegatingOptions next) {
         super( next );
         this.enumMapping = enumMapping;
         this.inverse = inverse;
         this.valid = valid;
+        this.annotation = annotation;
     }
 
     @Override
     public boolean hasAnnotation() {
-        return enumMapping != null;
+        return annotation != null;
     }
 
     public boolean isValid() {
@@ -58,16 +67,20 @@ public class EnumMappingOptions extends DelegatingOptions {
     }
 
     @Override
-    public TypeMirror getUnexpectedValueMappingException() {
-        if ( enumMapping != null && enumMapping.unexpectedValueMappingException().hasValue() ) {
-            return enumMapping.unexpectedValueMappingException().getValue();
+    public TypeDescriptor getUnexpectedValueMappingException() {
+        if ( enumMapping != null && enumMapping.unexpectedValueMappingException().hasValue() && annotation != null ) {
+            AnnotationValueDescriptor value = AnnotationDescriptorUtils.getValue(
+                annotation,
+                "unexpectedValueMappingException"
+            );
+            return AnnotationValueUtils.asType( value );
         }
 
         return next().getUnexpectedValueMappingException();
     }
 
-    public AnnotationMirror getMirror() {
-        return Optional.ofNullable( enumMapping ).map( EnumMappingGem::mirror ).orElse( null );
+    public AnnotationDescriptor getAnnotation() {
+        return annotation;
     }
 
     public boolean isInverse() {
@@ -75,43 +88,58 @@ public class EnumMappingOptions extends DelegatingOptions {
     }
 
     public EnumMappingOptions inverse() {
-        return new EnumMappingOptions( enumMapping, true, valid, next() );
+        return new EnumMappingOptions( enumMapping, annotation, true, valid, next() );
     }
 
-    public static EnumMappingOptions getInstanceOn(ExecutableElement method, MapperOptions mapperOptions,
-        Map<String, EnumTransformationStrategy> enumTransformationStrategies, FormattingMessager messager) {
+    public static EnumMappingOptions getInstanceOn(AnnotationDescriptor annotation,
+        MapperOptions mapperOptions,
+        ExecutableDescriptor method,
+        Map<String, EnumTransformationStrategy> enumTransformationStrategies,
+        FormattingMessager messager,
+        AnnotationGemFactory annotationGems) {
 
-        EnumMappingGem enumMapping = EnumMappingGem.instanceOn( method );
+        EnumMappingGem enumMapping = annotationGems.enumMapping( annotation );
         if ( enumMapping == null ) {
-            return new EnumMappingOptions( null, false, true, mapperOptions );
+            return new EnumMappingOptions( null, null, false, true, mapperOptions );
         }
-        else if ( !isConsistent( enumMapping, method, enumTransformationStrategies, messager ) ) {
-            return new EnumMappingOptions( null, false, false, mapperOptions );
+        else if ( !isConsistent( enumMapping, annotation, method, enumTransformationStrategies, messager ) ) {
+            return new EnumMappingOptions( null, null, false, false, mapperOptions );
         }
 
         return new EnumMappingOptions(
             enumMapping,
+            annotation,
             false,
             true,
             mapperOptions
         );
     }
 
-    private static boolean isConsistent(EnumMappingGem gem, ExecutableElement method,
-        Map<String, EnumTransformationStrategy> enumTransformationStrategies, FormattingMessager messager) {
+    private static boolean isConsistent(EnumMappingGem gem,
+        AnnotationDescriptor annotation,
+        ExecutableDescriptor method,
+        Map<String, EnumTransformationStrategy> enumTransformationStrategies,
+        FormattingMessager messager) {
 
         String strategy = gem.nameTransformationStrategy().getValue();
         String configuration = gem.configuration().getValue();
 
         boolean isConsistent = false;
 
+        AnnotationValueDescriptor strategyValue = annotation != null
+            ? AnnotationDescriptorUtils.getValue( annotation, "nameTransformationStrategy" )
+            : null;
+        AnnotationValueDescriptor configurationValue = annotation != null
+            ? AnnotationDescriptorUtils.getValue( annotation, "configuration" )
+            : null;
+
         if ( Strings.isNotEmpty( strategy ) || Strings.isNotEmpty( configuration ) ) {
             if ( !enumTransformationStrategies.containsKey( strategy ) ) {
                 String registeredStrategies = Strings.join( enumTransformationStrategies.keySet(), ", " );
                 messager.printMessage(
                     method,
-                    gem.mirror(),
-                    gem.nameTransformationStrategy().getAnnotationValue(),
+                    annotation,
+                    strategyValue,
                     ENUMMAPPING_INCORRECT_TRANSFORMATION_STRATEGY,
                     strategy,
                     registeredStrategies
@@ -122,8 +150,8 @@ public class EnumMappingOptions extends DelegatingOptions {
             else if ( Strings.isEmpty( configuration ) ) {
                 messager.printMessage(
                     method,
-                    gem.mirror(),
-                    gem.configuration().getAnnotationValue(),
+                    annotation,
+                    configurationValue,
                     ENUMMAPPING_MISSING_CONFIGURATION
                 );
                 return false;
@@ -137,7 +165,7 @@ public class EnumMappingOptions extends DelegatingOptions {
         if ( !isConsistent ) {
             messager.printMessage(
                 method,
-                gem.mirror(),
+                annotation,
                 ENUMMAPPING_NO_ELEMENTS
             );
         }

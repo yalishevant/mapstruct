@@ -7,19 +7,21 @@ package org.mapstruct.ap.internal.model.source;
 
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
-import javax.lang.model.element.AnnotationMirror;
-import javax.lang.model.element.ExecutableElement;
-import javax.lang.model.type.TypeMirror;
 
 import org.mapstruct.ap.internal.gem.SubclassMappingGem;
-import org.mapstruct.ap.internal.gem.SubclassMappingsGem;
 import org.mapstruct.ap.internal.model.common.Parameter;
+import org.mapstruct.ap.internal.model.common.TypeFactory;
 import org.mapstruct.ap.internal.model.common.Type;
 import org.mapstruct.ap.internal.util.FormattingMessager;
-import org.mapstruct.ap.internal.util.TypeUtils;
+import org.mapstruct.ap.internal.util.AnnotationDescriptorUtils;
+import org.mapstruct.ap.internal.util.AnnotationValueUtils;
+import org.mapstruct.ap.descriptor.AnnotationDescriptor;
+import org.mapstruct.ap.descriptor.AnnotationValueDescriptor;
+import org.mapstruct.ap.descriptor.ExecutableDescriptor;
+import org.mapstruct.ap.langmodel.api.LangTypes;
+import org.mapstruct.ap.descriptor.TypeDescriptor;
 import org.mapstruct.ap.spi.TypeHierarchyErroneousException;
 
 import static org.mapstruct.ap.internal.util.Message.SUBCLASSMAPPING_ILLEGAL_SUBCLASS;
@@ -33,172 +35,187 @@ import static org.mapstruct.ap.internal.util.Message.SUBCLASSMAPPING_UPDATE_METH
  */
 public class SubclassMappingOptions extends DelegatingOptions {
 
-    private final TypeMirror source;
-    private final TypeMirror target;
-    private final TypeUtils typeUtils;
+    private final TypeDescriptor sourceType;
+    private final TypeDescriptor targetType;
     private final SelectionParameters selectionParameters;
     private final SubclassMappingGem subclassMapping;
+    private final AnnotationDescriptor annotation;
 
-    public SubclassMappingOptions(TypeMirror source, TypeMirror target, TypeUtils typeUtils, DelegatingOptions next,
-                                  SelectionParameters selectionParameters, SubclassMappingGem subclassMapping) {
+    public SubclassMappingOptions(TypeDescriptor sourceType, TypeDescriptor targetType,
+                                  DelegatingOptions next, SelectionParameters selectionParameters,
+                                  SubclassMappingGem subclassMapping,
+                                  AnnotationDescriptor annotation) {
         super( next );
-        this.source = source;
-        this.target = target;
-        this.typeUtils = typeUtils;
+        this.sourceType = sourceType;
+        this.targetType = targetType;
         this.selectionParameters = selectionParameters;
         this.subclassMapping = subclassMapping;
+        this.annotation = annotation;
     }
 
     @Override
     public boolean hasAnnotation() {
-        return source != null && target != null;
+        return annotation != null;
     }
 
-    private static boolean isConsistent(SubclassMappingGem gem, ExecutableElement method, FormattingMessager messager,
-                                        TypeUtils typeUtils, List<Parameter> sourceParameters, Type resultType,
-                                        SubclassValidator subclassValidator) {
-
+    private static boolean isConsistent(SubclassMappingGem gem,
+                                        AnnotationDescriptor annotation,
+                                        ExecutableDescriptor method,
+                                        FormattingMessager messager,
+                                        List<Parameter> sourceParameters,
+                                        Type resultType,
+                                        SubclassValidator subclassValidator,
+                                        TypeFactory typeFactory) {
+        if ( gem == null ) {
+            return false;
+        }
         if ( resultType == null ) {
-            messager.printMessage( method, gem.mirror(), SUBCLASSMAPPING_UPDATE_METHODS_NOT_SUPPORTED );
+            messager.printMessage( method, annotation, SUBCLASSMAPPING_UPDATE_METHODS_NOT_SUPPORTED );
             return false;
         }
 
-        TypeMirror sourceSubclass = gem.source().getValue();
-        TypeMirror targetSubclass = gem.target().getValue();
-        TypeMirror targetParentType = resultType.getTypeMirror();
-        validateTypeMirrors( sourceSubclass, targetSubclass, targetParentType );
+        TypeDescriptor sourceSubclassDescriptor = toTypeDescriptor( typeFactory, gem.source().getValue() );
+        TypeDescriptor targetSubclassDescriptor = toTypeDescriptor( typeFactory, gem.target().getValue() );
+        TypeDescriptor targetParentDescriptor = resultType.getTypeDescriptor();
+        validateTypeDescriptors( sourceSubclassDescriptor, targetSubclassDescriptor, targetParentDescriptor );
+
+        LangTypes langTypes = typeFactory.langTypes();
 
         boolean isConsistent = true;
 
         boolean isChildOfAParameter = false;
         for ( Parameter sourceParameter : sourceParameters ) {
-            TypeMirror sourceParentType = sourceParameter.getType().getTypeMirror();
-            validateTypeMirrors( sourceParentType );
-            isChildOfAParameter = isChildOfAParameter || isChildOfParent( typeUtils, sourceSubclass, sourceParentType );
+            TypeDescriptor sourceParentDescriptor = sourceParameter.getType().getTypeDescriptor();
+            if ( sourceParentDescriptor == null ) {
+                throw new TypeHierarchyErroneousException();
+            }
+            isChildOfAParameter = isChildOfAParameter
+                || isChildOfParent( langTypes, sourceSubclassDescriptor, sourceParentDescriptor );
         }
         if ( !isChildOfAParameter ) {
             messager
                     .printMessage(
                         method,
-                        gem.mirror(),
+                        annotation,
                         SUBCLASSMAPPING_NO_VALID_SUPERCLASS,
-                        sourceSubclass.toString() );
+                        sourceSubclassDescriptor.displayName() );
             isConsistent = false;
         }
-        if ( !isChildOfParent( typeUtils, targetSubclass, targetParentType ) ) {
+        if ( !isChildOfParent( langTypes, targetSubclassDescriptor, targetParentDescriptor ) ) {
             messager
                     .printMessage(
                         method,
-                        gem.mirror(),
+                        annotation,
                         SUBCLASSMAPPING_ILLEGAL_SUBCLASS,
-                        targetParentType.toString(),
-                        targetSubclass.toString() );
+                        targetParentDescriptor.displayName(),
+                        targetSubclassDescriptor.displayName() );
             isConsistent = false;
         }
-        if ( !subclassValidator.isValidUsage( method, gem.mirror(), sourceSubclass ) ) {
+        if ( !subclassValidator.isValidUsage( method, annotation, sourceSubclassDescriptor ) ) {
             isConsistent = false;
         }
         return isConsistent;
     }
 
-    private static void validateTypeMirrors(TypeMirror... typeMirrors) {
-        for ( TypeMirror typeMirror : typeMirrors ) {
-            if ( typeMirror == null ) {
-                // When a class used in uses or imports is created by another annotation processor
-                // then javac will not return correct TypeMirror with TypeKind#ERROR, but rather a string "<error>"
-                // the gem tools would return a null TypeMirror in that case.
-                // Therefore throw TypeHierarchyErroneousException so we can postpone the generation of the mapper
-                throw new TypeHierarchyErroneousException( typeMirror );
+    private static void validateTypeDescriptors(TypeDescriptor... descriptors) {
+        for ( TypeDescriptor descriptor : descriptors ) {
+            if ( descriptor == null ) {
+                throw new TypeHierarchyErroneousException();
             }
         }
     }
 
-    private static boolean isChildOfParent(TypeUtils typeUtils, TypeMirror childType, TypeMirror parentType) {
-        return typeUtils.isSubtype( childType, parentType );
+    private static TypeDescriptor toTypeDescriptor(TypeFactory typeFactory, Object handle) {
+        if ( handle == null ) {
+            throw new TypeHierarchyErroneousException();
+        }
+        TypeDescriptor descriptor = typeFactory.getDescriptorFactory().typeDescriptor( handle );
+        if ( descriptor == null ) {
+            throw new TypeHierarchyErroneousException();
+        }
+        return descriptor;
     }
 
-    public TypeMirror getSource() {
-        return source;
+    private static boolean isChildOfParent(LangTypes langTypes, TypeDescriptor childType, TypeDescriptor parentType) {
+        return langTypes.isSubtype( childType, parentType );
     }
 
-    public TypeMirror getTarget() {
-        return target;
+    public TypeDescriptor getSourceType() {
+        return sourceType;
+    }
+
+    public TypeDescriptor getTargetType() {
+        return targetType;
+    }
+
+    public TypeDescriptor getSource() {
+        return sourceType;
+    }
+
+    public TypeDescriptor getTarget() {
+        return targetType;
     }
 
     public SelectionParameters getSelectionParameters() {
         return selectionParameters;
     }
 
-    public AnnotationMirror getMirror() {
-        return Optional.ofNullable( subclassMapping ).map( SubclassMappingGem::mirror ).orElse( null );
+    public AnnotationDescriptor getAnnotation() {
+        return annotation;
     }
 
-    public static void addInstances(SubclassMappingsGem gem, ExecutableElement method,
-                                    BeanMappingOptions beanMappingOptions, FormattingMessager messager,
-                                    TypeUtils typeUtils, Set<SubclassMappingOptions> mappings,
-                                    List<Parameter> sourceParameters, Type resultType,
-                                    SubclassValidator subclassValidator) {
-        for ( SubclassMappingGem subclassMapping : gem.value().get() ) {
-            addInstance(
-                subclassMapping,
-                method,
-                beanMappingOptions,
-                messager,
-                typeUtils,
-                mappings,
-                sourceParameters,
-                resultType,
-                subclassValidator );
-        }
-    }
-
-    public static void addInstance(SubclassMappingGem subclassMapping, ExecutableElement method,
-                                   BeanMappingOptions beanMappingOptions, FormattingMessager messager,
-                                   TypeUtils typeUtils, Set<SubclassMappingOptions> mappings,
-                                   List<Parameter> sourceParameters, Type resultType,
-                                   SubclassValidator subclassValidator) {
-        if ( !isConsistent(
-            subclassMapping,
-            method,
-            messager,
-            typeUtils,
-            sourceParameters,
-            resultType,
-            subclassValidator ) ) {
-            return;
+    public static SubclassMappingOptions getInstanceOn(SubclassMappingGem subclassMapping,
+                                                       AnnotationDescriptor annotation,
+                                                       BeanMappingOptions beanMappingOptions,
+                                                       List<Parameter> sourceParameters,
+                                                       Type resultType,
+                                                       ExecutableDescriptor method,
+                                                       SubclassValidator subclassValidator,
+                                                       FormattingMessager messager,
+                                                       TypeFactory typeFactory) {
+        if ( !isConsistent( subclassMapping, annotation, method, messager, sourceParameters, resultType,
+            subclassValidator, typeFactory ) ) {
+            return null;
         }
 
-        TypeMirror sourceSubclass = subclassMapping.source().getValue();
-        TypeMirror targetSubclass = subclassMapping.target().getValue();
+        TypeDescriptor sourceSubclassDescriptor = toTypeDescriptor( typeFactory, subclassMapping.source().getValue() );
+        TypeDescriptor targetSubclassDescriptor = toTypeDescriptor( typeFactory, subclassMapping.target().getValue() );
+        AnnotationValueDescriptor qualifiedByValue =
+            annotation != null ? AnnotationDescriptorUtils.getValue( annotation, "qualifiedBy" ) : null;
+        AnnotationValueDescriptor targetValue =
+            annotation != null ? AnnotationDescriptorUtils.getValue( annotation, "target" ) : null;
+
+        TypeDescriptor targetDescriptor = AnnotationValueUtils.asType( targetValue );
+        if ( targetDescriptor == null ) {
+            targetDescriptor = targetSubclassDescriptor;
+        }
+
         SelectionParameters selectionParameters = new SelectionParameters(
-            subclassMapping.qualifiedBy().get(),
+            AnnotationValueUtils.asTypeList( qualifiedByValue ),
             subclassMapping.qualifiedByName().get(),
-            targetSubclass,
-            typeUtils
+            targetDescriptor
         );
 
-        mappings
-                .add(
-                    new SubclassMappingOptions(
-                        sourceSubclass,
-                        targetSubclass,
-                        typeUtils,
-                        beanMappingOptions,
-                        selectionParameters,
-                        subclassMapping
-                    ) );
+        return new SubclassMappingOptions(
+            sourceSubclassDescriptor,
+            targetDescriptor,
+            beanMappingOptions,
+            selectionParameters,
+            subclassMapping,
+            annotation
+        );
     }
 
     public static List<SubclassMappingOptions> copyForInverseInheritance(Set<SubclassMappingOptions> mappings,
                                                                          BeanMappingOptions beanMappingOptions) {
         // we are not interested in keeping it unique at this point.
         return mappings.stream().map( mapping -> new SubclassMappingOptions(
-            mapping.target,
-            mapping.source,
-            mapping.typeUtils,
+            mapping.targetType,
+            mapping.sourceType,
             beanMappingOptions,
             mapping.selectionParameters,
-            mapping.subclassMapping
+            mapping.subclassMapping,
+            mapping.annotation
         ) ).collect( Collectors.toCollection( ArrayList::new ) );
     }
 
@@ -208,13 +225,13 @@ public class SubclassMappingOptions extends DelegatingOptions {
          List<SubclassMappingOptions> mappings = new ArrayList<>();
          for ( SubclassMappingOptions subclassMapping : subclassMappings ) {
              mappings.add(
-                         new SubclassMappingOptions(
-                                    subclassMapping.source,
-                                    subclassMapping.target,
-                                    subclassMapping.typeUtils,
-                                    beanMappingOptions,
-                                    subclassMapping.selectionParameters,
-                                    subclassMapping.subclassMapping ) );
+                        new SubclassMappingOptions(
+                                   subclassMapping.sourceType,
+                                   subclassMapping.targetType,
+                                   beanMappingOptions,
+                                   subclassMapping.selectionParameters,
+                                    subclassMapping.subclassMapping,
+                                    subclassMapping.annotation ) );
          }
          return mappings;
      }
@@ -225,11 +242,14 @@ public class SubclassMappingOptions extends DelegatingOptions {
             return false;
         }
         SubclassMappingOptions other = (SubclassMappingOptions) obj;
-        return typeUtils.isSameType( source, other.source );
+        if ( sourceType == null || other.sourceType == null ) {
+            return sourceType == other.sourceType;
+        }
+        return sourceType.id().equals( other.sourceType.id() );
     }
 
     @Override
     public int hashCode() {
-        return 1; // use a stable value because TypeMirror is not safe to use for hashCode.
+        return sourceType != null ? sourceType.id().hashCode() : 0;
     }
 }

@@ -23,31 +23,33 @@ import java.util.function.BiFunction;
 import java.util.function.Function;
 import java.util.function.Predicate;
 import java.util.stream.Collectors;
-import java.util.stream.Stream;
-import javax.lang.model.element.AnnotationMirror;
-import javax.lang.model.element.Element;
-import javax.lang.model.element.ElementKind;
-import javax.lang.model.element.ExecutableElement;
-import javax.lang.model.type.TypeMirror;
 
 import org.mapstruct.ap.internal.gem.AnnotateWithGem;
 import org.mapstruct.ap.internal.gem.AnnotateWithsGem;
-import org.mapstruct.ap.internal.gem.DeprecatedGem;
 import org.mapstruct.ap.internal.gem.ElementGem;
 import org.mapstruct.ap.internal.model.annotation.AnnotationElement;
 import org.mapstruct.ap.internal.model.annotation.AnnotationElement.AnnotationElementType;
 import org.mapstruct.ap.internal.model.annotation.EnumAnnotationElementHolder;
 import org.mapstruct.ap.internal.model.common.Type;
 import org.mapstruct.ap.internal.model.common.TypeFactory;
-import org.mapstruct.ap.internal.util.ElementUtils;
+import org.mapstruct.ap.internal.util.AnnotationDescriptorUtils;
+import org.mapstruct.ap.internal.util.AnnotationValueUtils;
 import org.mapstruct.ap.internal.util.FormattingMessager;
 import org.mapstruct.ap.internal.util.Message;
 import org.mapstruct.ap.internal.util.RepeatableAnnotations;
 import org.mapstruct.ap.internal.util.Strings;
+import org.mapstruct.ap.descriptor.AnnotationDescriptor;
+import org.mapstruct.ap.langmodel.AnnotationGemFactory;
+import org.mapstruct.ap.descriptor.AnnotationValueDescriptor;
+import org.mapstruct.ap.descriptor.ElementDescriptor;
+import org.mapstruct.ap.descriptor.ExecutableDescriptor;
+import org.mapstruct.ap.langmodel.LangDescriptorFactory;
+import org.mapstruct.ap.descriptor.LangElementKind;
+import org.mapstruct.ap.langmodel.api.LangElements;
+import org.mapstruct.ap.descriptor.TypeDescriptor;
+import org.mapstruct.ap.descriptor.TypeElementDescriptor;
 import org.mapstruct.ap.spi.TypeHierarchyErroneousException;
 import org.mapstruct.tools.gem.GemValue;
-
-import static javax.lang.model.util.ElementFilter.methodsIn;
 
 /**
  * @author Ben Zegveld
@@ -59,109 +61,174 @@ public class AdditionalAnnotationsBuilder
     private static final String ANNOTATE_WITHS_FQN = "org.mapstruct.AnnotateWiths";
     private TypeFactory typeFactory;
     private FormattingMessager messager;
+    private final LangElements langElements;
+    private final LangDescriptorFactory descriptorFactory;
+    private final AnnotationGemFactory annotationGems;
 
-    public AdditionalAnnotationsBuilder(ElementUtils elementUtils, TypeFactory typeFactory,
+    public AdditionalAnnotationsBuilder(TypeFactory typeFactory,
                                         FormattingMessager messager) {
-        super( elementUtils, ANNOTATE_WITH_FQN, ANNOTATE_WITHS_FQN );
+        super( typeFactory.langElements(), ANNOTATE_WITH_FQN, ANNOTATE_WITHS_FQN );
         this.typeFactory = typeFactory;
         this.messager = messager;
+        this.langElements = typeFactory.langElements();
+        this.descriptorFactory = typeFactory.getDescriptorFactory();
+        this.annotationGems = typeFactory.annotationGems();
     }
 
     @Override
-    protected AnnotateWithGem singularInstanceOn(Element element) {
-        return AnnotateWithGem.instanceOn( element );
+    protected AnnotateWithGem singularInstanceOn(ElementDescriptor element, AnnotationDescriptor annotation) {
+        return annotationGems.annotateWith( annotation );
     }
 
     @Override
-    protected AnnotateWithsGem multipleInstanceOn(Element element) {
-        return AnnotateWithsGem.instanceOn( element );
+    protected AnnotateWithsGem multipleInstanceOn(ElementDescriptor element, AnnotationDescriptor annotation) {
+        return annotationGems.annotateWiths( annotation );
     }
 
     @Override
-    protected void addInstance(AnnotateWithGem gem, Element source, Set<Annotation> mappings) {
-        buildAnnotation( gem, source ).ifPresent( t -> addAndValidateMapping( mappings, source, gem, t ) );
+    protected void addInstance(AnnotateWithGem gem,
+                               AnnotationDescriptor annotation,
+                               ElementDescriptor source,
+                               Set<Annotation> mappings) {
+        if ( gem == null ) {
+            return;
+        }
+        AnnotationDescriptor reportingAnnotation = descriptorFor( gem );
+        buildAnnotation( gem, source )
+            .ifPresent( t -> addAndValidateMapping(
+                mappings,
+                source,
+                reportingAnnotation != null ? reportingAnnotation : annotation,
+                t
+            ) );
     }
 
     @Override
-    protected void addInstances(AnnotateWithsGem gem, Element source, Set<Annotation> mappings) {
+    protected void addInstances(AnnotateWithsGem gem,
+                                AnnotationDescriptor annotation,
+                                ElementDescriptor source,
+                                Set<Annotation> mappings) {
+        if ( gem == null ) {
+            return;
+        }
         for ( AnnotateWithGem annotateWithGem : gem.value().get() ) {
-            buildAnnotation(
-                annotateWithGem,
-                source ).ifPresent( t -> addAndValidateMapping( mappings, source, annotateWithGem, t ) );
+            AnnotationDescriptor nestedDescriptor = descriptorFor( annotateWithGem );
+            buildAnnotation( annotateWithGem, source )
+                .ifPresent( t -> addAndValidateMapping(
+                    mappings,
+                    source,
+                    nestedDescriptor != null ? nestedDescriptor : annotation,
+                    t
+                ) );
         }
     }
 
     @Override
-    public Set<Annotation> getProcessedAnnotations(Element source) {
+    public Set<Annotation> getProcessedAnnotations(ElementDescriptor source) {
         Set<Annotation> processedAnnotations = super.getProcessedAnnotations( source );
         return addDeprecatedAnnotation( source, processedAnnotations );
     }
 
-    private Set<Annotation> addDeprecatedAnnotation(Element source, Set<Annotation> annotations) {
-        DeprecatedGem deprecatedGem = DeprecatedGem.instanceOn( source );
-        if ( deprecatedGem == null ) {
+    private Set<Annotation> addDeprecatedAnnotation(ElementDescriptor source, Set<Annotation> annotations) {
+        AnnotationDescriptor deprecatedAnnotation = langElements.annotationMirrors( source ).stream()
+            .filter( annotation -> AnnotationDescriptorUtils.hasQualifiedName(
+                annotation,
+                Deprecated.class.getName()
+            ) )
+            .findFirst()
+            .orElse( null );
+        if ( deprecatedAnnotation == null ) {
             return annotations;
         }
         Type deprecatedType = typeFactory.getType( Deprecated.class );
         if ( annotations.stream().anyMatch( annotation -> annotation.getType().equals( deprecatedType ) ) ) {
             messager.printMessage(
-                    source,
-                    deprecatedGem.mirror(),
-                    Message.ANNOTATE_WITH_DUPLICATE,
-                    deprecatedType.describe() );
+                source,
+                deprecatedAnnotation,
+                Message.ANNOTATE_WITH_DUPLICATE,
+                deprecatedType.describe()
+            );
             return annotations;
         }
         List<AnnotationElement> annotationElements = new ArrayList<>();
-        if ( deprecatedGem.since() != null && deprecatedGem.since().hasValue() ) {
+        AnnotationValueDescriptor sinceDescriptor = deprecatedAnnotation.elementValues().get( "since" );
+        String sinceValue = AnnotationValueUtils.asString( sinceDescriptor );
+        if ( !Strings.isEmpty( sinceValue ) ) {
             annotationElements.add( new AnnotationElement(
                 AnnotationElementType.STRING,
                 "since",
-                Collections.singletonList( deprecatedGem.since().getValue() )
+                Collections.singletonList( sinceValue )
             ) );
         }
-        if ( deprecatedGem.forRemoval() != null && deprecatedGem.forRemoval().hasValue() ) {
+        AnnotationValueDescriptor forRemovalDescriptor = deprecatedAnnotation.elementValues().get( "forRemoval" );
+        if ( AnnotationValueUtils.asBoolean( forRemovalDescriptor, false ) ) {
             annotationElements.add( new AnnotationElement(
                 AnnotationElementType.BOOLEAN,
                 "forRemoval",
-                Collections.singletonList( deprecatedGem.forRemoval().getValue() )
+                Collections.singletonList( Boolean.TRUE )
             ) );
         }
-        annotations.add( new Annotation(deprecatedType, annotationElements ) );
+        annotations.add( new Annotation( deprecatedType, annotationElements ) );
         return annotations;
     }
 
-    private void addAndValidateMapping(Set<Annotation> mappings, Element source, AnnotateWithGem gem, Annotation anno) {
-        if ( anno.getType().getTypeElement().getAnnotation( Repeatable.class ) == null ) {
-            if ( mappings.stream().anyMatch( existing -> existing.getType().equals( anno.getType() ) ) ) {
-                messager.printMessage(
-                            source,
-                            gem.mirror(),
-                            Message.ANNOTATE_WITH_ANNOTATION_IS_NOT_REPEATABLE,
-                            anno.getType().describe() );
-                return;
-            }
-        }
-        if ( mappings.stream().anyMatch( existing -> {
-            return existing.getType().equals( anno.getType() )
-                && existing.getProperties().equals( anno.getProperties() );
-        } ) ) {
+    private void addAndValidateMapping(Set<Annotation> mappings,
+                                       ElementDescriptor source,
+                                       AnnotationDescriptor reportingAnnotation,
+                                       Annotation anno) {
+        TypeElementDescriptor annotationTypeDescriptor = anno.getType().getTypeElementDescriptor();
+        boolean repeatable = annotationTypeDescriptor != null && isRepeatable( annotationTypeDescriptor );
+
+        if ( !repeatable && mappings.stream().anyMatch( existing -> existing.getType().equals( anno.getType() ) ) ) {
             messager.printMessage(
-                        source,
-                        gem.mirror(),
-                        Message.ANNOTATE_WITH_DUPLICATE,
-                        anno.getType().describe() );
+                source,
+                reportingAnnotation,
+                Message.ANNOTATE_WITH_ANNOTATION_IS_NOT_REPEATABLE,
+                anno.getType().describe()
+            );
+            return;
+        }
+        if ( mappings.stream().anyMatch( existing -> existing.getType().equals( anno.getType() )
+            && existing.getProperties().equals( anno.getProperties() ) ) ) {
+            messager.printMessage(
+                source,
+                reportingAnnotation,
+                Message.ANNOTATE_WITH_DUPLICATE,
+                anno.getType().describe()
+            );
             return;
         }
         mappings.add( anno );
     }
 
-    private Optional<Annotation> buildAnnotation(AnnotateWithGem annotationGem, Element element) {
-        Type annotationType = typeFactory.getType( getTypeMirror( annotationGem.value() ) );
+    private boolean isRepeatable(TypeElementDescriptor annotationTypeDescriptor) {
+        return langElements.annotationMirrors( annotationTypeDescriptor ).stream()
+            .anyMatch( annotation -> AnnotationDescriptorUtils.hasQualifiedName(
+                annotation,
+                Repeatable.class.getCanonicalName()
+            ) );
+    }
+
+    private Optional<Annotation> buildAnnotation(AnnotateWithGem annotationGem, ElementDescriptor element) {
+        if ( annotationGem == null ) {
+            return Optional.empty();
+        }
+        GemValue<?> annotationTypeValue = annotationGem.value();
+        if ( annotationTypeValue == null || !annotationTypeValue.hasValue() ) {
+            return Optional.empty();
+        }
+        Type annotationType = typeFactory.getType( getTypeDescriptor( annotationGem.value() ) );
         List<ElementGem> eleGems = annotationGem.elements().get();
-        if ( isValid( annotationType, eleGems, element, annotationGem.mirror() ) ) {
+        AnnotationDescriptor annotationDescriptor = descriptorFor( annotationGem );
+        if ( isValid( annotationType, eleGems, element, annotationDescriptor ) ) {
             return Optional.of( new Annotation( annotationType, convertToProperties( eleGems ) ) );
         }
         return Optional.empty();
+    }
+
+    private boolean isValid(Type annotationType, List<ElementGem> eleGems,
+                            ElementDescriptor element, AnnotationDescriptor annotation) {
+        return isValidInternal( annotationType, eleGems, element, annotation );
     }
 
     private List<AnnotationElement> convertToProperties(List<ElementGem> eleGems) {
@@ -187,7 +254,16 @@ public class AdditionalAnnotationsBuilder
         CLASSES(
             AnnotationElementType.CLASS,
             (eleGem, typeFactory) -> {
-                return eleGem.classes().get().stream().map( typeFactory::getType ).collect( Collectors.toList() );
+                List<?> classHandles = eleGem.classes().get();
+                if ( classHandles == null || classHandles.isEmpty() ) {
+                    return Collections.emptyList();
+                }
+                LangDescriptorFactory descriptorFactory = typeFactory.getDescriptorFactory();
+                return classHandles.stream()
+                    .filter( Objects::nonNull )
+                    .map( descriptorFactory::typeDescriptor )
+                    .map( typeFactory::getType )
+                    .collect( Collectors.toList() );
             },
             eleGem -> eleGem.classes().hasValue()
         ),
@@ -200,9 +276,15 @@ public class AdditionalAnnotationsBuilder
             AnnotationElementType.ENUM,
             (eleGem, typeFactory) -> {
                 List<EnumAnnotationElementHolder> values = new ArrayList<>();
+                Object enumClassHandle = eleGem.enumClass().get();
+                if ( enumClassHandle == null ) {
+                    return values;
+                }
+                Type enumType = typeFactory.getType(
+                    typeFactory.getDescriptorFactory().typeDescriptor( enumClassHandle )
+                );
                 for ( String enumName : eleGem.enums().get() ) {
-                    Type type = typeFactory.getType( eleGem.enumClass().get() );
-                    values.add( new EnumAnnotationElementHolder( type, enumName ) );
+                    values.add( new EnumAnnotationElementHolder( enumType, enumName ) );
                 }
                 return values;
             },
@@ -268,17 +350,28 @@ public class AdditionalAnnotationsBuilder
         return null;
     }
 
-    private boolean isValid(Type annotationType, List<ElementGem> eleGems, Element element,
-                            AnnotationMirror annotationMirror) {
+    private boolean isValidInternal(Type annotationType,
+                                    List<ElementGem> eleGems,
+                                    ElementDescriptor element,
+                                    AnnotationDescriptor annotationDescriptor) {
         boolean isValid = true;
-        if ( !annotationIsAllowed( annotationType, element, annotationMirror ) ) {
+        if ( !annotationIsAllowed( annotationType, element, annotationDescriptor ) ) {
             isValid = false;
         }
 
-        List<ExecutableElement> annotationElements = methodsIn( annotationType.getTypeElement()
-            .getEnclosedElements() );
-        if ( !allRequiredElementsArePresent( annotationType, annotationElements, eleGems, element,
-                                             annotationMirror ) ) {
+        TypeElementDescriptor annotationTypeDescriptor = annotationType.getTypeElementDescriptor();
+        if ( annotationTypeDescriptor == null ) {
+            return false;
+        }
+
+        List<ExecutableDescriptor> annotationElements = annotationMethods( annotationTypeDescriptor );
+        if ( !allRequiredElementsArePresent(
+            annotationType,
+            annotationElements,
+            eleGems,
+            element,
+            annotationDescriptor
+        ) ) {
             isValid = false;
         }
         if ( !allElementsAreKnownInAnnotation( annotationType, annotationElements, eleGems, element ) ) {
@@ -296,7 +389,21 @@ public class AdditionalAnnotationsBuilder
         return isValid;
     }
 
-    private boolean allElementsAreUnique(List<ElementGem> eleGems, Element element) {
+    private List<ExecutableDescriptor> annotationMethods(TypeElementDescriptor annotationTypeDescriptor) {
+        if ( annotationTypeDescriptor == null ) {
+            return Collections.emptyList();
+        }
+        String annotationTypeId = annotationTypeDescriptor.id();
+        return langElements.enclosedExecutables( annotationTypeDescriptor ).stream()
+            .filter( descriptor -> descriptor.kind() == LangElementKind.METHOD )
+            .filter( descriptor -> descriptor.enclosingElement()
+                .map( ElementDescriptor::id )
+                .map( annotationTypeId::equals )
+                .orElse( false ) )
+            .collect( Collectors.toList() );
+    }
+
+    private boolean allElementsAreUnique(List<ElementGem> eleGems, ElementDescriptor element) {
         boolean isValid = true;
         List<String> checkedElements = new ArrayList<>();
         for ( ElementGem elementGem : eleGems ) {
@@ -306,7 +413,7 @@ public class AdditionalAnnotationsBuilder
                 messager
                         .printMessage(
                             element,
-                            elementGem.mirror(),
+                            descriptorFor( elementGem ),
                             Message.ANNOTATE_WITH_DUPLICATE_PARAMETER,
                             elementName );
             }
@@ -317,7 +424,7 @@ public class AdditionalAnnotationsBuilder
         return isValid;
     }
 
-    private boolean enumConstructionIsCorrectlyUsed(List<ElementGem> eleGems, Element element) {
+    private boolean enumConstructionIsCorrectlyUsed(List<ElementGem> eleGems, ElementDescriptor element) {
         boolean isValid = true;
         for ( ElementGem elementGem : eleGems ) {
             if ( elementGem.enums().hasValue() ) {
@@ -326,11 +433,11 @@ public class AdditionalAnnotationsBuilder
                     messager
                             .printMessage(
                                 element,
-                                elementGem.mirror(),
+                                descriptorFor( elementGem ),
                                 Message.ANNOTATE_WITH_ENUM_CLASS_NOT_DEFINED );
                 }
                 else {
-                    Type type = typeFactory.getType( getTypeMirror( elementGem.enumClass() ) );
+                    Type type = typeFactory.getType( getTypeDescriptor( elementGem.enumClass() ) );
                     if ( type.isEnumType() ) {
                         List<String> enumConstants = type.getEnumConstants();
                         for ( String enumName : elementGem.enums().get() ) {
@@ -339,8 +446,8 @@ public class AdditionalAnnotationsBuilder
                                 messager
                                         .printMessage(
                                             element,
-                                            elementGem.mirror(),
-                                            elementGem.enums().getAnnotationValue(),
+                                            descriptorFor( elementGem ),
+                                            valueDescriptor( elementGem.enums() ),
                                             Message.ANNOTATE_WITH_ENUM_VALUE_DOES_NOT_EXIST,
                                             type.describe(),
                                             enumName );
@@ -351,21 +458,38 @@ public class AdditionalAnnotationsBuilder
             }
             else if ( elementGem.enumClass().getValue() != null ) {
                 isValid = false;
-                messager.printMessage( element, elementGem.mirror(), Message.ANNOTATE_WITH_ENUMS_NOT_DEFINED );
+                messager.printMessage(
+                    element,
+                    descriptorFor( elementGem ),
+                    Message.ANNOTATE_WITH_ENUMS_NOT_DEFINED
+                );
             }
         }
         return isValid;
     }
 
-    private boolean annotationIsAllowed(Type annotationType, Element element, AnnotationMirror annotationMirror) {
-        Target target = annotationType.getTypeElement().getAnnotation( Target.class );
-        if ( target == null ) {
+    private boolean annotationIsAllowed(Type annotationType,
+                                        ElementDescriptor element,
+                                        AnnotationDescriptor annotationDescriptor) {
+        TypeElementDescriptor annotationTypeDescriptor = annotationType.getTypeElementDescriptor();
+        if ( annotationTypeDescriptor == null ) {
             return true;
         }
 
-        Set<ElementType> annotationTargets = Stream.of( target.value() )
-            // The eclipse compiler returns null for some values
-            // Therefore, we filter out null values
+        AnnotationDescriptor targetDescriptor = langElements.annotationMirrors( annotationTypeDescriptor ).stream()
+            .filter( descriptor -> AnnotationDescriptorUtils.hasQualifiedName(
+                descriptor,
+                Target.class.getCanonicalName()
+            ) )
+            .findFirst()
+            .orElse( null );
+        if ( targetDescriptor == null ) {
+            return true;
+        }
+
+        Set<ElementType> annotationTargets = AnnotationDescriptorUtils.getValueList( targetDescriptor, "value" )
+            .stream()
+            .map( value -> AnnotationValueUtils.asEnum( value, ElementType.class ) )
             .filter( Objects::nonNull )
             .collect( Collectors.toCollection( () -> EnumSet.noneOf( ElementType.class ) ) );
 
@@ -373,37 +497,47 @@ public class AdditionalAnnotationsBuilder
         if ( isTypeTarget( element ) && !annotationTargets.contains( ElementType.TYPE ) ) {
             isValid = false;
             messager.printMessage(
-                        element,
-                        annotationMirror,
-                        Message.ANNOTATE_WITH_NOT_ALLOWED_ON_CLASS,
-                        annotationType.describe()
+                element,
+                annotationDescriptor,
+                Message.ANNOTATE_WITH_NOT_ALLOWED_ON_CLASS,
+                annotationType.describe()
             );
         }
         if ( isMethodTarget( element ) && !annotationTargets.contains( ElementType.METHOD ) ) {
             isValid = false;
             messager.printMessage(
-                        element,
-                        annotationMirror,
-                        Message.ANNOTATE_WITH_NOT_ALLOWED_ON_METHODS,
-                        annotationType.describe()
+                element,
+                annotationDescriptor,
+                Message.ANNOTATE_WITH_NOT_ALLOWED_ON_METHODS,
+                annotationType.describe()
             );
         }
         return isValid;
     }
 
-    private boolean isTypeTarget(Element element) {
-        return element.getKind().isInterface() || element.getKind().isClass();
+    private boolean isTypeTarget(ElementDescriptor element) {
+        if ( element == null ) {
+            return false;
+        }
+        LangElementKind kind = element.kind();
+        return kind == LangElementKind.CLASS
+            || kind == LangElementKind.INTERFACE
+            || kind == LangElementKind.ENUM
+            || kind == LangElementKind.RECORD
+            || kind == LangElementKind.ANNOTATION_TYPE;
     }
 
-    private boolean isMethodTarget(Element element) {
-        return element.getKind() == ElementKind.METHOD;
+    private boolean isMethodTarget(ElementDescriptor element) {
+        return element != null && element.kind() == LangElementKind.METHOD;
     }
 
-    private boolean allElementsAreKnownInAnnotation(Type annotationType, List<ExecutableElement> annotationParameters,
-                                                      List<ElementGem> eleGems, Element element) {
+    private boolean allElementsAreKnownInAnnotation(Type annotationType,
+                                                    List<ExecutableDescriptor> annotationParameters,
+                                                    List<ElementGem> eleGems,
+                                                    ElementDescriptor element) {
         Set<String> allowedAnnotationParameters = annotationParameters.stream()
-                                                                 .map( ee -> ee.getSimpleName().toString() )
-                                                                 .collect( Collectors.toSet() );
+            .map( descriptor -> descriptor.simpleName().content() )
+            .collect( Collectors.toSet() );
         boolean isValid = true;
         for ( ElementGem eleGem : eleGems ) {
             if ( eleGem.name().isValid()
@@ -412,8 +546,8 @@ public class AdditionalAnnotationsBuilder
                 messager
                         .printMessage(
                             element,
-                            eleGem.mirror(),
-                            eleGem.name().getAnnotationValue(),
+                            descriptorFor( eleGem ),
+                            valueDescriptor( eleGem.name() ),
                             Message.ANNOTATE_WITH_UNKNOWN_PARAMETER,
                             eleGem.name().get(),
                             annotationType.describe(),
@@ -424,15 +558,16 @@ public class AdditionalAnnotationsBuilder
         return isValid;
     }
 
-    private boolean allRequiredElementsArePresent(Type annotationType, List<ExecutableElement> annotationParameters,
-                                                  List<ElementGem> elements, Element element,
-                                                  AnnotationMirror annotationMirror) {
-
+    private boolean allRequiredElementsArePresent(Type annotationType,
+                                                  List<ExecutableDescriptor> annotationParameters,
+                                                  List<ElementGem> elements,
+                                                  ElementDescriptor element,
+                                                  AnnotationDescriptor annotationDescriptor) {
         boolean valid = true;
-        for ( ExecutableElement annotationParameter : annotationParameters ) {
-            if ( annotationParameter.getDefaultValue() == null ) {
+        for ( ExecutableDescriptor annotationParameter : annotationParameters ) {
+            if ( annotationParameter.defaultValue() == null ) {
                 // Mandatory parameter, must be present in the elements
-                String parameterName = annotationParameter.getSimpleName().toString();
+                String parameterName = annotationParameter.simpleName().content();
                 boolean elementGemDefined = false;
                 for ( ElementGem elementGem : elements ) {
                     if ( elementGem.isValid() && elementGem.name().get().equals( parameterName ) ) {
@@ -446,7 +581,7 @@ public class AdditionalAnnotationsBuilder
                     messager
                         .printMessage(
                             element,
-                            annotationMirror,
+                            annotationDescriptor,
                             Message.ANNOTATE_WITH_MISSING_REQUIRED_PARAMETER,
                             parameterName,
                             annotationType.describe()
@@ -454,17 +589,19 @@ public class AdditionalAnnotationsBuilder
                 }
             }
         }
-
-
         return valid;
     }
 
-    private boolean allElementsAreOfCorrectType(Type annotationType, List<ExecutableElement> annotationParameters,
-                                                  List<ElementGem> elements,
-                                                  Element element) {
-        Map<String, ExecutableElement> annotationParametersByName =
+    private boolean allElementsAreOfCorrectType(Type annotationType,
+                                                List<ExecutableDescriptor> annotationParameters,
+                                                List<ElementGem> elements,
+                                                ElementDescriptor element) {
+        Map<String, ExecutableDescriptor> annotationParametersByName =
             annotationParameters.stream()
-                          .collect( Collectors.toMap( ee -> ee.getSimpleName().toString(), Function.identity() ) );
+                .collect( Collectors.toMap(
+                    descriptor -> descriptor.simpleName().content(),
+                    Function.identity()
+                ) );
         boolean isValid = true;
         for ( ElementGem eleGem : elements ) {
             Type annotationParameterType = getAnnotationParameterType( annotationParametersByName, eleGem );
@@ -476,8 +613,8 @@ public class AdditionalAnnotationsBuilder
                 isValid = false;
                 messager.printMessage(
                     element,
-                    eleGem.mirror(),
-                    eleGem.name().getAnnotationValue(),
+                    descriptorFor( eleGem ),
+                    valueDescriptor( eleGem.name() ),
                     Message.ANNOTATE_WITH_TOO_MANY_VALUE_TYPES,
                     eleGem.name().get(),
                     annotationParameterType.describe(),
@@ -492,8 +629,8 @@ public class AdditionalAnnotationsBuilder
                         isValid = false;
                         messager.printMessage(
                             element,
-                            eleGem.mirror(),
-                            eleGem.name().getAnnotationValue(),
+                            descriptorFor( eleGem ),
+                            valueDescriptor( eleGem.name() ),
                             Message.ANNOTATE_WITH_WRONG_PARAMETER,
                             eleGem.name().get(),
                             eleGemType.describe(),
@@ -507,7 +644,7 @@ public class AdditionalAnnotationsBuilder
                         isValid = false;
                         messager.printMessage(
                             element,
-                            eleGem.mirror(),
+                            descriptorFor( eleGem ),
                             Message.ANNOTATE_WITH_PARAMETER_ARRAY_NOT_EXPECTED,
                             eleGem.name().get(),
                             annotationType.describe()
@@ -524,6 +661,18 @@ public class AdditionalAnnotationsBuilder
         return Arrays.stream( ConvertToProperty.values() )
                      .filter( anotationElement -> anotationElement.isUsable( eleGem ) )
                      .count() > 1;
+    }
+
+    private AnnotationDescriptor descriptorFor(AnnotateWithGem gem) {
+        return gem == null ? null : descriptorFactory.annotationDescriptor( gem.mirror() );
+    }
+
+    private AnnotationDescriptor descriptorFor(ElementGem gem) {
+        return gem == null ? null : descriptorFactory.annotationDescriptor( gem.mirror() );
+    }
+
+    private AnnotationValueDescriptor valueDescriptor(GemValue<?> gemValue) {
+        return gemValue == null ? null : descriptorFactory.annotationValueDescriptor( gemValue.getAnnotationValue() );
     }
 
     private Type getNonArrayType(Type annotationParameterType) {
@@ -568,11 +717,15 @@ public class AdditionalAnnotationsBuilder
                                       eleGem.chars().get().size() );
         }
         if ( eleGem.classes().hasValue() ) {
-            for ( TypeMirror mirror : eleGem.classes().get() ) {
-                suppliedParameterTypes.put(
-                    typeFactory.getType( typeMirrorFromAnnotation( mirror ) ),
-                    eleGem.classes().get().size()
-                );
+            List<?> classHandles = eleGem.classes().get();
+            if ( classHandles != null ) {
+                for ( Object handle : classHandles ) {
+                    TypeDescriptor descriptor = typeFactory.getDescriptorFactory().typeDescriptor( handle );
+                    if ( descriptor != null ) {
+                        Type type = typeFactory.getType( descriptor );
+                        suppliedParameterTypes.put( type, classHandles.size() );
+                    }
+                }
             }
         }
         if ( eleGem.doubles().hasValue() ) {
@@ -607,36 +760,28 @@ public class AdditionalAnnotationsBuilder
         }
         if ( eleGem.enums().hasValue() && eleGem.enumClass().hasValue() ) {
             suppliedParameterTypes.put(
-                                      typeFactory.getType( getTypeMirror( eleGem.enumClass() ) ),
+                                      typeFactory.getType( getTypeDescriptor( eleGem.enumClass() ) ),
                                       eleGem.enums().get().size() );
         }
         return suppliedParameterTypes;
     }
 
-    private Type getAnnotationParameterType(Map<String, ExecutableElement> annotationParameters,
-                                                  ElementGem element) {
-        if ( annotationParameters.containsKey( element.name().get() ) ) {
-            return typeFactory.getType( annotationParameters.get( element.name().get() ).getReturnType() );
-        }
-        else {
+    private Type getAnnotationParameterType(Map<String, ExecutableDescriptor> annotationParameters,
+                                            ElementGem element) {
+        ExecutableDescriptor descriptor = annotationParameters.get( element.name().get() );
+        if ( descriptor == null ) {
             return null;
         }
+        TypeDescriptor returnType = descriptor.returnType();
+        return returnType == null ? null : typeFactory.getType( returnType );
     }
 
-    private TypeMirror getTypeMirror(GemValue<TypeMirror> gemValue) {
-        return typeMirrorFromAnnotation( gemValue.getValue() );
-    }
-
-    private TypeMirror typeMirrorFromAnnotation(TypeMirror typeMirror) {
-        if ( typeMirror == null ) {
-            // When a class used in an annotation is created by another annotation processor
-            // then javac will not return correct TypeMirror with TypeKind#ERROR, but rather a string "<error>"
-            // the gem tools would return a null TypeMirror in that case.
-            // Therefore, throw TypeHierarchyErroneousException so we can postpone the generation of the mapper
-            throw new TypeHierarchyErroneousException( typeMirror );
+    private TypeDescriptor getTypeDescriptor(GemValue<?> gemValue) {
+        Object nativeType = gemValue != null ? gemValue.getValue() : null;
+        if ( nativeType == null ) {
+            throw new TypeHierarchyErroneousException();
         }
-
-        return typeMirror;
+        return descriptorFactory.typeDescriptor( nativeType );
     }
 
 }

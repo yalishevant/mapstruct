@@ -5,8 +5,6 @@
  */
 package org.mapstruct.ap.internal.model.common;
 
-import java.lang.reflect.InvocationTargetException;
-import java.lang.reflect.Method;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Collection;
@@ -22,44 +20,33 @@ import java.util.OptionalDouble;
 import java.util.OptionalInt;
 import java.util.OptionalLong;
 import java.util.Set;
-import java.util.function.Function;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
-import javax.lang.model.element.Element;
-import javax.lang.model.element.ElementKind;
-import javax.lang.model.element.ExecutableElement;
-import javax.lang.model.element.Modifier;
-import javax.lang.model.element.NestingKind;
-import javax.lang.model.element.TypeElement;
-import javax.lang.model.element.VariableElement;
-import javax.lang.model.type.ArrayType;
-import javax.lang.model.type.DeclaredType;
-import javax.lang.model.type.IntersectionType;
-import javax.lang.model.type.PrimitiveType;
-import javax.lang.model.type.TypeKind;
-import javax.lang.model.type.TypeMirror;
-import javax.lang.model.type.TypeVariable;
-import javax.lang.model.type.WildcardType;
-import javax.lang.model.util.ElementFilter;
-import javax.lang.model.util.SimpleTypeVisitor8;
 
 import org.mapstruct.ap.internal.gem.CollectionMappingStrategyGem;
 import org.mapstruct.ap.internal.util.AccessorNamingUtils;
-import org.mapstruct.ap.internal.util.ElementUtils;
 import org.mapstruct.ap.internal.util.Executables;
 import org.mapstruct.ap.internal.util.Filters;
-import org.mapstruct.ap.internal.util.JavaStreamConstants;
 import org.mapstruct.ap.internal.util.NativeTypes;
 import org.mapstruct.ap.internal.util.Nouns;
-import org.mapstruct.ap.internal.util.TypeUtils;
 import org.mapstruct.ap.internal.util.accessor.Accessor;
 import org.mapstruct.ap.internal.util.accessor.AccessorType;
 import org.mapstruct.ap.internal.util.accessor.ElementAccessor;
 import org.mapstruct.ap.internal.util.accessor.MapValueAccessor;
 import org.mapstruct.ap.internal.util.accessor.PresenceCheckAccessor;
 import org.mapstruct.ap.internal.util.accessor.ReadAccessor;
+import org.mapstruct.ap.descriptor.ElementDescriptor;
+import org.mapstruct.ap.descriptor.LangElementKind;
+import org.mapstruct.ap.descriptor.ExecutableDescriptor;
+import org.mapstruct.ap.descriptor.FieldDescriptor;
+import org.mapstruct.ap.descriptor.LangModifier;
+import org.mapstruct.ap.descriptor.LangTypeKind;
+import org.mapstruct.ap.langmodel.api.LangTypes;
+import org.mapstruct.ap.descriptor.RecordComponentDescriptor;
+import org.mapstruct.ap.descriptor.TypeDescriptor;
+import org.mapstruct.ap.descriptor.TypeElementDescriptor;
+import org.mapstruct.ap.langmodel.TypeIntrospector;
 
-import static java.util.Collections.emptyList;
 import static org.mapstruct.ap.internal.util.Collections.first;
 
 /**
@@ -74,26 +61,13 @@ import static org.mapstruct.ap.internal.util.Collections.first;
  * @author Filip Hrisafov
  */
 public class Type extends ModelElement implements Comparable<Type> {
-    private static final Method SEALED_PERMITTED_SUBCLASSES_METHOD;
 
-    static {
-        Method permittedSubclassesMethod;
-        try {
-            permittedSubclassesMethod = TypeElement.class.getMethod( "getPermittedSubclasses" );
-        }
-        catch ( NoSuchMethodException e ) {
-            permittedSubclassesMethod = null;
-        }
-        SEALED_PERMITTED_SUBCLASSES_METHOD = permittedSubclassesMethod;
-    }
-
-    private final TypeUtils typeUtils;
-    private final ElementUtils elementUtils;
     private final TypeFactory typeFactory;
     private final AccessorNamingUtils accessorNaming;
-
-    private final TypeMirror typeMirror;
-    private final TypeElement typeElement;
+    private final TypeIntrospector typeIntrospector;
+    private final TypeIntrospector.Metadata metadata;
+    private final TypeElementDescriptor typeElementDescriptor;
+    private final TypeDescriptor typeDescriptor;
     private final List<Type> typeParameters;
 
     private final ImplementationType implementationType;
@@ -125,9 +99,9 @@ public class Type extends ModelElement implements Comparable<Type> {
     private Map<String, ReadAccessor> readAccessors = null;
     private Map<String, PresenceCheckAccessor> presenceCheckers = null;
 
-    private List<ExecutableElement> allMethods = null;
-    private List<VariableElement> allFields = null;
-    private List<Element> recordComponents = null;
+    private List<ExecutableDescriptor> allMethods = null;
+    private List<FieldDescriptor> allFields = null;
+    private List<RecordComponentDescriptor> recordComponents = null;
 
     private List<Accessor> setters = null;
     private List<Accessor> adders = null;
@@ -142,10 +116,39 @@ public class Type extends ModelElement implements Comparable<Type> {
 
     private final Filters filters;
 
+    private LangTypes langTypes() {
+        return typeFactory.langTypes();
+    }
+
+    private boolean isNestedType() {
+        if ( typeElementDescriptor == null ) {
+            return false;
+        }
+        return typeElementDescriptor.enclosingElement()
+            .map( element -> element.kind() != LangElementKind.PACKAGE )
+            .orElse( false );
+    }
+
+    private boolean hasKind(LangTypeKind expected) {
+        if ( typeDescriptor == null ) {
+            return false;
+        }
+        return typeDescriptor.kind() == expected;
+    }
+
+    private static boolean hasKind(Type type, LangTypeKind expected) {
+        return type != null && type.hasKind( expected );
+    }
+
+    private boolean isPrimitiveKind() {
+        return typeDescriptor != null && typeDescriptor.isPrimitive();
+    }
+
     //CHECKSTYLE:OFF
-    public Type(TypeUtils typeUtils, ElementUtils elementUtils, TypeFactory typeFactory,
+    public Type(TypeFactory typeFactory,
                 AccessorNamingUtils accessorNaming,
-                TypeMirror typeMirror, TypeElement typeElement,
+                TypeDescriptor typeDescriptor,
+                TypeElementDescriptor explicitTypeElementDescriptor,
                 List<Type> typeParameters, ImplementationType implementationType, Type componentType,
                 String packageName, String name, String qualifiedName,
                 boolean isInterface, boolean isEnumType, boolean isIterableType,
@@ -153,16 +156,20 @@ public class Type extends ModelElement implements Comparable<Type> {
                 Map<String, String> toBeImportedTypes,
                 Map<String, String> notToBeImportedTypes,
                 Boolean isToBeImported,
-                boolean isLiteral, boolean loggingVerbose) {
+                boolean isLiteral, boolean loggingVerbose,
+                TypeIntrospector typeIntrospector,
+                TypeIntrospector.Metadata metadata) {
 
-        this.typeUtils = typeUtils;
-        this.elementUtils = elementUtils;
         this.typeFactory = typeFactory;
         this.accessorNaming = accessorNaming;
+        this.typeIntrospector = typeIntrospector;
+        this.metadata = metadata;
+        this.typeElementDescriptor = explicitTypeElementDescriptor != null
+            ? explicitTypeElementDescriptor
+            : metadata != null ? metadata.typeElement().orElse( null ) : null;
 
-        this.typeMirror = typeMirror;
-        this.typeElement = typeElement;
-        this.typeParameters = typeParameters;
+        this.typeDescriptor = typeDescriptor;
+        this.typeParameters = typeParameters != null ? typeParameters : Collections.emptyList();
         this.componentType = componentType;
         this.implementationType = implementationType;
 
@@ -176,53 +183,48 @@ public class Type extends ModelElement implements Comparable<Type> {
         this.isCollectionType = isCollectionType;
         this.isMapType = isMapType;
         this.isStream = isStreamType;
-        this.isVoid = typeMirror.getKind() == TypeKind.VOID;
+        this.isVoid = typeDescriptor != null && typeDescriptor.isVoid();
         this.isLiteral = isLiteral;
 
-        if ( isEnumType ) {
-            enumConstants = new ArrayList<>();
-
-            for ( Element element : typeElement.getEnclosedElements() ) {
-                // #162: The check for visibility shouldn't be required, but the Eclipse compiler implementation
-                // exposes non-enum members otherwise
-                if ( element.getKind() == ElementKind.ENUM_CONSTANT &&
-                    element.getModifiers().contains( Modifier.PUBLIC ) ) {
-                    enumConstants.add( element.getSimpleName().toString() );
-                }
-            }
-        }
-        else {
-            enumConstants = Collections.emptyList();
-        }
+        List<String> constants = metadata != null ? metadata.enumConstants() : java.util.Collections.emptyList();
+        enumConstants = constants.isEmpty() ? Collections.emptyList() : new ArrayList<>( constants );
 
         this.isToBeImported = isToBeImported;
         this.toBeImportedTypes = toBeImportedTypes;
         this.notToBeImportedTypes = notToBeImportedTypes;
-        this.filters = new Filters( accessorNaming, typeUtils, typeMirror );
+        this.filters = new Filters(
+            accessorNaming,
+            method -> {
+                Type resolved = typeFactory.getReturnType( typeDescriptor, method );
+                return resolved != null ? resolved.getTypeDescriptor() : null;
+            },
+            field -> {
+                TypeDescriptor resolved = typeIntrospector.asMemberOf( typeDescriptor, field );
+                return resolved != null ? resolved : field.fieldType();
+            },
+            recordComponent -> {
+                TypeDescriptor resolved = typeIntrospector.asMemberOf( typeDescriptor, recordComponent );
+                return resolved != null ? resolved : recordComponent.componentType();
+            },
+            method -> {
+                Parameter parameter = typeFactory.getSingleParameter( typeDescriptor, method );
+                return parameter != null ? parameter.getType().getTypeDescriptor() : null;
+            }
+        );
 
         this.loggingVerbose = loggingVerbose;
 
-        TypeElement typeElementForTopLevel;
-        if ( Boolean.TRUE.equals( isToBeImported ) ) {
-            // If the is to be imported is explicitly set to true then we shouldn't look for the top level type
-            typeElementForTopLevel = null;
-        }
-        else {
-            // The top level type for an array type is the top level type of the component type
-            typeElementForTopLevel =
-                this.componentType == null ? this.typeElement : this.componentType.getTypeElement();
-        }
-        this.topLevelType = topLevelType( typeElementForTopLevel, this.typeFactory );
-        this.nameWithTopLevelTypeName = nameWithTopLevelTypeName( typeElementForTopLevel, this.name );
+        this.topLevelType = resolveTopLevelType( isToBeImported, componentType );
+        this.nameWithTopLevelTypeName = resolveNameWithTopLevel( componentType, name );
     }
     //CHECKSTYLE:ON
 
-    public TypeMirror getTypeMirror() {
-        return typeMirror;
+    public TypeDescriptor getTypeDescriptor() {
+        return typeDescriptor;
     }
 
-    public TypeElement getTypeElement() {
-        return typeElement;
+    public TypeElementDescriptor getTypeElementDescriptor() {
+        return typeElementDescriptor;
     }
 
     public String getPackageName() {
@@ -279,7 +281,7 @@ public class Type extends ModelElement implements Comparable<Type> {
     }
 
     public boolean isPrimitive() {
-        return typeMirror.getKind().isPrimitive();
+        return isPrimitiveKind();
     }
 
     public boolean isInterface() {
@@ -295,7 +297,8 @@ public class Type extends ModelElement implements Comparable<Type> {
     }
 
     public boolean isAbstract() {
-        return typeElement != null && typeElement.getModifiers().contains( Modifier.ABSTRACT );
+        return typeElementDescriptor != null
+            && typeElementDescriptor.modifiers().contains( LangModifier.ABSTRACT );
     }
 
     public boolean isString() {
@@ -381,11 +384,11 @@ public class Type extends ModelElement implements Comparable<Type> {
     }
 
     public boolean isTypeVar() {
-        return (typeMirror.getKind() == TypeKind.TYPEVAR);
+        return hasKind( LangTypeKind.TYPE_PARAMETER );
     }
 
     public boolean isIntersection() {
-        return typeMirror.getKind() == TypeKind.INTERSECTION;
+        return hasKind( LangTypeKind.INTERSECTION );
     }
 
     public boolean isJavaLangType() {
@@ -393,7 +396,7 @@ public class Type extends ModelElement implements Comparable<Type> {
     }
 
     public boolean isRecord() {
-        return typeElement.getKind().name().equals( "RECORD" );
+        return metadata != null && metadata.isRecordType();
     }
 
     /**
@@ -411,12 +414,7 @@ public class Type extends ModelElement implements Comparable<Type> {
      * @return true if the bound has a wild card super bound (e.g. ? super Number)
      */
     public boolean hasSuperBound() {
-        boolean result = false;
-        if ( typeMirror.getKind() == TypeKind.WILDCARD ) {
-            WildcardType wildcardType = (WildcardType) typeMirror;
-            result = wildcardType.getSuperBound() != null;
-        }
-        return result;
+        return typeDescriptor != null && typeDescriptor.wildcardSuperBound().isPresent();
     }
 
     /**
@@ -425,12 +423,7 @@ public class Type extends ModelElement implements Comparable<Type> {
      * @return true if the bound has a wild card super bound (e.g. ? extends Number)
      */
     public boolean hasExtendsBound() {
-        boolean result = false;
-        if ( typeMirror.getKind() == TypeKind.WILDCARD ) {
-            WildcardType wildcardType = (WildcardType) typeMirror;
-            result = wildcardType.getExtendsBound() != null;
-        }
-        return result;
+        return typeDescriptor != null && typeDescriptor.wildcardExtendsBound().isPresent();
     }
 
     /**
@@ -442,12 +435,7 @@ public class Type extends ModelElement implements Comparable<Type> {
      * @return true if the bound has a type variable lower bound (e.g. T super Number)
      */
     public boolean hasLowerBound() {
-        boolean result = false;
-        if ( typeMirror.getKind() == TypeKind.TYPEVAR ) {
-            TypeVariable typeVarType = (TypeVariable) typeMirror;
-            result = typeVarType.getLowerBound() != null;
-        }
-        return result;
+        return typeDescriptor != null && typeDescriptor.typeVariableLowerBound().isPresent();
     }
 
     /**
@@ -459,12 +447,7 @@ public class Type extends ModelElement implements Comparable<Type> {
      * @return true if the bound has a type variable upper bound (e.g. T extends Number)
      */
     public boolean hasUpperBound() {
-        boolean result = false;
-        if ( typeMirror.getKind() == TypeKind.TYPEVAR ) {
-            TypeVariable typeVarType = (TypeVariable) typeMirror;
-            result = typeVarType.getUpperBound() != null;
-        }
-        return result;
+        return typeDescriptor != null && typeDescriptor.typeVariableUpperBound().isPresent();
     }
 
     public String getFullyQualifiedName() {
@@ -482,7 +465,7 @@ public class Type extends ModelElement implements Comparable<Type> {
     public Set<Type> getImportTypes() {
         Set<Type> result = new HashSet<>();
 
-        if ( getTypeMirror().getKind() == TypeKind.DECLARED ) {
+        if ( hasKind( LangTypeKind.DECLARED ) ) {
             result.add( this );
         }
 
@@ -531,7 +514,7 @@ public class Type extends ModelElement implements Comparable<Type> {
                     isToBeImported = true;
                 }
             }
-            else if ( typeElement == null || !typeElement.getNestingKind().isNested() ) {
+            else if ( !isNestedType() ) {
                 toBeImportedTypes.put( trimmedName, trimmedQualifiedName );
                 isToBeImported = true;
             }
@@ -548,31 +531,11 @@ public class Type extends ModelElement implements Comparable<Type> {
     }
 
     public Type erasure() {
-        return new Type(
-            typeUtils,
-            elementUtils,
-            typeFactory,
-            accessorNaming,
-            typeUtils.erasure( typeMirror ),
-            typeElement,
-            typeParameters,
-            implementationType,
-            componentType,
-            packageName,
-            name,
-            qualifiedName,
-            isInterface,
-            isEnumType,
-            isIterableType,
-            isCollectionType,
-            isMapType,
-            isStream,
-            toBeImportedTypes,
-            notToBeImportedTypes,
-            isToBeImported,
-            isLiteral,
-            loggingVerbose
-        );
+        if ( typeDescriptor == null ) {
+            return this;
+        }
+        TypeDescriptor erasureDescriptor = langTypes().erasure( typeDescriptor );
+        return typeFactory.getType( erasureDescriptor );
     }
 
     public Type withoutBounds() {
@@ -580,42 +543,26 @@ public class Type extends ModelElement implements Comparable<Type> {
             return this;
         }
 
-        List<Type> bounds = new ArrayList<>( typeParameters.size() );
-        List<TypeMirror> mirrors = new ArrayList<>( typeParameters.size() );
-        for ( Type typeParameter : typeParameters ) {
-            bounds.add( typeParameter.getTypeBound() );
-            mirrors.add( typeParameter.getTypeBound().getTypeMirror() );
+        TypeElementDescriptor elementDescriptor = typeElementDescriptor;
+        if ( elementDescriptor == null ) {
+            return this;
         }
 
-        DeclaredType declaredType = typeUtils.getDeclaredType(
-            typeElement,
-            mirrors.toArray( new TypeMirror[] {} )
-        );
-        return new Type(
-            typeUtils,
-            elementUtils,
-            typeFactory,
-            accessorNaming,
-            declaredType,
-            (TypeElement) declaredType.asElement(),
-            bounds,
-            implementationType,
-            componentType,
-            packageName,
-            name,
-            qualifiedName,
-            isInterface,
-            isEnumType,
-            isIterableType,
-            isCollectionType,
-            isMapType,
-            isStream,
-            toBeImportedTypes,
-            notToBeImportedTypes,
-            isToBeImported,
-            isLiteral,
-            loggingVerbose
-        );
+        List<TypeDescriptor> boundDescriptors = new ArrayList<>( typeParameters.size() );
+        for ( Type typeParameter : typeParameters ) {
+            Type bound = typeParameter.getTypeBound();
+            TypeDescriptor descriptor = bound != null ? bound.getTypeDescriptor() : null;
+            if ( descriptor == null ) {
+                descriptor = typeParameter.getTypeDescriptor();
+            }
+            if ( descriptor == null ) {
+                return this;
+            }
+            boundDescriptors.add( descriptor );
+        }
+
+        TypeDescriptor declaredDescriptor = langTypes().declaredType( elementDescriptor, boundDescriptors );
+        return typeFactory.getType( declaredDescriptor );
     }
 
     private Type replaceGeneric(Type oldGenericType, Type newType) {
@@ -623,14 +570,28 @@ public class Type extends ModelElement implements Comparable<Type> {
             return this;
         }
         newType = newType.getBoxedEquivalent();
-        TypeMirror[] replacedTypeMirrors = new TypeMirror[typeParameters.size()];
-        for ( int i = 0; i < typeParameters.size(); i++ ) {
-            Type typeParameter = typeParameters.get( i );
-            replacedTypeMirrors[i] =
-                typeParameter.equals( oldGenericType ) ? newType.typeMirror : typeParameter.typeMirror;
+        TypeElementDescriptor elementDescriptor = typeElementDescriptor;
+        if ( elementDescriptor == null ) {
+            return this;
+        }
+        List<TypeDescriptor> replacementDescriptors = new ArrayList<>( typeParameters.size() );
+        for ( Type typeParameter : typeParameters ) {
+            TypeDescriptor descriptor = typeParameter.getTypeDescriptor();
+            if ( descriptor == null ) {
+                return this;
+            }
+            if ( typeParameter.equals( oldGenericType ) ) {
+                TypeDescriptor newDescriptor = newType.getTypeDescriptor();
+                if ( newDescriptor == null ) {
+                    return this;
+                }
+                descriptor = newDescriptor;
+            }
+            replacementDescriptors.add( descriptor );
         }
 
-        return typeFactory.getType( typeUtils.getDeclaredType( typeElement, replacedTypeMirrors ) );
+        TypeDescriptor declaredDescriptor = langTypes().declaredType( elementDescriptor, replacementDescriptors );
+        return typeFactory.getType( declaredDescriptor );
     }
 
     /**
@@ -642,14 +603,22 @@ public class Type extends ModelElement implements Comparable<Type> {
      * @return {@code true} if and only if this type is assignable to the given other type.
      */
     public boolean isAssignableTo(Type other) {
-        TypeMirror otherMirror = other.typeMirror;
-        if ( otherMirror.getKind() == TypeKind.WILDCARD ) {
-            otherMirror = typeUtils.erasure( other.typeMirror );
+        if ( other == null ) {
+            return false;
         }
-        if ( TypeKind.WILDCARD == typeMirror.getKind() ) {
-            return typeUtils.contains( typeMirror, otherMirror );
+        TypeDescriptor thisDescriptor = typeDescriptor;
+        TypeDescriptor otherDescriptor = other.getTypeDescriptor();
+        if ( thisDescriptor == null || otherDescriptor == null ) {
+            return false;
         }
-        return typeUtils.isAssignable( typeMirror, otherMirror );
+        LangTypes langTypes = langTypes();
+        TypeDescriptor targetDescriptor = hasKind( other, LangTypeKind.WILDCARD )
+            ? langTypes.erasure( otherDescriptor )
+            : otherDescriptor;
+        if ( hasKind( LangTypeKind.WILDCARD ) ) {
+            return langTypes.contains( thisDescriptor, targetDescriptor );
+        }
+        return langTypes.isAssignable( thisDescriptor, targetDescriptor );
     }
 
     /**
@@ -667,7 +636,16 @@ public class Type extends ModelElement implements Comparable<Type> {
         if ( equals( other ) ) {
             return true;
         }
-        return typeUtils.isAssignable( typeUtils.erasure( typeMirror ), typeUtils.erasure( other.typeMirror ) );
+        TypeDescriptor thisDescriptor = typeDescriptor;
+        TypeDescriptor otherDescriptor = other.getTypeDescriptor();
+        if ( thisDescriptor != null && otherDescriptor != null ) {
+            LangTypes langTypes = langTypes();
+            return langTypes.isAssignable(
+                langTypes.erasure( thisDescriptor ),
+                langTypes.erasure( otherDescriptor )
+            );
+        }
+        return false;
     }
 
     /**
@@ -676,22 +654,29 @@ public class Type extends ModelElement implements Comparable<Type> {
      */
     public Type asRawType() {
         if ( getTypeBound() != null ) {
-            return typeFactory.getType( typeUtils.erasure( typeMirror ) );
+            if ( typeDescriptor != null ) {
+                return typeFactory.getType( langTypes().erasure( typeDescriptor ) );
+            }
         }
         else {
             return this;
         }
+        return this;
     }
 
     public ReadAccessor getReadAccessor(String propertyName, boolean allowedMapToBean) {
         if ( allowedMapToBean && hasStringMapSignature() ) {
-            ExecutableElement getMethod = getAllMethods()
+            ExecutableDescriptor getMethod = getAllMethods()
                 .stream()
-                .filter( m -> m.getSimpleName().contentEquals( "get" ) )
-                .filter( m -> m.getParameters().size() == 1 )
+                .filter( m -> m.simpleName().content().equals( "get" ) )
+                .filter( m -> m.parameters().size() == 1 )
                 .findAny()
                 .orElse( null );
-            return new MapValueAccessor( getMethod, typeParameters.get( 1 ).getTypeMirror(), propertyName );
+            return new MapValueAccessor(
+                getMethod,
+                typeParameters.get( 1 ).getTypeDescriptor(),
+                propertyName
+            );
         }
 
         Map<String, ReadAccessor> readAccessors = getPropertyReadAccessors();
@@ -716,7 +701,7 @@ public class Type extends ModelElement implements Comparable<Type> {
     public Map<String, ReadAccessor> getPropertyReadAccessors() {
         if ( readAccessors == null ) {
 
-            Map<String, ReadAccessor> recordAccessors = filters.recordAccessorsIn( getRecordComponents() );
+            Map<String, ReadAccessor> recordAccessors = filters.recordAccessorsIn( getRecordComponentDescriptors() );
             Map<String, ReadAccessor> modifiableGetters = new LinkedHashMap<>(recordAccessors);
 
             List<ReadAccessor> getterList = filters.getterMethodsIn( getAllMethods() );
@@ -769,9 +754,9 @@ public class Type extends ModelElement implements Comparable<Type> {
      */
     public Map<String, PresenceCheckAccessor> getPropertyPresenceCheckers() {
         if ( presenceCheckers == null ) {
-            List<ExecutableElement> checkerList = filters.presenceCheckMethodsIn( getAllMethods() );
+            List<ExecutableDescriptor> checkerList = filters.presenceCheckMethodsIn( getAllMethods() );
             Map<String, PresenceCheckAccessor> modifiableCheckers = new LinkedHashMap<>();
-            for ( ExecutableElement checker : checkerList ) {
+            for ( ExecutableDescriptor checker : checkerList ) {
                 modifiableCheckers.put(
                     getPropertyName( checker ),
                     PresenceCheckAccessor.methodInvocation( checker )
@@ -857,7 +842,7 @@ public class Type extends ModelElement implements Comparable<Type> {
 
             Accessor previousCandidate = result.get( targetPropertyName );
             if ( previousCandidate == null || preferredType == null || ( targetType != null
-                && typeUtils.isAssignable( preferredType.getTypeMirror(), targetType.getTypeMirror() ) ) ) {
+                && preferredType.isAssignableTo( targetType ) ) ) {
                 result.put( targetPropertyName, candidate );
             }
         }
@@ -865,68 +850,70 @@ public class Type extends ModelElement implements Comparable<Type> {
         return result;
     }
 
-    public List<Element> getRecordComponents() {
+    private List<RecordComponentDescriptor> getRecordComponentDescriptors() {
         if ( recordComponents == null ) {
-            recordComponents = nullSafeTypeElementListConversion( filters::recordComponentsIn );
+            recordComponents = typeElementDescriptor != null
+                ? typeIntrospector.recordComponents( typeDescriptor )
+                : Collections.emptyList();
         }
 
         return recordComponents;
     }
 
+    public List<RecordComponentDescriptor> getRecordComponents() {
+        return getRecordComponentDescriptors();
+    }
+
     private Type determinePreferredType(Accessor readAccessor) {
         if ( readAccessor != null ) {
-            return typeFactory.getReturnType( (DeclaredType) typeMirror, readAccessor );
+            return typeFactory.getReturnType( typeDescriptor, readAccessor );
         }
         return null;
     }
 
     private Type determineTargetType(Accessor candidate) {
-        Parameter parameter = typeFactory.getSingleParameter( (DeclaredType) typeMirror, candidate );
+        Parameter parameter = typeFactory.getSingleParameter( typeDescriptor, candidate );
         if ( parameter != null ) {
             return parameter.getType();
         }
         else if ( candidate.getAccessorType() == AccessorType.GETTER
                         || candidate.getAccessorType().isFieldAssignment() ) {
-            return typeFactory.getReturnType( (DeclaredType) typeMirror, candidate );
+            return typeFactory.getReturnType( typeDescriptor, candidate );
         }
         return null;
     }
 
-    private List<ExecutableElement> getAllMethods() {
+    private List<ExecutableDescriptor> getAllMethods() {
         if ( allMethods == null ) {
-            allMethods = nullSafeTypeElementListConversion( elementUtils::getAllEnclosedExecutableElements );
+            allMethods = typeElementDescriptor != null
+                ? typeIntrospector.enclosedExecutables( typeDescriptor )
+                : Collections.emptyList();
         }
 
         return allMethods;
     }
 
-    private List<VariableElement> getAllFields() {
+    private List<FieldDescriptor> getAllFields() {
         if ( allFields == null ) {
-            allFields = nullSafeTypeElementListConversion( elementUtils::getAllEnclosedFields );
+            allFields = typeElementDescriptor != null
+                ? typeIntrospector.enclosedFields( typeDescriptor )
+                : Collections.emptyList();
         }
 
         return allFields;
     }
 
-    private <T> List<T> nullSafeTypeElementListConversion(Function<TypeElement, List<T>> conversionFunction) {
-        if ( typeElement != null ) {
-            return conversionFunction.apply( typeElement );
-        }
-
-        return Collections.emptyList();
-    }
-
     private String getPropertyName(Accessor accessor ) {
-        Element accessorElement = accessor.getElement();
-        if ( accessorElement instanceof ExecutableElement ) {
-            return getPropertyName( (ExecutableElement) accessorElement );
+        ElementDescriptor accessorElement = accessor.getElement();
+        if ( accessorElement instanceof ExecutableDescriptor ) {
+            return getPropertyName( (ExecutableDescriptor) accessorElement );
         }
         else {
             return accessor.getSimpleName();
         }
     }
 
-    private String getPropertyName(ExecutableElement element) {
+    private String getPropertyName(ExecutableDescriptor element) {
         return accessorNaming.getPropertyName( element );
     }
 
@@ -989,28 +976,29 @@ public class Type extends ModelElement implements Comparable<Type> {
      * @return accessor candidates
      */
     private List<Accessor> getAccessorCandidates(Type property, Class<?> superclass) {
-        TypeMirror typeArg = first( property.determineTypeArguments( superclass ) ).getTypeBound().getTypeMirror();
+        Type typeArgument = first( property.determineTypeArguments( superclass ) ).getTypeBound();
+        if ( typeArgument == null ) {
+            return Collections.emptyList();
+        }
+        TypeDescriptor boxedArgumentDescriptor = typeArgument.getBoxedEquivalent().getTypeDescriptor();
+        if ( boxedArgumentDescriptor == null ) {
+            return Collections.emptyList();
+        }
         // now, look for a method that
         // 1) starts with add,
         // 2) and has typeArg as one and only arg
         List<Accessor> adderList = getAdders();
         List<Accessor> candidateList = new ArrayList<>();
         for ( Accessor adder : adderList ) {
-            TypeMirror adderParameterType = determineTargetType( adder ).getTypeMirror();
-            if ( typeUtils.isSameType( boxed( adderParameterType ), boxed( typeArg ) ) ) {
+            Type target = determineTargetType( adder );
+            TypeDescriptor adderDescriptor = target != null
+                ? target.getBoxedEquivalent().getTypeDescriptor()
+                : null;
+            if ( adderDescriptor != null && langTypes().isSameType( adderDescriptor, boxedArgumentDescriptor ) ) {
                 candidateList.add( adder );
             }
         }
         return candidateList;
-    }
-
-    private TypeMirror boxed(TypeMirror possiblePrimitive) {
-        if ( possiblePrimitive.getKind().isPrimitive() ) {
-            return typeUtils.boxedClass( (PrimitiveType) possiblePrimitive ).asType();
-        }
-        else {
-            return possiblePrimitive;
-        }
     }
 
     /**
@@ -1100,28 +1088,20 @@ public class Type extends ModelElement implements Comparable<Type> {
     }
 
     private boolean isCollectionOrMapOrStream(Accessor getterMethod) {
-        return isCollection( getterMethod.getAccessedType() ) || isMap( getterMethod.getAccessedType() ) ||
-            isStream( getterMethod.getAccessedType() );
+        TypeDescriptor accessedType = getterMethod.getAccessedType();
+        return isCollection( accessedType ) || isMap( accessedType ) || isStream( accessedType );
     }
 
-    private boolean isCollection(TypeMirror candidate) {
-        return isSubType( candidate, Collection.class );
+    private boolean isCollection(TypeDescriptor candidate) {
+        return typeFactory.isCollectionDescriptor( candidate );
     }
 
-    private boolean isStream(TypeMirror candidate) {
-        TypeElement streamTypeElement = elementUtils.getTypeElement( JavaStreamConstants.STREAM_FQN );
-        TypeMirror streamType = streamTypeElement == null ? null : typeUtils.erasure( streamTypeElement.asType() );
-        return streamType != null && typeUtils.isSubtypeErased( candidate, streamType );
+    private boolean isStream(TypeDescriptor candidate) {
+        return typeFactory.isStreamDescriptor( candidate );
     }
 
-    private boolean isMap(TypeMirror candidate) {
-        return isSubType( candidate, Map.class );
-    }
-
-    private boolean isSubType(TypeMirror candidate, Class<?> clazz) {
-        String className = clazz.getCanonicalName();
-        TypeMirror classType = typeUtils.erasure( elementUtils.getTypeElement( className ).asType() );
-        return typeUtils.isSubtypeErased( candidate, classType );
+    private boolean isMap(TypeDescriptor candidate) {
+        return typeFactory.isMapDescriptor( candidate );
     }
 
     /**
@@ -1134,21 +1114,33 @@ public class Type extends ModelElement implements Comparable<Type> {
      * @return the length of the shortest path in the type hierarchy between this type and the specified other type
      */
     public int distanceTo(Type assignableOther) {
-        return distanceTo( typeMirror, assignableOther.typeMirror );
+        if ( assignableOther == null ) {
+            return -1;
+        }
+        TypeDescriptor thisDescriptor = typeDescriptor;
+        TypeDescriptor otherDescriptor = assignableOther.getTypeDescriptor();
+        if ( thisDescriptor != null && otherDescriptor != null ) {
+            return distanceTo( thisDescriptor, otherDescriptor );
+        }
+        return -1;
     }
 
-    private int distanceTo(TypeMirror base, TypeMirror targetType) {
-        if ( typeUtils.isSameType( base, targetType ) ) {
+    private int distanceTo(TypeDescriptor base, TypeDescriptor targetType) {
+        LangTypes langTypes = langTypes();
+        if ( langTypes.isSameType( base, targetType ) ) {
             return 0;
         }
 
-        if ( !typeUtils.isAssignable( base, targetType ) ) {
+        if ( !langTypes.isAssignable( base, targetType ) ) {
             return -1;
         }
 
-        List<? extends TypeMirror> directSupertypes = typeUtils.directSupertypes( base );
+        List<TypeDescriptor> directSupertypes = langTypes.directSupertypes( base );
         int minDistanceOfSuperToTargetType = Integer.MAX_VALUE;
-        for ( TypeMirror type : directSupertypes ) {
+        for ( TypeDescriptor type : directSupertypes ) {
+            if ( type == null ) {
+                continue;
+            }
             int distanceToTargetType = distanceTo( type, targetType );
             if ( distanceToTargetType >= 0 ) {
                 minDistanceOfSuperToTargetType = Math.min( minDistanceOfSuperToTargetType, distanceToTargetType );
@@ -1163,14 +1155,18 @@ public class Type extends ModelElement implements Comparable<Type> {
      * @param method the method to check
      * @return Whether this type can access the given method declared on the given type.
      */
-    public boolean canAccess(Type type, ExecutableElement method) {
-        if ( method.getModifiers().contains( Modifier.PRIVATE ) ) {
+    public boolean canAccess(Type type, ExecutableDescriptor method) {
+        if ( method == null ) {
             return false;
         }
-        else if ( method.getModifiers().contains( Modifier.PROTECTED ) ) {
+        Set<LangModifier> modifiers = method.modifiers();
+        if ( modifiers.contains( LangModifier.PRIVATE ) ) {
+            return false;
+        }
+        else if ( modifiers.contains( LangModifier.PROTECTED ) ) {
             return isAssignableTo( type ) || getPackageName().equals( type.getPackageName() );
         }
-        else if ( !method.getModifiers().contains( Modifier.PUBLIC ) ) {
+        else if ( !modifiers.contains( LangModifier.PUBLIC ) ) {
             // default
             return getPackageName().equals( type.getPackageName() );
         }
@@ -1228,7 +1224,12 @@ public class Type extends ModelElement implements Comparable<Type> {
         else {
             if ( isNative() ) {
                 // must be boxed, since primitive is already checked
-                return typeFactory.getType( typeUtils.unboxedType( typeMirror ) ).getNull();
+                if ( typeDescriptor != null ) {
+                    TypeDescriptor unboxed = langTypes().unboxed( typeDescriptor );
+                    if ( unboxed != null ) {
+                        return typeFactory.getType( unboxed ).getNull();
+                    }
+                }
             }
         }
         return null;
@@ -1259,14 +1260,41 @@ public class Type extends ModelElement implements Comparable<Type> {
         }
         Type other = (Type) obj;
 
+        if ( typeDescriptor != null && other.typeDescriptor != null ) {
+            LangTypes langTypes = langTypes();
+            if ( this.isWildCardBoundByTypeVar() && other.isWildCardBoundByTypeVar() ) {
+                Type thisBound = getTypeBound();
+                Type otherBound = other.getTypeBound();
+                if ( thisBound != null && otherBound != null ) {
+                    TypeDescriptor thisBoundDescriptor = thisBound.getTypeDescriptor();
+                    TypeDescriptor otherBoundDescriptor = otherBound.getTypeDescriptor();
+                    if ( thisBoundDescriptor != null && otherBoundDescriptor != null ) {
+                        return langTypes.isSameType( thisBoundDescriptor, otherBoundDescriptor );
+                    }
+                }
+            }
+            return langTypes.isSameType( typeDescriptor, other.typeDescriptor );
+        }
+
         if ( this.isWildCardBoundByTypeVar() && other.isWildCardBoundByTypeVar() ) {
-            return  ( this.hasExtendsBound() == this.hasExtendsBound()
-                || this.hasSuperBound() == this.hasSuperBound() )
-                && typeUtils.isSameType( getTypeBound().getTypeMirror(), other.getTypeBound().getTypeMirror() );
+            if ( this.hasExtendsBound() != other.hasExtendsBound()
+                && this.hasSuperBound() != other.hasSuperBound() ) {
+                return false;
+            }
+            Type thisBound = getTypeBound();
+            Type otherBound = other.getTypeBound();
+            if ( thisBound != null && otherBound != null ) {
+                TypeDescriptor thisBoundDescriptor = thisBound.getTypeDescriptor();
+                TypeDescriptor otherBoundDescriptor = otherBound.getTypeDescriptor();
+                if ( thisBoundDescriptor != null && otherBoundDescriptor != null ) {
+                    return langTypes().isSameType( thisBoundDescriptor, otherBoundDescriptor );
+                }
+                return Objects.equals( thisBound.describe(), otherBound.describe() );
+            }
+            return thisBound == null && otherBound == null;
         }
-        else {
-            return typeUtils.isSameType( typeMirror, other.typeMirror );
-        }
+
+        return Objects.equals( name, other.name ) && Objects.equals( packageName, other.packageName );
     }
 
     @Override
@@ -1276,7 +1304,13 @@ public class Type extends ModelElement implements Comparable<Type> {
 
     @Override
     public String toString() {
-        return typeMirror.toString();
+        if ( typeDescriptor != null ) {
+            return typeDescriptor.displayName();
+        }
+        if ( qualifiedName != null ) {
+            return qualifiedName;
+        }
+        return name;
     }
 
     /**
@@ -1328,7 +1362,9 @@ public class Type extends ModelElement implements Comparable<Type> {
             return boundingBase;
         }
 
-        boundingBase = typeFactory.getType( typeFactory.getTypeBound( getTypeMirror() ) );
+        if ( typeDescriptor != null ) {
+            boundingBase = typeFactory.getTypeBound( typeDescriptor );
+        }
 
         return boundingBase;
     }
@@ -1345,10 +1381,16 @@ public class Type extends ModelElement implements Comparable<Type> {
             this.boundTypes = Collections.singletonList( bound );
         }
         else {
-            List<? extends TypeMirror> bounds = ( (IntersectionType) bound.typeMirror ).getBounds();
-            this.boundTypes = new ArrayList<>( bounds.size() );
-            for ( TypeMirror mirror : bounds ) {
-                boundTypes.add( typeFactory.getType( mirror ) );
+            TypeDescriptor boundDescriptor = bound.getTypeDescriptor();
+            if ( boundDescriptor != null && boundDescriptor.kind() == LangTypeKind.INTERSECTION ) {
+                List<TypeDescriptor> descriptors = boundDescriptor.typeVariableBounds();
+                this.boundTypes = new ArrayList<>( descriptors.size() );
+                for ( TypeDescriptor descriptor : descriptors ) {
+                    boundTypes.add( typeFactory.getType( descriptor ) );
+                }
+            }
+            else {
+                this.boundTypes = Collections.singletonList( bound );
             }
         }
 
@@ -1359,11 +1401,13 @@ public class Type extends ModelElement implements Comparable<Type> {
     public boolean hasAccessibleConstructor() {
         if ( hasAccessibleConstructor == null ) {
             hasAccessibleConstructor = false;
-            List<ExecutableElement> constructors = ElementFilter.constructorsIn( typeElement.getEnclosedElements() );
-            for ( ExecutableElement constructor : constructors ) {
-                if ( !constructor.getModifiers().contains( Modifier.PRIVATE ) ) {
-                    hasAccessibleConstructor = true;
-                    break;
+            if ( typeDescriptor != null ) {
+                List<ExecutableDescriptor> constructors = typeIntrospector.constructors( typeDescriptor );
+                for ( ExecutableDescriptor constructor : constructors ) {
+                    if ( !constructor.modifiers().contains( LangModifier.PRIVATE ) ) {
+                        hasAccessibleConstructor = true;
+                        break;
+                    }
                 }
             }
         }
@@ -1377,10 +1421,16 @@ public class Type extends ModelElement implements Comparable<Type> {
      * @return the direct supertypes, or an empty list if none
      */
     public List<Type> getDirectSuperTypes() {
-        return typeUtils.directSupertypes( typeMirror )
-            .stream()
-            .map( typeFactory::getType )
-            .collect( Collectors.toList() );
+        if ( typeDescriptor != null ) {
+            List<TypeDescriptor> directSupertypes = langTypes().directSupertypes( typeDescriptor );
+            if ( directSupertypes.isEmpty() ) {
+                return Collections.emptyList();
+            }
+            return directSupertypes.stream()
+                .map( typeFactory::getType )
+                .collect( Collectors.toList() );
+        }
+        return Collections.emptyList();
     }
 
     /**
@@ -1394,12 +1444,14 @@ public class Type extends ModelElement implements Comparable<Type> {
             return getTypeParameters();
         }
 
-        List<? extends TypeMirror> directSupertypes = typeUtils.directSupertypes( typeMirror );
-        for ( TypeMirror supertypemirror : directSupertypes ) {
-            Type supertype = typeFactory.getType( supertypemirror );
-            List<Type> supertypeTypeArguments = supertype.determineTypeArguments( superclass );
-            if ( supertypeTypeArguments != null ) {
-                return supertypeTypeArguments;
+        if ( typeDescriptor != null ) {
+            List<TypeDescriptor> directSupertypes = langTypes().directSupertypes( typeDescriptor );
+            for ( TypeDescriptor descriptor : directSupertypes ) {
+                Type supertype = typeFactory.getType( descriptor );
+                List<Type> supertypeTypeArguments = supertype.determineTypeArguments( superclass );
+                if ( supertypeTypeArguments != null ) {
+                    return supertypeTypeArguments;
+                }
             }
         }
 
@@ -1446,8 +1498,18 @@ public class Type extends ModelElement implements Comparable<Type> {
      */
     public ResolvedPair resolveParameterToType(Type declared, Type parameterized) {
         if ( isTypeVar() || isArrayTypeVar() || isWildCardBoundByTypeVar() ) {
-            TypeVarMatcher typeVarMatcher = new TypeVarMatcher( typeFactory, typeUtils, this );
-            return typeVarMatcher.visit( parameterized.getTypeMirror(), declared );
+            if ( parameterized != null
+                && parameterized.getTypeDescriptor() != null
+                && declared != null
+                && declared.getTypeDescriptor() != null
+                && getTypeDescriptor() != null ) {
+                DescriptorTypeVarMatcher descriptorMatcher = new DescriptorTypeVarMatcher( typeFactory, this );
+                ResolvedPair result = descriptorMatcher.visit( parameterized, declared );
+                if ( result != null && result.getMatch() != null ) {
+                    return result;
+                }
+            }
+            return new ResolvedPair( this, null );
         }
         return new ResolvedPair( this, this );
     }
@@ -1550,133 +1612,231 @@ public class Type extends ModelElement implements Comparable<Type> {
         return  isArrayType() && getComponentType().isTypeVar();
     }
 
-    private static class TypeVarMatcher extends SimpleTypeVisitor8<ResolvedPair, Type> {
+    private static class DescriptorTypeVarMatcher {
 
         private final TypeFactory typeFactory;
         private final Type typeToMatch;
-        private final TypeUtils types;
+        private final LangTypes langTypes;
+        private final ResolvedPair defaultValue;
+        private final Set<String> visitedPairs = new HashSet<>();
 
-        /**
-         * @param typeFactory factory
-         * @param types type utils
-         * @param typeToMatch the typeVar or wildcard with typeVar bound
-         */
-        TypeVarMatcher(TypeFactory typeFactory, TypeUtils types, Type typeToMatch) {
-            super( new ResolvedPair( typeToMatch, null ) );
+        DescriptorTypeVarMatcher(TypeFactory typeFactory, Type typeToMatch) {
             this.typeFactory = typeFactory;
             this.typeToMatch = typeToMatch;
-            this.types = types;
+            this.langTypes = typeFactory.langTypes();
+            this.defaultValue = new ResolvedPair( typeToMatch, null );
         }
 
-        @Override
-        public ResolvedPair visitTypeVariable(TypeVariable parameterized, Type declared) {
-            if ( typeToMatch.isTypeVar() && types.isSameType( parameterized, typeToMatch.getTypeMirror() ) ) {
-                return new ResolvedPair(  typeFactory.getType( parameterized ), declared );
+        ResolvedPair visit(Type parameterized, Type declared) {
+            if ( parameterized == null || declared == null ) {
+                return defaultValue;
             }
-            return super.DEFAULT_VALUE;
+
+            TypeDescriptor parameterizedDescriptor = parameterized.getTypeDescriptor();
+            TypeDescriptor declaredDescriptor = declared.getTypeDescriptor();
+
+            String visitKey = visitKey( parameterizedDescriptor, declaredDescriptor );
+            if ( visitKey != null && !visitedPairs.add( visitKey ) ) {
+                return defaultValue;
+            }
+
+            if ( parameterized.isTypeVar() ) {
+                return visitTypeVariable( parameterized, declared );
+            }
+
+            if ( isWildcard( parameterizedDescriptor ) ) {
+                return visitWildcard( parameterized, declared );
+            }
+
+            if ( parameterized.isArrayType() ) {
+                return visitArray( parameterized, declared );
+            }
+
+            if ( parameterizedDescriptor != null && parameterizedDescriptor.kind() == LangTypeKind.DECLARED ) {
+                return visitDeclared( parameterized, declared );
+            }
+
+            return defaultValue;
         }
 
-        /**
-         * If ? extends SomeTime equals the boundary set in typeVarToMatch (NOTE: you can't compare the wildcard itself)
-         * then return a result;
-          */
-        @Override
-        public ResolvedPair visitWildcard(WildcardType parameterized, Type declared) {
-            if ( typeToMatch.hasExtendsBound() && parameterized.getExtendsBound() != null
-                && types.isSameType( typeToMatch.getTypeBound().getTypeMirror(), parameterized.getExtendsBound() ) ) {
-                return new ResolvedPair( typeToMatch, declared);
+        private boolean isWildcard(TypeDescriptor descriptor) {
+            return descriptor != null && descriptor.kind() == LangTypeKind.WILDCARD;
+        }
+
+        private boolean isDefault(ResolvedPair pair) {
+            return pair == null || pair.getMatch() == null;
+        }
+
+        private ResolvedPair visitTypeVariable(Type parameterized, Type declared) {
+            TypeDescriptor parameterizedDescriptor = parameterized.getTypeDescriptor();
+            TypeDescriptor matchDescriptor = typeToMatch.getTypeDescriptor();
+            if ( parameterizedDescriptor != null
+                && matchDescriptor != null
+                && langTypes.isSameType( parameterizedDescriptor, matchDescriptor ) ) {
+                return new ResolvedPair( typeFactory.getType( parameterizedDescriptor ), declared );
             }
-            else if ( typeToMatch.hasSuperBound() && parameterized.getSuperBound() != null
-                && types.isSameType( typeToMatch.getTypeBound().getTypeMirror(), parameterized.getSuperBound() ) ) {
-                return new ResolvedPair( typeToMatch, declared);
+            return defaultValue;
+        }
+
+        private ResolvedPair visitWildcard(Type parameterized, Type declared) {
+            TypeDescriptor parameterizedDescriptor = parameterized.getTypeDescriptor();
+            TypeDescriptor matchDescriptor = typeToMatch.getTypeDescriptor();
+            if ( parameterizedDescriptor == null || matchDescriptor == null ) {
+                return defaultValue;
             }
-            if ( parameterized.getExtendsBound() != null ) {
-                ResolvedPair match = visit( parameterized.getExtendsBound(), declared );
-                if ( match.match != null ) {
-                    return new ResolvedPair( typeFactory.getType( parameterized ), declared );
+
+            TypeDescriptor parameterizedExtends = parameterizedDescriptor.wildcardExtendsBound().orElse( null );
+            TypeDescriptor parameterizedSuper = parameterizedDescriptor.wildcardSuperBound().orElse( null );
+            TypeDescriptor matchExtends = matchDescriptor.wildcardExtendsBound().orElse( null );
+            TypeDescriptor matchSuper = matchDescriptor.wildcardSuperBound().orElse( null );
+
+            if ( matchExtends != null && parameterizedExtends != null
+                && langTypes.isSameType( parameterizedExtends, matchExtends ) ) {
+                return new ResolvedPair( typeToMatch, declared );
+            }
+            if ( matchSuper != null && parameterizedSuper != null
+                && langTypes.isSameType( parameterizedSuper, matchSuper ) ) {
+                return new ResolvedPair( typeToMatch, declared );
+            }
+
+            if ( parameterizedExtends != null ) {
+                Type extendsType = typeFactory.getType( parameterizedExtends );
+                ResolvedPair match = visit( extendsType, declared );
+                if ( !isDefault( match ) ) {
+                    return new ResolvedPair( typeFactory.getType( parameterizedDescriptor ), declared );
                 }
             }
-            else if (parameterized.getSuperBound() != null ) {
-                ResolvedPair match = visit( parameterized.getSuperBound(), declared );
-                if ( match.match != null ) {
-                    return new ResolvedPair( typeFactory.getType( parameterized ), declared );
-                }
 
+            if ( parameterizedSuper != null ) {
+                Type superType = typeFactory.getType( parameterizedSuper );
+                ResolvedPair match = visit( superType, declared );
+                if ( !isDefault( match ) ) {
+                    return new ResolvedPair( typeFactory.getType( parameterizedDescriptor ), declared );
+                }
             }
-            return super.DEFAULT_VALUE;
+
+            return defaultValue;
         }
 
-        @Override
-        public ResolvedPair visitArray(ArrayType parameterized, Type declared) {
-            if ( types.isSameType( parameterized.getComponentType(), typeToMatch.getTypeMirror() ) ) {
-                return new ResolvedPair( typeFactory.getType( parameterized ), declared );
+        private ResolvedPair visitArray(Type parameterized, Type declared) {
+            if ( parameterized == null ) {
+                return defaultValue;
             }
-            if ( declared.isArrayType() ) {
-                return visit( parameterized.getComponentType(), declared.getComponentType() );
+
+            Type component = parameterized.getComponentType();
+            if ( typeToMatch.isArrayTypeVar()
+                && declared != null
+                && declared.isArrayType()
+                && component != null ) {
+                Type toMatchComponent = typeToMatch.getComponentType();
+                Type declaredComponent = declared.getComponentType();
+                if ( toMatchComponent != null && declaredComponent != null ) {
+                    ResolvedPair componentMatch = toMatchComponent.resolveParameterToType(
+                        component,
+                        declaredComponent
+                    );
+                    if ( componentMatch.getMatch() != null ) {
+                        Type arrayMatch = typeFactory.getType( parameterized.getTypeDescriptor() );
+                        return new ResolvedPair( typeToMatch, arrayMatch );
+                    }
+                }
             }
-            return super.DEFAULT_VALUE;
+
+            if ( typeToMatch.isTypeVar()
+                && declared != null
+                && declared.isArrayType()
+                && declared.getComponentType() != null
+                && declared.getComponentType().getTypeDescriptor() != null
+                && typeToMatch.getTypeDescriptor() != null
+                && langTypes.isSameType(
+                    declared.getComponentType().getTypeDescriptor(),
+                    typeToMatch.getTypeDescriptor()
+                ) ) {
+                if ( component != null ) {
+                    return new ResolvedPair( typeToMatch, component );
+                }
+            }
+
+            if ( declared != null && declared.isArrayType() && component != null ) {
+                return visit( component, declared.getComponentType() );
+            }
+
+            return defaultValue;
         }
 
-        @Override
-        public ResolvedPair visitDeclared(DeclaredType parameterized, Type declared) {
-
-            List<ResolvedPair> results = new ArrayList<>(  );
-            if ( parameterized.getTypeArguments().isEmpty() ) {
-                return super.DEFAULT_VALUE;
+        private ResolvedPair visitDeclared(Type parameterized, Type declared) {
+            TypeDescriptor parameterizedDescriptor = parameterized.getTypeDescriptor();
+            TypeDescriptor declaredDescriptor = declared.getTypeDescriptor();
+            if ( parameterizedDescriptor == null || declaredDescriptor == null ) {
+                return defaultValue;
             }
-            else if ( types.isSameType( types.erasure( parameterized ), types.erasure( declared.getTypeMirror() ) ) ) {
-                // We can't assume that the type args are the same
-                // e.g. List<T> is assignable to Object
-                if ( parameterized.getTypeArguments().size() != declared.getTypeParameters().size() ) {
-                    return super.visitDeclared( parameterized, declared );
-                }
 
-                // only possible to compare parameters when the types are exactly the same
-                for ( int i = 0; i < parameterized.getTypeArguments().size(); i++ ) {
-                    TypeMirror parameterizedTypeArg = parameterized.getTypeArguments().get( i );
-                    Type declaredTypeArg = declared.getTypeParameters().get( i );
-                    ResolvedPair result = visit( parameterizedTypeArg, declaredTypeArg );
-                    if ( result != super.DEFAULT_VALUE ) {
+            if ( parameterized.getTypeParameters().isEmpty() ) {
+                return defaultValue;
+            }
+
+            TypeDescriptor parameterizedErasure = langTypes.erasure( parameterizedDescriptor );
+            TypeDescriptor declaredErasure = langTypes.erasure( declaredDescriptor );
+
+            if ( langTypes.isSameType( parameterizedErasure, declaredErasure ) ) {
+                if ( parameterized.getTypeParameters().size() != declared.getTypeParameters().size() ) {
+                    return defaultValue;
+                }
+                List<ResolvedPair> results = new ArrayList<>();
+                for ( int i = 0; i < parameterized.getTypeParameters().size(); i++ ) {
+                    Type parameterizedArg = parameterized.getTypeParameters().get( i );
+                    Type declaredArg = declared.getTypeParameters().get( i );
+                    ResolvedPair result = visit( parameterizedArg, declaredArg );
+                    if ( !isDefault( result ) ) {
                         results.add( result );
                     }
                 }
-            }
-            else {
-                // Also check whether the implemented interfaces are parameterized
-                for ( Type declaredSuperType : declared.getDirectSuperTypes() ) {
-                    if ( Object.class.getName().equals( declaredSuperType.getFullyQualifiedName() ) ) {
-                        continue;
-                    }
-                    ResolvedPair result = visitDeclared( parameterized, declaredSuperType );
-                    if ( result != super.DEFAULT_VALUE  ) {
-                        results.add( result );
-                    }
+                if ( results.isEmpty() ) {
+                    return defaultValue;
                 }
+                ResolvedPair first = results.get( 0 );
+                boolean allEqual = results.stream().allMatch( first::equals );
+                return allEqual ? first : defaultValue;
+            }
 
-                for ( TypeMirror parameterizedSuper : types.directSupertypes( parameterized ) ) {
-                    if ( isJavaLangObject( parameterizedSuper ) ) {
-                        continue;
-                    }
-                    ResolvedPair result = visitDeclared( (DeclaredType) parameterizedSuper, declared );
-                    if ( result != super.DEFAULT_VALUE  ) {
-                        results.add( result );
-                    }
+            List<ResolvedPair> results = new ArrayList<>();
+            for ( Type declaredSuper : declared.getDirectSuperTypes() ) {
+                if ( declaredSuper == null || isJavaLangObject( declaredSuper ) ) {
+                    continue;
+                }
+                ResolvedPair result = visitDeclared( parameterized, declaredSuper );
+                if ( !isDefault( result ) ) {
+                    results.add( result );
                 }
             }
+
+            for ( Type parameterizedSuper : parameterized.getDirectSuperTypes() ) {
+                if ( parameterizedSuper == null || isJavaLangObject( parameterizedSuper ) ) {
+                    continue;
+                }
+                ResolvedPair result = visitDeclared( parameterizedSuper, declared );
+                if ( !isDefault( result ) ) {
+                    results.add( result );
+                }
+            }
+
             if ( results.isEmpty() ) {
-                return super.DEFAULT_VALUE;
+                return defaultValue;
             }
-            else {
-                return results.stream().allMatch( results.get( 0 )::equals ) ? results.get( 0 ) : super.DEFAULT_VALUE;
-            }
+            ResolvedPair first = results.get( 0 );
+            boolean allEqual = results.stream().allMatch( first::equals );
+            return allEqual ? first : defaultValue;
         }
 
-        private boolean isJavaLangObject(TypeMirror type) {
-            if ( type instanceof DeclaredType ) {
-                return ( (TypeElement) ( (DeclaredType) type ).asElement() ).getQualifiedName()
-                                                                            .contentEquals( Object.class.getName() );
+        private boolean isJavaLangObject(Type type) {
+            return type != null && Object.class.getName().equals( type.getFullyQualifiedName() );
+        }
+
+        private String visitKey(TypeDescriptor parameterizedDescriptor, TypeDescriptor declaredDescriptor) {
+            if ( parameterizedDescriptor == null || declaredDescriptor == null ) {
+                return null;
             }
-            return false;
+            return parameterizedDescriptor.id() + "->" + declaredDescriptor.id();
         }
     }
 
@@ -1739,8 +1899,13 @@ public class Type extends ModelElement implements Comparable<Type> {
             return boxedEquivalent;
         }
         else if ( isPrimitive() ) {
-            boxedEquivalent = typeFactory.getType( typeUtils.boxedClass( (PrimitiveType) typeMirror ) );
-            return boxedEquivalent;
+            if ( typeDescriptor != null ) {
+                TypeDescriptor boxedDescriptor = langTypes().boxed( typeDescriptor );
+                if ( boxedDescriptor != null ) {
+                    boxedEquivalent = typeFactory.getType( boxedDescriptor );
+                }
+            }
+            return boxedEquivalent != null ? boxedEquivalent : this;
         }
         return this;
     }
@@ -1769,41 +1934,6 @@ public class Type extends ModelElement implements Comparable<Type> {
         return trimmedClassName;
     }
 
-    private static String nameWithTopLevelTypeName(TypeElement element, String name) {
-        if ( element == null ) {
-            return null;
-        }
-        if ( !element.getNestingKind().isNested() ) {
-            return name;
-        }
-
-        Deque<CharSequence> elements = new ArrayDeque<>();
-        elements.addFirst( name );
-        Element parent = element.getEnclosingElement();
-        while ( parent != null && parent.getKind() != ElementKind.PACKAGE ) {
-            elements.addFirst( parent.getSimpleName() );
-            parent = parent.getEnclosingElement();
-        }
-
-        return String.join( ".", elements );
-    }
-
-    private static Type topLevelType(TypeElement typeElement, TypeFactory typeFactory) {
-        if ( typeElement == null || typeElement.getNestingKind() == NestingKind.TOP_LEVEL ) {
-            return null;
-        }
-
-        Element parent = typeElement.getEnclosingElement();
-        while ( parent != null ) {
-            if ( parent.getEnclosingElement() != null &&
-                parent.getEnclosingElement().getKind() == ElementKind.PACKAGE ) {
-                break;
-            }
-            parent = parent.getEnclosingElement();
-        }
-        return parent == null ? null : typeFactory.getType( parent.asType() );
-    }
-
     public boolean isEnumSet() {
         return "java.util.EnumSet".equals( getFullyQualifiedName() );
     }
@@ -1812,23 +1942,87 @@ public class Type extends ModelElement implements Comparable<Type> {
      * return true if this type is a java 17+ sealed class
      */
     public boolean isSealed() {
-        return typeElement.getModifiers().stream().map( Modifier::name ).anyMatch( "SEALED"::equals );
+        return metadata != null && metadata.isSealedType();
     }
 
     /**
-     * return the list of permitted TypeMirrors for the java 17+ sealed class
+     * return the list of permitted subclasses for the java 17+ sealed class
      */
-    @SuppressWarnings( "unchecked" )
-    public List<? extends TypeMirror> getPermittedSubclasses() {
-        if (SEALED_PERMITTED_SUBCLASSES_METHOD == null) {
-            return emptyList();
+    public List<Type> getPermittedSubclasses() {
+        if ( metadata == null ) {
+            return Collections.emptyList();
         }
-        try {
-            return (List<? extends TypeMirror>) SEALED_PERMITTED_SUBCLASSES_METHOD.invoke( typeElement );
+        List<TypeDescriptor> descriptors = metadata.permittedSubclasses();
+        if ( descriptors == null || descriptors.isEmpty() ) {
+            return Collections.emptyList();
         }
-        catch ( IllegalAccessException | IllegalArgumentException | InvocationTargetException e ) {
-            return emptyList();
+        return descriptors.stream()
+            .map( typeFactory::getType )
+            .collect( Collectors.toList() );
+    }
+
+    private Type resolveTopLevelType(Boolean importHint, Type component) {
+        if ( Boolean.TRUE.equals( importHint ) ) {
+            return null;
         }
+        if ( metadata != null ) {
+            Optional<TypeDescriptor> topLevelDescriptor = metadata.topLevelType();
+            if ( topLevelDescriptor.isPresent() ) {
+                return typeFactory.getType( topLevelDescriptor.get() );
+            }
+        }
+        if ( component != null && component.topLevelType != null ) {
+            return component.topLevelType;
+        }
+        if ( typeElementDescriptor == null ) {
+            return null;
+        }
+
+        ElementDescriptor current = typeElementDescriptor.enclosingElement().orElse( null );
+        while ( current != null && current.kind() != LangElementKind.PACKAGE ) {
+            ElementDescriptor parent = current.enclosingElement().orElse( null );
+            if ( parent == null || parent.kind() == LangElementKind.PACKAGE ) {
+                TypeDescriptor descriptor = current.asType();
+                if ( descriptor != null ) {
+                    return typeFactory.getType( descriptor );
+                }
+                break;
+            }
+            current = parent;
+        }
+        return null;
+    }
+
+    private String resolveNameWithTopLevel(Type component, String simpleName) {
+        if ( typeElementDescriptor == null ) {
+            if ( component != null ) {
+                String componentName = component.nameWithTopLevelTypeName != null
+                    ? component.nameWithTopLevelTypeName
+                    : component.getName();
+                if ( componentName == null ) {
+                    return simpleName;
+                }
+
+                String suffix = "";
+                String componentSimpleName = component.getName();
+                if ( simpleName != null && componentSimpleName != null
+                    && simpleName.length() >= componentSimpleName.length()
+                    && simpleName.startsWith( componentSimpleName ) ) {
+                    suffix = simpleName.substring( componentSimpleName.length() );
+                }
+
+                return componentName + suffix;
+            }
+            return simpleName;
+        }
+        Deque<String> names = new ArrayDeque<>();
+        names.addFirst( simpleName );
+        ElementDescriptor current = typeElementDescriptor.enclosingElement().orElse( null );
+        while ( current != null && current.kind() != LangElementKind.PACKAGE ) {
+            names.addFirst( current.simpleName().content() );
+            current = current.enclosingElement().orElse( null );
+        }
+        return String.join( ".", names );
     }
 
 }

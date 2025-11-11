@@ -117,8 +117,7 @@ public final class PresenceCheckMethodResolver {
         MappingBuilderContext ctx
     ) {
         MethodSelectors selectors = new MethodSelectors(
-            ctx.getTypeUtils(),
-            ctx.getElementUtils(),
+            ctx.getTypeFactory(),
             ctx.getMessager(),
             null
         );

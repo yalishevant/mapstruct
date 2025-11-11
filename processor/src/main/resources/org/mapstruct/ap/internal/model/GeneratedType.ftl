@@ -10,7 +10,7 @@
 package ${packageName};
 </#if>
 
-<#list importTypeNames as importedType>
+<#list ext.imports?default([]) as importedType>
 import ${importedType};
 </#list>
 

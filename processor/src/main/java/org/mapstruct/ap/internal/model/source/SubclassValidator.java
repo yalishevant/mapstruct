@@ -7,13 +7,13 @@ package org.mapstruct.ap.internal.model.source;
 
 import java.util.ArrayList;
 import java.util.List;
-import javax.lang.model.element.AnnotationMirror;
-import javax.lang.model.element.Element;
-import javax.lang.model.type.TypeMirror;
 
 import org.mapstruct.ap.internal.util.FormattingMessager;
 import org.mapstruct.ap.internal.util.Message;
-import org.mapstruct.ap.internal.util.TypeUtils;
+import org.mapstruct.ap.descriptor.AnnotationDescriptor;
+import org.mapstruct.ap.descriptor.ExecutableDescriptor;
+import org.mapstruct.ap.langmodel.api.LangTypes;
+import org.mapstruct.ap.descriptor.TypeDescriptor;
 
 /**
  * Handles the validation of multiple @SubclassMapping annotations on the same method.
@@ -23,35 +23,37 @@ import org.mapstruct.ap.internal.util.TypeUtils;
 public class SubclassValidator {
 
     private final FormattingMessager messager;
-    private final List<TypeMirror> handledSubclasses = new ArrayList<>();
-    private final TypeUtils typeUtils;
+    private final List<TypeDescriptor> handledSubclasses = new ArrayList<>();
+    private final LangTypes langTypes;
 
-    public SubclassValidator(FormattingMessager messager, TypeUtils typeUtils) {
+    public SubclassValidator(FormattingMessager messager, LangTypes langTypes) {
         this.messager = messager;
-        this.typeUtils = typeUtils;
+        this.langTypes = langTypes;
     }
 
-    public boolean isValidUsage(Element e, AnnotationMirror annotation, TypeMirror sourceType) {
-        for ( TypeMirror typeMirror : handledSubclasses ) {
-            if ( typeUtils.isSameType( sourceType, typeMirror ) ) {
+    public boolean isValidUsage(ExecutableDescriptor executable,
+                                AnnotationDescriptor annotation,
+                                TypeDescriptor sourceType) {
+        for ( TypeDescriptor typeDescriptor : handledSubclasses ) {
+            if ( langTypes.isSameType( sourceType, typeDescriptor ) ) {
                 messager
                         .printMessage(
-                            e,
+                            executable,
                             annotation,
                             Message.SUBCLASSMAPPING_DOUBLE_SOURCE_SUBCLASS,
-                            sourceType );
+                            sourceType.displayName() );
                 return false;
             }
-            if ( typeUtils.isAssignable( sourceType, typeMirror ) ) {
+            if ( langTypes.isAssignable( sourceType, typeDescriptor ) ) {
                 messager
                         .printMessage(
-                            e,
+                            executable,
                             annotation,
                             Message.SUBCLASSMAPPING_ILLOGICAL_ORDER,
-                            sourceType,
-                            typeMirror,
-                            sourceType,
-                            typeMirror );
+                            sourceType.displayName(),
+                            typeDescriptor.displayName(),
+                            sourceType.displayName(),
+                            typeDescriptor.displayName() );
                 return false;
             }
         }

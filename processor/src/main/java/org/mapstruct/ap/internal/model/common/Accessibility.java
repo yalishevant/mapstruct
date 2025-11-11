@@ -7,7 +7,7 @@ package org.mapstruct.ap.internal.model.common;
 
 import java.util.Set;
 
-import javax.lang.model.element.Modifier;
+import org.mapstruct.ap.descriptor.LangModifier;
 
 /**
  * Accessibility of an element
@@ -27,14 +27,14 @@ public enum Accessibility {
         return keyword;
     }
 
-    public static Accessibility fromModifiers(Set<Modifier> modifiers) {
-        if ( modifiers.contains( Modifier.PUBLIC ) ) {
+    public static Accessibility fromModifiers(Set<LangModifier> modifiers) {
+        if ( modifiers.contains( LangModifier.PUBLIC ) ) {
             return PUBLIC;
         }
-        else if ( modifiers.contains( Modifier.PROTECTED ) ) {
+        else if ( modifiers.contains( LangModifier.PROTECTED ) ) {
             return PROTECTED;
         }
-        else if ( modifiers.contains( Modifier.PRIVATE ) ) {
+        else if ( modifiers.contains( LangModifier.PRIVATE ) ) {
             return PRIVATE;
         }
 

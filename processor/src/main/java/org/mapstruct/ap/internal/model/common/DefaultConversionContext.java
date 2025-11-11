@@ -49,7 +49,7 @@ public class DefaultConversionContext implements ConversionContext {
                 validationResult.printErrorMessage(
                     messager,
                     formattingParameters.getElement(),
-                    formattingParameters.getMirror(),
+                    formattingParameters.getAnnotation(),
                     formattingParameters.getDateAnnotationValue()
                 );
             }

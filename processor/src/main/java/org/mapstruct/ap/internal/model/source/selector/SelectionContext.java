@@ -100,6 +100,7 @@ public class SelectionContext {
                 source,
                 target,
                 mappingMethod,
+                criteria,
                 typeFactory
             )
         );
@@ -224,11 +225,17 @@ public class SelectionContext {
     private static List<ParameterBinding> getAvailableParameterBindingsFromSourceType(Type sourceType,
                                                                                       Type targetType,
                                                                                       Method mappingMethod,
+                                                                                      SelectionCriteria criteria,
                                                                                       TypeFactory typeFactory) {
 
         List<ParameterBinding> availableParams = new ArrayList<>();
 
-        availableParams.add( ParameterBinding.forSourceTypeBinding( sourceType ) );
+        if ( sourceType != null ) {
+            availableParams.add( ParameterBinding.forSourceTypeBinding( sourceType ) );
+        }
+        else if ( criteria != null && criteria.getSourceRHS() != null ) {
+            availableParams.add( ParameterBinding.fromSourceRHS( criteria.getSourceRHS() ) );
+        }
         addSourcePropertyNameBindings( availableParams, sourceType, typeFactory );
 
         for ( Parameter param : mappingMethod.getParameters() ) {

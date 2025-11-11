@@ -11,8 +11,6 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Objects;
 import java.util.Set;
-import javax.lang.model.element.AnnotationMirror;
-import javax.lang.model.element.AnnotationValue;
 
 import org.mapstruct.ap.internal.model.common.Parameter;
 import org.mapstruct.ap.internal.model.common.Type;
@@ -22,6 +20,8 @@ import org.mapstruct.ap.internal.model.source.Method;
 import org.mapstruct.ap.internal.util.FormattingMessager;
 import org.mapstruct.ap.internal.util.Message;
 import org.mapstruct.ap.internal.util.Strings;
+import org.mapstruct.ap.descriptor.AnnotationDescriptor;
+import org.mapstruct.ap.descriptor.AnnotationValueDescriptor;
 
 import static org.mapstruct.ap.internal.util.Collections.first;
 
@@ -129,9 +129,9 @@ public class TargetReference {
         // mapping parameters
         private String targetName = null;
         private MappingOptions mapping;
-        private AnnotationMirror annotationMirror = null;
-        private AnnotationValue targetAnnotationValue = null;
-        private AnnotationValue sourceAnnotationValue = null;
+        private AnnotationDescriptor annotation = null;
+        private AnnotationValueDescriptor targetAnnotationValue = null;
+        private AnnotationValueDescriptor sourceAnnotationValue = null;
 
         public Builder messager(FormattingMessager messager) {
             this.messager = messager;
@@ -141,7 +141,7 @@ public class TargetReference {
         public Builder mapping(MappingOptions mapping) {
             this.mapping = mapping;
             this.targetName = mapping.getTargetName();
-            this.annotationMirror = mapping.getMirror();
+            this.annotation = mapping.getAnnotation();
             this.targetAnnotationValue = mapping.getTargetAnnotationValue();
             this.sourceAnnotationValue = mapping.getSourceAnnotationValue();
             return this;
@@ -181,8 +181,8 @@ public class TargetReference {
             String targetNameTrimmed = targetName.trim();
             if ( !targetName.equals( targetNameTrimmed ) ) {
                 messager.printMessage(
-                    method.getExecutable(),
-                    annotationMirror,
+                    method.getExecutableDescriptor(),
+                    annotation,
                     targetAnnotationValue,
                     Message.PROPERTYMAPPING_WHITESPACE_TRIMMED,
                     targetName,

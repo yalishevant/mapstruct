@@ -11,9 +11,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
-import javax.lang.model.element.AnnotationMirror;
-import javax.lang.model.element.AnnotationValue;
-import javax.lang.model.type.DeclaredType;
 
 import org.mapstruct.ap.internal.model.common.Parameter;
 import org.mapstruct.ap.internal.model.common.Type;
@@ -25,6 +22,9 @@ import org.mapstruct.ap.internal.util.Message;
 import org.mapstruct.ap.internal.util.Strings;
 import org.mapstruct.ap.internal.util.accessor.PresenceCheckAccessor;
 import org.mapstruct.ap.internal.util.accessor.ReadAccessor;
+import org.mapstruct.ap.descriptor.AnnotationDescriptor;
+import org.mapstruct.ap.descriptor.AnnotationValueDescriptor;
+import org.mapstruct.ap.descriptor.ElementDescriptor;
 
 import static org.mapstruct.ap.internal.model.beanmapping.PropertyEntry.forSourceReference;
 import static org.mapstruct.ap.internal.util.Collections.last;
@@ -66,8 +66,8 @@ public class SourceReference extends AbstractReference {
         private boolean isForwarded = false;
         private Method templateMethod = null;
         private String sourceName;
-        private AnnotationMirror annotationMirror;
-        private AnnotationValue sourceAnnotationValue;
+        private AnnotationDescriptor annotation;
+        private AnnotationValueDescriptor sourceAnnotationValue;
 
         public BuilderFromMapping messager(FormattingMessager messager) {
             this.messager = messager;
@@ -76,7 +76,7 @@ public class SourceReference extends AbstractReference {
 
         public BuilderFromMapping mapping(MappingOptions mapping) {
             this.sourceName = mapping.getSourceName();
-            this.annotationMirror = mapping.getMirror();
+            this.annotation = mapping.getAnnotation();
             this.sourceAnnotationValue = mapping.getSourceAnnotationValue();
             if ( mapping.getInheritContext() != null ) {
                 isForwarded = mapping.getInheritContext().isForwarded();
@@ -111,8 +111,8 @@ public class SourceReference extends AbstractReference {
             String sourceNameTrimmed = sourceName.trim();
             if ( !sourceName.equals( sourceNameTrimmed ) ) {
                 messager.printMessage(
-                    method.getExecutable(),
-                    annotationMirror,
+                    method.getExecutableDescriptor(),
+                    annotation,
                     sourceAnnotationValue,
                     Message.PROPERTYMAPPING_WHITESPACE_TRIMMED,
                     sourceName,
@@ -328,10 +328,14 @@ public class SourceReference extends AbstractReference {
                 ReadAccessor readAccessor = noBoundsType.getReadAccessor( entryNames[i], i > 0 || allowedMapToBean );
                 if ( readAccessor != null ) {
                     PresenceCheckAccessor presenceChecker = noBoundsType.getPresenceChecker( entryNames[i] );
-                    newType = typeFactory.getReturnType(
-                        (DeclaredType) noBoundsType.getTypeMirror(),
-                        readAccessor
-                    );
+                    ElementDescriptor element = readAccessor.getElement();
+                    if ( element instanceof org.mapstruct.ap.descriptor.ExecutableDescriptor ) {
+                        newType = typeFactory.getReturnType( noBoundsType,
+                            (org.mapstruct.ap.descriptor.ExecutableDescriptor) element );
+                    }
+                    else {
+                        newType = typeFactory.getType( readAccessor.getAccessedType() );
+                    }
                     sourceEntries.add( forSourceReference(
                         Arrays.copyOf( entryNames, i + 1 ),
                         readAccessor,
@@ -348,7 +352,7 @@ public class SourceReference extends AbstractReference {
         }
 
         private void reportMappingError(Message msg, Object... objects) {
-            messager.printMessage( method.getExecutable(), annotationMirror, sourceAnnotationValue, msg, objects );
+            messager.printMessage( method.getExecutableDescriptor(), annotation, sourceAnnotationValue, msg, objects );
         }
     }
 

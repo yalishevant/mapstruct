@@ -17,6 +17,9 @@ import org.mapstruct.ap.internal.model.common.Type;
 import org.mapstruct.ap.internal.model.presence.SuffixPresenceCheck;
 import org.mapstruct.ap.internal.util.Strings;
 import org.mapstruct.ap.internal.util.accessor.PresenceCheckAccessor;
+import org.mapstruct.ap.internal.util.accessor.ReadAccessor;
+import org.mapstruct.ap.descriptor.ElementDescriptor;
+import org.mapstruct.ap.descriptor.ExecutableDescriptor;
 
 /**
  * This method is used to convert the nested properties as listed in propertyEntries into a method
@@ -68,16 +71,29 @@ public class NestedPropertyMappingMethod extends MappingMethod {
             }
 
             String previousPropertyName = sourceParameter.getName();
+            Type owningType = sourceParameter.getType();
             for ( PropertyEntry propertyEntry : propertyEntries ) {
                 String safeName = Strings.getSafeVariableName( propertyEntry.getName(), existingVariableNames );
                 safePropertyEntries.add( new SafePropertyEntry( propertyEntry, safeName, previousPropertyName ) );
                 existingVariableNames.add( safeName );
-                thrownTypes.addAll( ctx.getTypeFactory().getThrownTypes(
-                        propertyEntry.getReadAccessor() ) );
+                thrownTypes.addAll( resolveThrownTypes( owningType, propertyEntry.getReadAccessor() ) );
                 previousPropertyName = safeName;
+                owningType = propertyEntry.getType();
             }
             method.addThrownTypes( thrownTypes );
             return new NestedPropertyMappingMethod( method, safePropertyEntries );
+        }
+
+        private List<Type> resolveThrownTypes(Type owningType, ReadAccessor accessor) {
+            if ( accessor == null || owningType == null ) {
+                return java.util.Collections.emptyList();
+            }
+
+            ElementDescriptor descriptor = accessor.getElement();
+            if ( descriptor instanceof ExecutableDescriptor ) {
+                return ctx.getTypeFactory().getThrownTypes( owningType, (ExecutableDescriptor) descriptor );
+            }
+            return java.util.Collections.emptyList();
         }
     }
 
@@ -238,4 +254,3 @@ public class NestedPropertyMappingMethod extends MappingMethod {
         }
     }
 }
-

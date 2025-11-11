@@ -10,13 +10,12 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
-import javax.lang.model.type.DeclaredType;
-import javax.lang.model.type.TypeMirror;
 
 import org.mapstruct.ap.internal.model.common.Parameter;
 import org.mapstruct.ap.internal.model.common.Type;
 import org.mapstruct.ap.internal.model.common.TypeFactory;
-import org.mapstruct.ap.internal.util.TypeUtils;
+import org.mapstruct.ap.descriptor.TypeDescriptor;
+import org.mapstruct.ap.descriptor.TypeElementDescriptor;
 
 /**
  * SourceMethodMatcher $8.4 of the JavaLanguage specification describes a method body as such:
@@ -46,11 +45,9 @@ import org.mapstruct.ap.internal.util.TypeUtils;
 public class MethodMatcher {
 
     private final SourceMethod candidateMethod;
-    private final TypeUtils typeUtils;
     private final TypeFactory typeFactory;
 
-    MethodMatcher(TypeUtils typeUtils, TypeFactory typeFactory, SourceMethod candidateMethod) {
-        this.typeUtils = typeUtils;
+    MethodMatcher(TypeFactory typeFactory, SourceMethod candidateMethod) {
         this.candidateMethod = candidateMethod;
         this.typeFactory = typeFactory;
     }
@@ -66,7 +63,7 @@ public class MethodMatcher {
     boolean matches(List<Type> sourceTypes, Type targetType) {
 
         GenericAnalyser analyser =
-            new GenericAnalyser( typeFactory, typeUtils, candidateMethod, sourceTypes, targetType );
+            new GenericAnalyser( typeFactory, candidateMethod, sourceTypes, targetType );
         if ( !analyser.lineUp() ) {
             return false;
         }
@@ -120,15 +117,13 @@ public class MethodMatcher {
     private static class GenericAnalyser {
 
         private TypeFactory typeFactory;
-        private TypeUtils typeUtils;
         private Method candidateMethod;
         private List<Type> sourceTypes;
         private Type targetType;
 
-        GenericAnalyser(TypeFactory typeFactory, TypeUtils typeUtils, Method candidateMethod,
+        GenericAnalyser(TypeFactory typeFactory, Method candidateMethod,
                                List<Type> sourceTypes, Type targetType) {
             this.typeFactory = typeFactory;
-            this.typeUtils = typeUtils;
             this.candidateMethod = candidateMethod;
             this.sourceTypes = sourceTypes;
             this.targetType = targetType;
@@ -293,12 +288,24 @@ public class MethodMatcher {
                         return false;
                     }
 
+                    collectArrayTypeVarMatches( aCandidateMethodType, matchingType, typeVarCandidate );
+
+                    if ( aCandidateMethodType.isArrayTypeVar()
+                        && matchingType != null
+                        && matchingType.isArrayType()
+                        && resolved.getMatch() != null ) {
+                        typeVarCandidate.pairs.add( new Type.ResolvedPair( aCandidateMethodType, matchingType ) );
+                    }
+
                 }
                 else if ( resolved.getParameter().isArrayTypeVar()
                     && resolved.getParameter().getComponentType().isAssignableTo( mthdParType ) ) {
                     // e.g. <T extends Number> T map( List<T[]> in ), the match for T should be assignable
                     // to the parameter T extends Number
                     typeVarCandidate.pairs.add( resolved );
+                    if ( matchingType != null && matchingType.isArrayType() ) {
+                        typeVarCandidate.pairs.add( new Type.ResolvedPair( aCandidateMethodType, matchingType ) );
+                    }
                 }
                 else if ( resolved.getParameter().isWildCardBoundByTypeVar()
                     && resolved.getParameter().getTypeBound().isAssignableTo( mthdParType ) )  {
@@ -344,6 +351,26 @@ public class MethodMatcher {
             return true;
         }
 
+        private void collectArrayTypeVarMatches(Type declaredType, Type matchingType, TypeVarCandidate candidate) {
+            if ( declaredType == null || matchingType == null ) {
+                return;
+            }
+
+            if ( declaredType.isArrayTypeVar() && matchingType.isArrayType() ) {
+                candidate.pairs.add( new Type.ResolvedPair( declaredType, matchingType ) );
+            }
+
+            List<Type> declaredParameters = declaredType.getTypeParameters();
+            List<Type> matchingParameters = matchingType.getTypeParameters();
+            if ( declaredParameters.size() != matchingParameters.size() ) {
+                return;
+            }
+
+            for ( int i = 0; i < declaredParameters.size(); i++ ) {
+                collectArrayTypeVarMatches( declaredParameters.get( i ), matchingParameters.get( i ), candidate );
+            }
+        }
+
         private boolean hasGenericTypeParameters(Type typeFromCandidateMethod) {
             for ( Type typeParam : typeFromCandidateMethod.getTypeParameters() ) {
                 if ( typeParam.isTypeVar() || typeParam.isWildCardBoundByTypeVar() || typeParam.isArrayTypeVar() ) {
@@ -363,38 +390,40 @@ public class MethodMatcher {
                 return pairs.get( typeFromCandidateMethod );
             }
             else if ( hasGenericTypeParameters( typeFromCandidateMethod ) ) {
-                TypeMirror[] typeArgs = new TypeMirror[ typeFromCandidateMethod.getTypeParameters().size() ];
-                for ( int i = 0; i < typeFromCandidateMethod.getTypeParameters().size(); i++ ) {
-                    Type typeFromCandidateMethodTypeParameter = typeFromCandidateMethod.getTypeParameters().get( i );
-                    if ( hasGenericTypeParameters( typeFromCandidateMethodTypeParameter ) ) {
-                        // nested type var, lets resolve some more (recur)
-                        Type matchingType = resolve( typeFromCandidateMethodTypeParameter, pairs );
+                List<TypeDescriptor> typeArgs = new ArrayList<>( typeFromCandidateMethod.getTypeParameters().size() );
+                for ( Type typeParameter : typeFromCandidateMethod.getTypeParameters() ) {
+                    TypeDescriptor argumentDescriptor;
+                    if ( hasGenericTypeParameters( typeParameter ) ) {
+                        Type matchingType = resolve( typeParameter, pairs );
                         if ( matchingType == null ) {
-                            // something went wrong
                             return null;
                         }
-                        typeArgs[i] = matchingType.getTypeMirror();
+                        argumentDescriptor = matchingType.getTypeDescriptor();
                     }
-                    else if ( typeFromCandidateMethodTypeParameter.isWildCardBoundByTypeVar()
-                        || typeFromCandidateMethodTypeParameter.isTypeVar()
-                        || typeFromCandidateMethodTypeParameter.isArrayTypeVar()
-                    ) {
-                        Type matchingType = pairs.get( typeFromCandidateMethodTypeParameter );
+                    else if ( typeParameter.isWildCardBoundByTypeVar()
+                        || typeParameter.isTypeVar()
+                        || typeParameter.isArrayTypeVar() ) {
+                        Type matchingType = pairs.get( typeParameter );
                         if ( matchingType == null ) {
-                            // something went wrong
                             return null;
                         }
-                        // Use the boxed equivalent for the type arguments,
-                        // because a primitive type cannot be a type argument
-                        typeArgs[i] = matchingType.getBoxedEquivalent().getTypeMirror();
+                        argumentDescriptor = matchingType.getBoxedEquivalent().getTypeDescriptor();
                     }
                     else {
-                        // it is not a type var (e.g. Map<String, T> ), String is not a type var
-                        typeArgs[i] = typeFromCandidateMethodTypeParameter.getTypeMirror();
+                        argumentDescriptor = typeParameter.getTypeDescriptor();
                     }
+
+                    if ( argumentDescriptor == null ) {
+                        return null;
+                    }
+                    typeArgs.add( argumentDescriptor );
                 }
-                DeclaredType typeArg = typeUtils.getDeclaredType( typeFromCandidateMethod.getTypeElement(), typeArgs );
-                return typeFactory.getType( typeArg );
+                TypeElementDescriptor typeElementDescriptor = typeFromCandidateMethod.getTypeElementDescriptor();
+                if ( typeElementDescriptor == null ) {
+                    return null;
+                }
+                TypeDescriptor parameterized = typeFactory.langTypes().declaredType( typeElementDescriptor, typeArgs );
+                return parameterized != null ? typeFactory.getType( parameterized ) : null;
             }
             else {
                 // its not a type var or generic parameterized (e.g. just a plain type)
@@ -418,4 +447,3 @@ public class MethodMatcher {
     }
 
 }
-

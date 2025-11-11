@@ -6,23 +6,31 @@
 package org.mapstruct.ap.internal.model.source.selector;
 
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
-import javax.lang.model.element.Element;
-import javax.lang.model.element.ElementKind;
-import javax.lang.model.element.TypeElement;
-import javax.lang.model.type.TypeMirror;
+import java.util.Objects;
+import java.util.Set;
 
 import org.mapstruct.ap.internal.model.common.Type;
 import org.mapstruct.ap.internal.model.source.Method;
 import org.mapstruct.ap.internal.model.source.SourceMethod;
-import org.mapstruct.ap.internal.util.TypeUtils;
+import org.mapstruct.ap.internal.util.AnnotationDescriptorUtils;
+import org.mapstruct.ap.internal.util.AnnotationValueUtils;
+import org.mapstruct.ap.descriptor.AnnotationDescriptor;
+import org.mapstruct.ap.descriptor.AnnotationValueDescriptor;
+import org.mapstruct.ap.descriptor.ElementDescriptor;
+import org.mapstruct.ap.descriptor.ExecutableDescriptor;
+import org.mapstruct.ap.descriptor.FieldDescriptor;
+import org.mapstruct.ap.descriptor.LangElementKind;
+import org.mapstruct.ap.langmodel.api.LangElements;
+import org.mapstruct.ap.langmodel.api.LangTypes;
+import org.mapstruct.ap.descriptor.TypeDescriptor;
+import org.mapstruct.ap.descriptor.TypeElementDescriptor;
 
 /**
- * Finds the {@code XmlElementRef} annotation on a field (of the mapping result type or its
- * super types) matching the
+ * Finds the {@code XmlElementRef} annotation on a field (of the mapping result type or its super types) matching the
  * target property name. Then selects those methods with matching {@code name} and {@code scope} attributes of the
- * {@code XmlElementDecl} annotation, if that is present. Matching happens in the following
- * order:
+ * {@code XmlElementDecl} annotation, if that is present. Matching happens in the following order:
  * <ol>
  * <li>Name and Scope matches</li>
  * <li>Scope matches</li>
@@ -32,16 +40,17 @@ import org.mapstruct.ap.internal.util.TypeUtils;
  * the given method is not annotated with {@code XmlElementDecl} it will be considered as matching.
  *
  * @author Sjaak Derksen
- *
  * @see JavaxXmlElementDeclSelector
  * @see JakartaXmlElementDeclSelector
  */
 abstract class XmlElementDeclSelector implements MethodSelector {
 
-    private final TypeUtils typeUtils;
+    private final LangElements langElements;
+    private final LangTypes langTypes;
 
-    XmlElementDeclSelector(TypeUtils typeUtils) {
-        this.typeUtils = typeUtils;
+    XmlElementDeclSelector(LangElements langElements, LangTypes langTypes) {
+        this.langElements = Objects.requireNonNull( langElements );
+        this.langTypes = Objects.requireNonNull( langTypes );
     }
 
     @Override
@@ -53,8 +62,7 @@ abstract class XmlElementDeclSelector implements MethodSelector {
         List<SelectedMethod<T>> nameMatches = new ArrayList<>();
         List<SelectedMethod<T>> scopeMatches = new ArrayList<>();
         List<SelectedMethod<T>> nameAndScopeMatches = new ArrayList<>();
-        XmlElementRefInfo xmlElementRefInfo =
-            findXmlElementRef( resultType, targetPropertyName );
+        XmlElementRefInfo xmlElementRefInfo = findXmlElementRef( resultType, targetPropertyName );
 
         for ( SelectedMethod<T> candidate : methods ) {
             if ( !( candidate.getMethod() instanceof SourceMethod ) ) {
@@ -62,18 +70,21 @@ abstract class XmlElementDeclSelector implements MethodSelector {
             }
 
             SourceMethod candidateMethod = (SourceMethod) candidate.getMethod();
-            XmlElementDeclInfo xmlElementDeclInfo = getXmlElementDeclInfo( candidateMethod.getExecutable() );
+            ExecutableDescriptor executable = candidateMethod.getExecutableDescriptor();
+            XmlElementDeclInfo xmlElementDeclInfo = getXmlElementDeclInfo( executable );
 
             if ( xmlElementDeclInfo == null ) {
                 continue;
             }
 
             String name = xmlElementDeclInfo.nameValue();
-            TypeMirror scope = xmlElementDeclInfo.scopeType();
+            TypeDescriptor scope = xmlElementDeclInfo.scopeType();
 
             boolean nameIsSetAndMatches = name != null && name.equals( xmlElementRefInfo.nameValue() );
             boolean scopeIsSetAndMatches =
-                scope != null && typeUtils.isSameType( scope, xmlElementRefInfo.sourceType() );
+                scope != null
+                    && xmlElementRefInfo.sourceType() != null
+                    && langTypes.isSameType( scope, xmlElementRefInfo.sourceType() );
 
             if ( nameIsSetAndMatches ) {
                 if ( scopeIsSetAndMatches ) {
@@ -102,65 +113,100 @@ abstract class XmlElementDeclSelector implements MethodSelector {
         }
     }
 
-    /**
-     * Iterate through resultType and its super types to find a field named targetPropertyName and return information
-     * about:
-     * <ul>
-     * <li>what the value of the name property of the XmlElementRef annotation on that field was</li>
-     * <li>on which type the field was found</li>
-     * </ul>
-     *
-     * @param resultType starting point of the iteration
-     * @param targetPropertyName name of the field we are looking for
-     * @return an XmlElementRefInfo containing the information
-     */
     private XmlElementRefInfo findXmlElementRef(Type resultType, String targetPropertyName) {
-        TypeMirror startingMirror = resultType.getTypeMirror();
-        XmlElementRefInfo defaultInfo = new XmlElementRefInfo( targetPropertyName, startingMirror );
-        if ( targetPropertyName == null ) {
-            /*
-             * sometimes MethodSelectors seem to be called with criteria.getTargetPropertyName() == null so we need to
-             * avoid NPEs for that case.
-             */
+        TypeDescriptor startingDescriptor = resultType != null ? resultType.getTypeDescriptor() : null;
+        XmlElementRefInfo defaultInfo = new XmlElementRefInfo( targetPropertyName, startingDescriptor );
+
+        if ( targetPropertyName == null || startingDescriptor == null ) {
             return defaultInfo;
         }
 
-        TypeMirror currentMirror = startingMirror;
-        TypeElement currentElement = resultType.getTypeElement();
+        Set<String> visited = new HashSet<>();
+        TypeDescriptor current = startingDescriptor;
 
-        /*
-         * Outer loop for resultType and its super types. "currentElement" will be null once we reach Object and try to
-         * get a TypeElement for its super type.
-         */
-        while ( currentElement != null ) {
-            /*
-             * Inner loop tries to find a field with the targetPropertyName and assumes that where the XmlElementRef is
-             * set
-             */
-            for ( Element enclosed : currentElement.getEnclosedElements() ) {
-                if ( enclosed.getKind().equals( ElementKind.FIELD )
-                    && enclosed.getSimpleName().contentEquals( targetPropertyName ) ) {
-                    XmlElementRefInfo xmlElementRefInfo = getXmlElementRefInfo( enclosed );
-                    if ( xmlElementRefInfo != null ) {
-                        return new XmlElementRefInfo( xmlElementRefInfo.nameValue(), currentMirror );
+        while ( current != null && visited.add( current.id() ) ) {
+            TypeElementDescriptor currentElement = langTypes.asElement( current );
+            if ( currentElement == null ) {
+                break;
+            }
+
+            for ( FieldDescriptor field : langElements.enclosedFields( currentElement ) ) {
+                ElementDescriptor enclosing = field.enclosingElement().orElse( null );
+                if ( !( enclosing instanceof TypeElementDescriptor ) ) {
+                    continue;
+                }
+                if ( !currentElement.id().equals( ( (TypeElementDescriptor) enclosing ).id() ) ) {
+                    continue;
+                }
+                if ( targetPropertyName.equals( field.simpleName().content() ) ) {
+                    String name = extractXmlElementRefName( field );
+                    if ( name != null ) {
+                        return new XmlElementRefInfo( name, current );
                     }
                 }
             }
-            currentMirror = currentElement.getSuperclass();
-            currentElement = (TypeElement) typeUtils.asElement( currentMirror );
+
+            current = directSuperClass( current );
         }
+
         return defaultInfo;
     }
 
-    abstract XmlElementDeclInfo getXmlElementDeclInfo(Element element);
+    private String extractXmlElementRefName(FieldDescriptor field) {
+        AnnotationDescriptor annotation = AnnotationDescriptorUtils
+            .findAnnotation( langElements, field, xmlElementRefAnnotation() )
+            .orElse( null );
+        if ( annotation == null ) {
+            return null;
+        }
 
-    abstract XmlElementRefInfo getXmlElementRefInfo(Element element);
+        AnnotationValueDescriptor value = AnnotationDescriptorUtils.getValue( annotation, "name" );
+        return AnnotationValueUtils.asString( value );
+    }
+
+    private TypeDescriptor directSuperClass(TypeDescriptor type) {
+        if ( type == null ) {
+            return null;
+        }
+        for ( TypeDescriptor candidate : langTypes.directSupertypes( type ) ) {
+            if ( candidate == null ) {
+                continue;
+            }
+            TypeElementDescriptor element = langTypes.asElement( candidate );
+            if ( element != null && element.kind() == LangElementKind.CLASS ) {
+                return candidate;
+            }
+        }
+        return null;
+    }
+
+    private XmlElementDeclInfo getXmlElementDeclInfo(ExecutableDescriptor executable) {
+        AnnotationDescriptor annotation = AnnotationDescriptorUtils
+            .findAnnotation( langElements, executable, xmlElementDeclAnnotation() )
+            .orElse( null );
+        if ( annotation == null ) {
+            return null;
+        }
+
+        String name = AnnotationValueUtils.asString(
+            AnnotationDescriptorUtils.getValue( annotation, "name" )
+        );
+        TypeDescriptor scope = AnnotationValueUtils.asType(
+            AnnotationDescriptorUtils.getValue( annotation, "scope" )
+        );
+        return new XmlElementDeclInfo( name, scope );
+    }
+
+    protected abstract String xmlElementDeclAnnotation();
+
+    protected abstract String xmlElementRefAnnotation();
 
     static class XmlElementRefInfo {
-        private final String nameValue;
-        private final TypeMirror sourceType;
 
-        XmlElementRefInfo(String nameValue, TypeMirror sourceType) {
+        private final String nameValue;
+        private final TypeDescriptor sourceType;
+
+        XmlElementRefInfo(String nameValue, TypeDescriptor sourceType) {
             this.nameValue = nameValue;
             this.sourceType = sourceType;
         }
@@ -169,23 +215,17 @@ abstract class XmlElementDeclSelector implements MethodSelector {
             return nameValue;
         }
 
-        TypeMirror sourceType() {
+        TypeDescriptor sourceType() {
             return sourceType;
         }
     }
 
-    /**
-     * A class, whose purpose is to combine the use of
-     * {@link org.mapstruct.ap.internal.gem.XmlElementDeclGem}
-     * and
-     * {@link org.mapstruct.ap.internal.gem.jakarta.XmlElementDeclGem}.
-     */
     static class XmlElementDeclInfo {
 
         private final String nameValue;
-        private final TypeMirror scopeType;
+        private final TypeDescriptor scopeType;
 
-        XmlElementDeclInfo(String nameValue, TypeMirror scopeType) {
+        XmlElementDeclInfo(String nameValue, TypeDescriptor scopeType) {
             this.nameValue = nameValue;
             this.scopeType = scopeType;
         }
@@ -194,7 +234,7 @@ abstract class XmlElementDeclSelector implements MethodSelector {
             return nameValue;
         }
 
-        TypeMirror scopeType() {
+        TypeDescriptor scopeType() {
             return scopeType;
         }
     }

@@ -8,14 +8,13 @@ package org.mapstruct.ap.internal.model.common;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashMap;
-import java.util.HashSet;
-import java.util.Iterator;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.NavigableMap;
 import java.util.NavigableSet;
+import java.util.Optional;
 import java.util.Set;
 import java.util.SortedMap;
 import java.util.SortedSet;
@@ -25,39 +24,39 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.ConcurrentNavigableMap;
 import java.util.concurrent.ConcurrentSkipListMap;
-import javax.lang.model.element.Element;
-import javax.lang.model.element.ElementKind;
-import javax.lang.model.element.ExecutableElement;
-import javax.lang.model.element.TypeElement;
-import javax.lang.model.element.VariableElement;
-import javax.lang.model.type.ArrayType;
-import javax.lang.model.type.DeclaredType;
-import javax.lang.model.type.ExecutableType;
-import javax.lang.model.type.PrimitiveType;
-import javax.lang.model.type.TypeKind;
-import javax.lang.model.type.TypeMirror;
-import javax.lang.model.type.TypeVariable;
-import javax.lang.model.type.WildcardType;
+import java.util.stream.Collectors;
 
 import org.mapstruct.ap.internal.gem.BuilderGem;
 import org.mapstruct.ap.internal.util.AnnotationProcessingException;
-import org.mapstruct.ap.internal.util.Collections;
-import org.mapstruct.ap.internal.util.ElementUtils;
-import org.mapstruct.ap.internal.util.Extractor;
 import org.mapstruct.ap.internal.util.FormattingMessager;
 import org.mapstruct.ap.internal.util.JavaCollectionConstants;
 import org.mapstruct.ap.internal.util.JavaStreamConstants;
 import org.mapstruct.ap.internal.util.Message;
-import org.mapstruct.ap.internal.util.NativeTypes;
 import org.mapstruct.ap.internal.util.RoundContext;
-import org.mapstruct.ap.internal.util.Strings;
-import org.mapstruct.ap.internal.util.TypeUtils;
 import org.mapstruct.ap.internal.util.accessor.Accessor;
 import org.mapstruct.ap.internal.version.VersionInformation;
-import org.mapstruct.ap.spi.AstModifyingAnnotationProcessor;
+import org.mapstruct.ap.langmodel.AnnotationGemFactory;
+import org.mapstruct.ap.langmodel.AnnotationGemsCapability;
+import org.mapstruct.ap.descriptor.BuilderDescriptor;
+import org.mapstruct.ap.spi.lang.BuilderIntrospector;
+import org.mapstruct.ap.langmodel.BuilderIntrospectorCapability;
+import org.mapstruct.ap.descriptor.ElementDescriptor;
+import org.mapstruct.ap.descriptor.ExecutableDescriptor;
+import org.mapstruct.ap.langmodel.ExecutableSignature;
+import org.mapstruct.ap.langmodel.LangDescriptorFactory;
+import org.mapstruct.ap.langmodel.api.LangElements;
+import org.mapstruct.ap.internal.langmodel.MissingLangModelCapabilityException;
+import org.mapstruct.ap.langmodel.LangModelContext;
+import org.mapstruct.ap.langmodel.LangModelElementQuery;
+import org.mapstruct.ap.langmodel.LangModelTypeSystem;
+import org.mapstruct.ap.descriptor.LangTypeKind;
+import org.mapstruct.ap.langmodel.api.LangTypes;
+import org.mapstruct.ap.descriptor.ParameterDescriptor;
+import org.mapstruct.ap.descriptor.TypeDescriptor;
+import org.mapstruct.ap.descriptor.TypeElementDescriptor;
+import org.mapstruct.ap.langmodel.TypeIntrospector;
 import org.mapstruct.ap.spi.BuilderInfo;
 import org.mapstruct.ap.spi.MoreThanOneBuilderCreationMethodException;
-import org.mapstruct.ap.spi.TypeHierarchyErroneousException;
 
 import static org.mapstruct.ap.internal.model.common.ImplementationType.withDefaultConstructor;
 import static org.mapstruct.ap.internal.model.common.ImplementationType.withFactoryMethod;
@@ -71,54 +70,76 @@ import static org.mapstruct.ap.internal.model.common.ImplementationType.withLoad
  */
 public class TypeFactory {
 
-    private static final Extractor<BuilderInfo, String> BUILDER_INFO_CREATION_METHOD_EXTRACTOR =
-        builderInfo -> {
-            ExecutableElement builderCreationMethod = builderInfo.getBuilderCreationMethod();
-
-            StringBuilder sb = new StringBuilder( builderCreationMethod.getSimpleName() );
-
-            sb.append( '(' );
-            for ( VariableElement parameter : builderCreationMethod.getParameters() ) {
-                sb.append( parameter );
-            }
-
-            sb.append( ')' );
-            return sb.toString();
-        };
     private static final String LINKED_HASH_SET_FACTORY_METHOD_NAME = "newLinkedHashSet";
     private static final String LINKED_HASH_MAP_FACTORY_METHOD_NAME = "newLinkedHashMap";
 
-    private final ElementUtils elementUtils;
-    private final TypeUtils typeUtils;
+    private final LangModelContext<?, ?, ?, ?> langModelContext;
+    private final LangModelTypeSystem<?, ?, ?, ?> typeSystem;
+    private final LangModelElementQuery elementQuery;
+    private final LangTypes langTypes;
+    private final LangElements langElements;
+    private final LangDescriptorFactory descriptorFactory;
+    private final TypeIntrospector typeIntrospector;
+    private final BuilderIntrospector builderIntrospector;
+    private final AnnotationGemFactory annotationGemFactory;
     private final FormattingMessager messager;
     private final RoundContext roundContext;
 
-    private final TypeMirror iterableType;
-    private final TypeMirror collectionType;
-    private final TypeMirror mapType;
-    private final TypeMirror streamType;
+    private final TypeDescriptor iterableType;
+    private final TypeDescriptor collectionType;
+    private final TypeDescriptor mapType;
+    private final TypeDescriptor streamType;
 
     private final Map<String, ImplementationType> implementationTypes = new HashMap<>();
     private final Map<String, String> toBeImportedTypes = new HashMap<>();
     private final Map<String, String> notToBeImportedTypes;
-
     private final boolean loggingVerbose;
 
-    public TypeFactory(ElementUtils elementUtils, TypeUtils typeUtils, FormattingMessager messager,
+    public TypeFactory(LangModelContext<?, ?, ?, ?> langModelContext,
+                       FormattingMessager messager,
                        RoundContext roundContext, Map<String, String> notToBeImportedTypes, boolean loggingVerbose,
                        VersionInformation versionInformation) {
-        this.elementUtils = elementUtils;
-        this.typeUtils = typeUtils;
+        this.langModelContext = langModelContext;
+        this.typeSystem = langModelContext.typeSystem();
+        this.elementQuery = langModelContext.elementQuery();
+        this.langTypes = typeSystem.types();
+        this.langElements = elementQuery.elements();
+        @SuppressWarnings("unchecked")
+        LangDescriptorFactory<Object, Object, Object, Object> descriptorFactory =
+            (LangDescriptorFactory<Object, Object, Object, Object>) typeSystem.descriptors();
+        this.descriptorFactory = descriptorFactory;
+        this.typeIntrospector = typeSystem.typeIntrospector();
+        BuilderIntrospectorCapability builderIntrospectorCapability =
+            langModelContext.optional( BuilderIntrospectorCapability.class ).orElse( null );
+        if ( builderIntrospectorCapability != null ) {
+            this.builderIntrospector = builderIntrospectorCapability.builderIntrospector(
+                roundContext.getAnnotationProcessorContext()
+            );
+        }
+        else {
+            messager.printMessage(
+                Message.OPTIONAL_CAPABILITY_MISSING,
+                "BuilderIntrospectorCapability",
+                "Builder-based mappings"
+            );
+            this.builderIntrospector = descriptor -> null;
+        }
+        AnnotationGemsCapability annotationGemsCapability =
+            langModelContext.optional( AnnotationGemsCapability.class )
+                .orElseThrow( () -> MissingLangModelCapabilityException.required( AnnotationGemsCapability.class ) );
+        this.annotationGemFactory = annotationGemsCapability.annotationGems();
         this.messager = messager;
         this.roundContext = roundContext;
         this.notToBeImportedTypes = notToBeImportedTypes;
 
-        iterableType = typeUtils.erasure( elementUtils.getTypeElement( Iterable.class.getCanonicalName() ).asType() );
-        collectionType =
-            typeUtils.erasure( elementUtils.getTypeElement( Collection.class.getCanonicalName() ).asType() );
-        mapType = typeUtils.erasure( elementUtils.getTypeElement( Map.class.getCanonicalName() ).asType() );
-        TypeElement streamTypeElement = elementUtils.getTypeElement( JavaStreamConstants.STREAM_FQN );
-        streamType = streamTypeElement == null ? null : typeUtils.erasure( streamTypeElement.asType() );
+        TypeElementDescriptor iterableElement = langElements.typeElement( Iterable.class.getCanonicalName() );
+        iterableType = iterableElement == null ? null : langTypes.erasure( iterableElement.asType() );
+        TypeElementDescriptor collectionElement = langElements.typeElement( Collection.class.getCanonicalName() );
+        collectionType = collectionElement == null ? null : langTypes.erasure( collectionElement.asType() );
+        TypeElementDescriptor mapElement = langElements.typeElement( Map.class.getCanonicalName() );
+        mapType = mapElement == null ? null : langTypes.erasure( mapElement.asType() );
+        TypeElementDescriptor streamElement = langElements.typeElement( JavaStreamConstants.STREAM_FQN );
+        streamType = streamElement == null ? null : langTypes.erasure( streamElement.asType() );
 
         implementationTypes.put( Iterable.class.getName(), withInitialCapacity( getType( ArrayList.class ) ) );
         implementationTypes.put( Collection.class.getName(), withInitialCapacity( getType( ArrayList.class ) ) );
@@ -167,28 +188,26 @@ public class TypeFactory {
     }
 
     public Type getTypeForLiteral(Class<?> type) {
-        return type.isPrimitive() ? getType( getPrimitiveType( type ), true )
-            : getType( type.getCanonicalName(), true );
+        TypeDescriptor descriptor = type.isPrimitive()
+            ? langTypes.primitive( type.getName() )
+            : requireTypeElementDescriptor( type.getCanonicalName() ).asType();
+        return getTypeInternal( descriptor, true, null );
     }
 
     public Type getType(Class<?> type) {
-        return type.isPrimitive() ? getType( getPrimitiveType( type ) ) : getType( type.getCanonicalName() );
+        TypeDescriptor descriptor = type.isPrimitive()
+            ? langTypes.primitive( type.getName() )
+            : requireTypeElementDescriptor( type.getCanonicalName() ).asType();
+        return getType( descriptor );
+    }
+
+    public Type fromDescriptor(TypeDescriptor descriptor) {
+        return getType( descriptor );
     }
 
     public Type getType(String canonicalName) {
-        return getType( canonicalName, false );
-    }
-
-    private Type getType(String canonicalName, boolean isLiteral) {
-        TypeElement typeElement = elementUtils.getTypeElement( canonicalName );
-
-        if ( typeElement == null ) {
-            throw new AnnotationProcessingException(
-                "Couldn't find type " + canonicalName + ". Are you missing a dependency on your classpath?"
-            );
-        }
-
-        return getType( typeElement, isLiteral );
+        TypeElementDescriptor descriptor = requireTypeElementDescriptor( canonicalName );
+        return getType( descriptor.asType() );
     }
 
     /**
@@ -198,156 +217,109 @@ public class TypeFactory {
      * @return true if the type with the given full qualified name is part of the classpath.
      */
     public boolean isTypeAvailable(String canonicalName) {
-        return null != elementUtils.getTypeElement( canonicalName );
+        return langElements.typeElement( canonicalName ) != null;
     }
 
     public Type getWrappedType(Type type ) {
         Type result = type;
         if ( type.isPrimitive() ) {
-            PrimitiveType typeMirror = (PrimitiveType) type.getTypeMirror();
-            result = getType( typeUtils.boxedClass( typeMirror ) );
+            TypeDescriptor boxedDescriptor = langTypes.boxed( type.getTypeDescriptor() );
+            result = getType( boxedDescriptor );
         }
         return result;
     }
 
-    public Type getType(TypeElement typeElement) {
-        return getType( typeElement.asType(), false );
+    public Type getType(TypeDescriptor descriptor) {
+        if ( descriptor == null ) {
+            return null;
+        }
+        return getTypeInternal( descriptor, false, null );
     }
 
-    private Type getType(TypeElement typeElement, boolean isLiteral) {
-        return getType( typeElement.asType(), isLiteral );
+    public Type getAlwaysImportedType(TypeDescriptor descriptor) {
+        if ( descriptor == null ) {
+            return null;
+        }
+        return getTypeInternal( descriptor, false, Boolean.TRUE );
     }
 
-    public Type getType(TypeMirror mirror) {
-        return getType( mirror, false );
+    public LangElements getLangElements() {
+        return langElements;
     }
 
-    /**
-     * Return a type that is always going to be imported.
-     * This is useful when using it in {@code Mapper#imports}
-     * for types that should be used in expressions.
-     *
-     * @param mirror the type mirror for which we need a type
-     *
-     * @return the type
-     */
-    public Type getAlwaysImportedType(TypeMirror mirror) {
-        return getType( mirror, false, true );
+    public LangTypes langTypes() {
+        return langTypes;
     }
 
-    private Type getType(TypeMirror mirror, boolean isLiteral) {
-        return getType( mirror, isLiteral, null );
+    public LangElements langElements() {
+        return langElements;
     }
 
-    private Type getType(TypeMirror mirror, boolean isLiteral, Boolean alwaysImport) {
-        if ( !canBeProcessed( mirror ) ) {
-            throw new TypeHierarchyErroneousException( mirror );
+    public LangDescriptorFactory getDescriptorFactory() {
+        return descriptorFactory;
+    }
+
+    public AnnotationGemFactory annotationGems() {
+        return annotationGemFactory;
+    }
+
+    private Type getType(TypeDescriptor descriptor, boolean isLiteral, Boolean alwaysImport) {
+        if ( descriptor == null ) {
+            return null;
+        }
+        return getTypeInternal( descriptor, isLiteral, alwaysImport );
+    }
+
+    private TypeElementDescriptor requireTypeElementDescriptor(String canonicalName) {
+        TypeElementDescriptor descriptor = langElements.typeElement( canonicalName );
+        if ( descriptor == null ) {
+            throw new AnnotationProcessingException(
+                "Couldn't find type " + canonicalName + ". Are you missing a dependency on your classpath?"
+            );
+        }
+        return descriptor;
+    }
+
+    private Type getTypeInternal(TypeDescriptor descriptor, boolean isLiteral, Boolean alwaysImport) {
+        if ( descriptor == null ) {
+            return null;
         }
 
-        ImplementationType implementationType = getImplementationType( mirror );
-
-        boolean isIterableType = typeUtils.isSubtypeErased( mirror, iterableType );
-        boolean isCollectionType = typeUtils.isSubtypeErased( mirror, collectionType );
-        boolean isMapType = typeUtils.isSubtypeErased( mirror, mapType );
-        boolean isStreamType = streamType != null && typeUtils.isSubtypeErased( mirror, streamType );
-
-        boolean isEnumType;
-        boolean isInterface;
-        String name;
-        String packageName;
-        String qualifiedName;
-        TypeElement typeElement;
-        Type componentType;
-        Boolean toBeImported = alwaysImport;
-
-        if ( mirror.getKind() == TypeKind.DECLARED ) {
-            DeclaredType declaredType = (DeclaredType) mirror;
-
-            isEnumType = declaredType.asElement().getKind() == ElementKind.ENUM;
-            isInterface = declaredType.asElement().getKind() == ElementKind.INTERFACE;
-            name = declaredType.asElement().getSimpleName().toString();
-
-            typeElement = (TypeElement) declaredType.asElement();
-
-            if ( typeElement != null ) {
-                packageName = elementUtils.getPackageOf( typeElement ).getQualifiedName().toString();
-                qualifiedName = typeElement.getQualifiedName().toString();
-            }
-            else {
-                packageName = null;
-                qualifiedName = name;
-            }
-
-            componentType = null;
+        if ( !roundContext.canBeProcessed( descriptor ) ) {
+            throw roundContext.typeHierarchyErroneousException( descriptor );
         }
-        else if ( mirror.getKind() == TypeKind.ARRAY ) {
-            TypeMirror componentTypeMirror = getComponentType( mirror );
-            StringBuilder builder = new StringBuilder("[]");
 
-            while ( componentTypeMirror.getKind() == TypeKind.ARRAY ) {
-                componentTypeMirror = getComponentType( componentTypeMirror );
-                builder.append( "[]" );
-            }
+        TypeIntrospector.Metadata metadata = typeIntrospector.describe( descriptor );
 
-            if ( componentTypeMirror.getKind() == TypeKind.DECLARED ) {
-                DeclaredType declaredType = (DeclaredType) componentTypeMirror;
-                TypeElement componentTypeElement = (TypeElement) declaredType.asElement();
+        ImplementationType implementationType = getImplementationType( descriptor );
 
-                String arraySuffix = builder.toString();
-                name = componentTypeElement.getSimpleName().toString() + arraySuffix;
-                packageName = elementUtils.getPackageOf( componentTypeElement ).getQualifiedName().toString();
-                qualifiedName = componentTypeElement.getQualifiedName().toString() + arraySuffix;
-            }
-            else if (componentTypeMirror.getKind().isPrimitive()) {
-                // When the component type is primitive and is annotated with ElementType.TYPE_USE then
-                // the typeMirror#toString returns (@CustomAnnotation :: byte) for the javac compiler
-                name = NativeTypes.getName( componentTypeMirror.getKind() ) + builder.toString();
-                packageName = null;
-                // for primitive types only name (e.g. byte, short..) required as qualified name
-                qualifiedName = name;
-                toBeImported = false;
-            }
-            else {
-                name = mirror.toString();
-                packageName = null;
-                qualifiedName = name;
-                toBeImported = false;
-            }
+        boolean isIterableType = isIterableDescriptor( descriptor );
+        boolean isCollectionType = isCollectionDescriptor( descriptor );
+        boolean isMapType = isMapDescriptor( descriptor );
+        boolean isStreamType = isStreamDescriptor( descriptor );
 
-            isEnumType = false;
-            isInterface = false;
-            typeElement = null;
-            componentType = getType( getComponentType( mirror ) );
-        }
-        else {
-            isEnumType = false;
-            isInterface = false;
-            // When the component type is primitive and is annotated with ElementType.TYPE_USE then
-            // the typeMirror#toString returns (@CustomAnnotation :: byte) for the javac compiler
-            if ( mirror.getKind().isPrimitive() ) {
-                name = NativeTypes.getName( mirror.getKind() );
-            }
-            // When the component type is type var and is annotated with ElementType.TYPE_USE then
-            // the typeMirror#toString returns (@CustomAnnotation T) for the errorprone javac compiler
-            else if ( mirror.getKind() == TypeKind.TYPEVAR ) {
-                name = ( (TypeVariable) mirror ).asElement().getSimpleName().toString();
-            }
-            else {
-                name = mirror.toString();
-            }
-            packageName = null;
-            qualifiedName = name;
-            typeElement = null;
-            componentType = null;
-            toBeImported = false;
-        }
+        boolean isEnumType = metadata.isEnumType();
+        boolean isInterface = metadata.isInterfaceType();
+
+        String name = sanitizeDisplayName( metadata.simpleName().orElse( descriptor.displayName() ) );
+        String packageName = metadata.packageName().orElse( null );
+        String qualifiedName = sanitizeDisplayName( metadata.qualifiedName().orElse( name ) );
+
+        TypeElementDescriptor typeElementDescriptor = metadata.typeElement().orElse( null );
+        Type componentType = metadata.componentType()
+            .map( this::getType )
+            .orElse( null );
+
+        Boolean toBeImported = alwaysImport != null
+            ? alwaysImport
+            : determineImportHint( descriptor, metadata );
 
         return new Type(
-            typeUtils, elementUtils, this,
+            this,
             roundContext.getAnnotationProcessorContext().getAccessorNaming(),
-            mirror,
-            typeElement,
-            getTypeParameters( mirror, false ),
+            descriptor,
+            typeElementDescriptor,
+            getTypeParameters( descriptor, false ),
             implementationType,
             componentType,
             packageName,
@@ -363,8 +335,82 @@ public class TypeFactory {
             notToBeImportedTypes,
             toBeImported,
             isLiteral,
-            loggingVerbose
+            loggingVerbose,
+            typeIntrospector,
+            metadata
         );
+    }
+
+    private String sanitizeDisplayName(String name) {
+        if ( name == null || name.indexOf( '@' ) < 0 ) {
+            return name;
+        }
+
+        StringBuilder sanitized = new StringBuilder( name.length() );
+        int length = name.length();
+        int index = 0;
+
+        while ( index < length ) {
+            char current = name.charAt( index );
+            if ( current == '@' ) {
+                index++;
+                int parenLevel = 0;
+                while ( index < length ) {
+                    char ch = name.charAt( index );
+                    if ( ch == '(' ) {
+                        parenLevel++;
+                        index++;
+                    }
+                    else if ( ch == ')' ) {
+                        if ( parenLevel > 0 ) {
+                            parenLevel--;
+                            index++;
+                        }
+                        else {
+                            index++;
+                            break;
+                        }
+                    }
+                    else if ( parenLevel == 0
+                        && ( Character.isWhitespace( ch ) || ch == '[' || ch == '<' || ch == ',' || ch == '>' ) ) {
+                        break;
+                    }
+                    else {
+                        index++;
+                    }
+                }
+
+                while ( index < length && Character.isWhitespace( name.charAt( index ) ) ) {
+                    index++;
+                }
+            }
+            else {
+                sanitized.append( current );
+                index++;
+            }
+        }
+
+        return sanitized.toString();
+    }
+
+    private Boolean determineImportHint(TypeDescriptor descriptor, TypeIntrospector.Metadata metadata) {
+        if ( descriptor == null ) {
+            return Boolean.FALSE;
+        }
+        if ( descriptor.kind() == LangTypeKind.DECLARED ) {
+            return null;
+        }
+        if ( descriptor.kind() == LangTypeKind.ARRAY ) {
+            TypeDescriptor baseComponent = metadata.baseComponentType().orElse( null );
+            if ( baseComponent == null ) {
+                return Boolean.FALSE;
+            }
+            if ( baseComponent.kind() == LangTypeKind.DECLARED ) {
+                return null;
+            }
+            return Boolean.FALSE;
+        }
+        return Boolean.FALSE;
     }
 
     /**
@@ -380,243 +426,287 @@ public class TypeFactory {
      * @return the type representing {@code Class<type>}.
      */
     public Type classTypeOf(Type type) {
-        TypeMirror typeToUse;
-        if ( type.isVoid() ) {
+        if ( type == null || type.isVoid() ) {
             return null;
         }
-        else if ( type.isPrimitive() ) {
-            typeToUse = typeUtils.boxedClass( (PrimitiveType) type.getTypeMirror() ).asType();
-        }
-        else {
-            typeToUse = type.getTypeMirror();
-        }
-
-        return getType( typeUtils.getDeclaredType( elementUtils.getTypeElement( "java.lang.Class" ), typeToUse ) );
-    }
-
-    /**
-     * Get the ExecutableType for given method as part of usedMapper. Possibly parameterized types in method declaration
-     * will be evaluated to concrete types then.
-     *
-     * <b>IMPORTANT:</b> This should only be used from the Processors, as they are operating over executable elements.
-     * The internals should not be using this function and should not be using the {@link ExecutableElement} directly.
-     *
-     * @param includingType the type on which's scope the method type shall be evaluated
-     * @param method the method
-     * @return the ExecutableType representing the method as part of usedMapper
-     */
-    public ExecutableType getMethodType(DeclaredType includingType, ExecutableElement method) {
-        TypeMirror asMemberOf = typeUtils.asMemberOf( includingType, method );
-        return (ExecutableType) asMemberOf;
-    }
-
-    /**
-     * Get the Type for given method as part of usedMapper. Possibly parameterized types in method declaration will be
-     * evaluated to concrete types then.
-     *
-     * @param includingType the type on which's scope the method type shall be evaluated
-     * @param method the method
-     *
-     * @return the ExecutableType representing the method as part of usedMapper
-     */
-    public TypeMirror getMethodType(DeclaredType includingType, Element method) {
-        return typeUtils.asMemberOf( includingType, method );
-    }
-
-    public Parameter getSingleParameter(DeclaredType includingType, Accessor method) {
-        if ( method.getAccessorType().isFieldAssignment() ) {
+        TypeDescriptor descriptor = type.getTypeDescriptor();
+        if ( descriptor == null ) {
             return null;
         }
-        ExecutableElement executable = (ExecutableElement) method.getElement();
-        List<? extends VariableElement> parameters = executable.getParameters();
+        if ( descriptor.isPrimitive() ) {
+            descriptor = langTypes.boxed( descriptor );
+        }
+        TypeElementDescriptor classElement = requireTypeElementDescriptor( "java.lang.Class" );
+        TypeDescriptor classDescriptor = langTypes.declaredType(
+            classElement,
+            java.util.Collections.singletonList( descriptor )
+        );
+        return getType( classDescriptor );
+    }
 
-        if ( parameters.size() != 1 ) {
-            //TODO: Log error
+    public Parameter getSingleParameter(TypeDescriptor includingType, Accessor accessor) {
+        if ( accessor == null || accessor.getAccessorType().isFieldAssignment() ) {
             return null;
         }
-
-        return Collections.first( getParameters( includingType, method ) );
-    }
-
-    public List<Parameter> getParameters(DeclaredType includingType, Accessor accessor) {
-        ExecutableElement method = (ExecutableElement) accessor.getElement();
-        return getParameters( includingType, method );
-    }
-
-    public List<Parameter> getParameters(DeclaredType includingType, ExecutableElement method) {
-        ExecutableType methodType = getMethodType( includingType, method );
-        if ( method == null || methodType.getKind() != TypeKind.EXECUTABLE ) {
-            return new ArrayList<>();
+        ElementDescriptor elementDescriptor = accessor.getElement();
+        if ( !( elementDescriptor instanceof ExecutableDescriptor ) ) {
+            return null;
         }
-        return getParameters( methodType, method );
+        ExecutableDescriptor executableDescriptor = (ExecutableDescriptor) elementDescriptor;
+        if ( executableDescriptor.parameters().size() != 1 ) {
+            return null;
+        }
+        return getSingleParameter( includingType, executableDescriptor );
     }
 
-    public List<Parameter> getParameters(ExecutableType methodType, ExecutableElement method) {
-        List<? extends TypeMirror> parameterTypes = methodType.getParameterTypes();
-        List<? extends VariableElement> parameters = method.getParameters();
-        List<Parameter> result = new ArrayList<>( parameters.size() );
+    public Parameter getSingleParameter(Type includingType, Accessor accessor) {
+        return getSingleParameter( includingType != null ? includingType.getTypeDescriptor() : null, accessor );
+    }
 
-        Iterator<? extends VariableElement> varIt = parameters.iterator();
-        Iterator<? extends TypeMirror> typesIt = parameterTypes.iterator();
+    public Parameter getSingleParameter(TypeDescriptor includingType, ExecutableDescriptor method) {
+        List<Parameter> parameters = getParameters( includingType, method );
+        return parameters.isEmpty() ? null : parameters.get( 0 );
+    }
 
-        while ( varIt.hasNext() ) {
-            VariableElement parameter = varIt.next();
-            TypeMirror parameterType = typesIt.next();
+    public Parameter getSingleParameter(Type includingType, ExecutableDescriptor method) {
+        return getSingleParameter( includingType != null ? includingType.getTypeDescriptor() : null, method );
+    }
 
-            Type type = getType( parameterType );
+    public List<Parameter> getParameters(TypeDescriptor includingType, Accessor accessor) {
+        if ( accessor == null ) {
+            return java.util.Collections.emptyList();
+        }
+        ElementDescriptor element = accessor.getElement();
+        if ( element instanceof ExecutableDescriptor ) {
+            return getParameters( includingType, (ExecutableDescriptor) element );
+        }
+        return java.util.Collections.emptyList();
+    }
 
-            // if the method has varargs and this is the last parameter
-            // we know that this parameter should be used as varargs
-            boolean isVarArgs = !varIt.hasNext() && method.isVarArgs();
+    public List<Parameter> getParameters(Type includingType, Accessor accessor) {
+        return getParameters( includingType != null ? includingType.getTypeDescriptor() : null, accessor );
+    }
 
-            result.add( Parameter.forElementAndType( parameter, type, isVarArgs ) );
+    public List<Parameter> getParameters(TypeDescriptor includingType, ExecutableDescriptor method) {
+        if ( method == null ) {
+            return java.util.Collections.emptyList();
+        }
+        ExecutableSignature signature = typeIntrospector.resolveExecutable( includingType, method );
+        List<TypeDescriptor> resolvedTypes = signature != null
+            ? signature.parameterTypes()
+            : java.util.Collections.emptyList();
+
+        List<ParameterDescriptor> descriptors = method.parameters();
+        if ( descriptors.isEmpty() ) {
+            return java.util.Collections.emptyList();
+        }
+        List<Parameter> result = new ArrayList<>( descriptors.size() );
+        for ( int i = 0; i < descriptors.size(); i++ ) {
+            ParameterDescriptor parameterDescriptor = descriptors.get( i );
+            TypeDescriptor parameterTypeDescriptor = resolvedTypes.size() > i
+                ? resolvedTypes.get( i )
+                : parameterDescriptor.type();
+            Type parameterType = getType( parameterTypeDescriptor );
+            result.add( Parameter.forDescriptor( parameterDescriptor, parameterType ) );
+        }
+        return result;
+    }
+
+    public List<Parameter> getParameters(Type includingType, ExecutableDescriptor method) {
+        return getParameters( includingType != null ? includingType.getTypeDescriptor() : null, method );
+    }
+
+    public Type getReturnType(TypeDescriptor includingType, Accessor accessor) {
+        if ( accessor == null ) {
+            return null;
+        }
+        ElementDescriptor element = accessor.getElement();
+        if ( element instanceof ExecutableDescriptor ) {
+            return getReturnType( includingType, (ExecutableDescriptor) element );
+        }
+        TypeDescriptor resolved = includingType != null
+            ? typeIntrospector.asMemberOf( includingType, element )
+            : element.asType();
+        return getType( resolved );
+    }
+
+    public Type getReturnType(Type includingType, Accessor accessor) {
+        return getReturnType( includingType != null ? includingType.getTypeDescriptor() : null, accessor );
+    }
+
+    public Type getReturnType(TypeDescriptor includingType, ExecutableDescriptor method) {
+        if ( method == null ) {
+            return null;
+        }
+        ExecutableSignature signature = typeIntrospector.resolveExecutable( includingType, method );
+        TypeDescriptor returnDescriptor = signature != null ? signature.returnType() : method.returnType();
+        return getType( returnDescriptor );
+    }
+
+    public Type getReturnType(Type includingType, ExecutableDescriptor method) {
+        return getReturnType( includingType != null ? includingType.getTypeDescriptor() : null, method );
+    }
+
+    public List<Type> getThrownTypes(TypeDescriptor includingType, ExecutableDescriptor method) {
+        if ( method == null ) {
+            return java.util.Collections.emptyList();
+        }
+        ExecutableSignature signature = typeIntrospector.resolveExecutable( includingType, method );
+        List<TypeDescriptor> thrownDescriptors = signature != null
+            ? signature.thrownTypes()
+            : method.thrownTypes();
+        if ( thrownDescriptors.isEmpty() ) {
+            return java.util.Collections.emptyList();
+        }
+        java.util.LinkedHashSet<Type> types = new java.util.LinkedHashSet<>( thrownDescriptors.size() );
+        for ( TypeDescriptor thrownDescriptor : thrownDescriptors ) {
+            types.add( getType( thrownDescriptor ) );
+        }
+        return new ArrayList<>( types );
+    }
+
+    public List<Type> getThrownTypes(Type includingType, ExecutableDescriptor method) {
+        return getThrownTypes( includingType != null ? includingType.getTypeDescriptor() : null, method );
+    }
+
+    boolean isIterableDescriptor(TypeDescriptor descriptor) {
+        return isSubtypeErased( descriptor, iterableType );
+    }
+
+    boolean isCollectionDescriptor(TypeDescriptor descriptor) {
+        return isSubtypeErased( descriptor, collectionType );
+    }
+
+    boolean isMapDescriptor(TypeDescriptor descriptor) {
+        return isSubtypeErased( descriptor, mapType );
+    }
+
+    boolean isStreamDescriptor(TypeDescriptor descriptor) {
+        return isSubtypeErased( descriptor, streamType );
+    }
+
+    private List<Type> getTypeParameters(TypeDescriptor descriptor, boolean isImplementationType) {
+        if ( descriptor == null || descriptor.typeArguments().isEmpty() ) {
+            return java.util.Collections.emptyList();
+        }
+
+        List<Type> result = new ArrayList<>( descriptor.typeArguments().size() );
+        for ( TypeDescriptor argument : descriptor.typeArguments() ) {
+            Type argumentType = getType( argument, false, null );
+            result.add( isImplementationType ? argumentType.getTypeBound() : argumentType );
         }
 
         return result;
     }
 
-    public Type getReturnType(DeclaredType includingType, Accessor accessor) {
-        Type type;
-        TypeMirror accessorType = getMethodType( includingType, accessor.getElement() );
-        if ( isExecutableType( accessorType ) ) {
-            type = getType( ( (ExecutableType) accessorType ).getReturnType() );
+    private boolean isSubtypeErased(TypeDescriptor descriptor, TypeDescriptor target) {
+        if ( descriptor == null || target == null ) {
+            return false;
         }
-        else {
-            type = getType( accessorType );
+        LangTypeKind kind = descriptor.kind();
+        if ( kind == LangTypeKind.PRIMITIVE
+            || kind == LangTypeKind.VOID
+            || kind == LangTypeKind.ARRAY
+            || kind == LangTypeKind.ERROR ) {
+            return false;
         }
-
-        return type;
+        return langTypes.isSubtypeErased( descriptor, target );
     }
 
-    private boolean isExecutableType(TypeMirror accessorType) {
-        return accessorType.getKind() == TypeKind.EXECUTABLE;
-    }
-
-    public Type getReturnType(ExecutableType method) {
-        return getType( method.getReturnType() );
-    }
-
-    public List<Type> getThrownTypes(ExecutableType method) {
-        return extractTypes( method.getThrownTypes() );
-    }
-
-    public List<Type> getThrownTypes(Accessor accessor) {
-        if (accessor.getAccessorType().isFieldAssignment()) {
-            return new ArrayList<>();
-        }
-        Element element = accessor.getElement();
-        if ( element instanceof ExecutableElement ) {
-            return extractTypes( ( (ExecutableElement) element ).getThrownTypes() );
-        }
-        return new ArrayList<>();
-    }
-
-    private List<Type> extractTypes(List<? extends TypeMirror> typeMirrors) {
-        Set<Type> types = new HashSet<>( typeMirrors.size() );
-
-        for ( TypeMirror typeMirror : typeMirrors ) {
-            types.add( getType( typeMirror ) );
-        }
-
-        return new ArrayList<>( types );
-    }
-
-    private List<Type> getTypeParameters(TypeMirror mirror, boolean isImplementationType) {
-        if ( mirror.getKind() != TypeKind.DECLARED ) {
-            return java.util.Collections.emptyList();
-        }
-
-        DeclaredType declaredType = (DeclaredType) mirror;
-        List<Type> typeParameters = new ArrayList<>( declaredType.getTypeArguments().size() );
-
-        for ( TypeMirror typeParameter : declaredType.getTypeArguments() ) {
-            if ( isImplementationType ) {
-                typeParameters.add( getType( typeParameter ).getTypeBound() );
-            }
-            else {
-                typeParameters.add( getType( typeParameter ) );
-            }
-        }
-
-        return typeParameters;
-    }
-
-    private TypeMirror getPrimitiveType(Class<?> primitiveType) {
-        return primitiveType == byte.class ? typeUtils.getPrimitiveType( TypeKind.BYTE ) :
-            primitiveType == short.class ? typeUtils.getPrimitiveType( TypeKind.SHORT ) :
-                primitiveType == int.class ? typeUtils.getPrimitiveType( TypeKind.INT ) :
-                    primitiveType == long.class ? typeUtils.getPrimitiveType( TypeKind.LONG ) :
-                        primitiveType == float.class ? typeUtils.getPrimitiveType( TypeKind.FLOAT ) :
-                            primitiveType == double.class ? typeUtils.getPrimitiveType( TypeKind.DOUBLE ) :
-                                primitiveType == boolean.class ? typeUtils.getPrimitiveType( TypeKind.BOOLEAN ) :
-                                    primitiveType == char.class ? typeUtils.getPrimitiveType( TypeKind.CHAR ) :
-                                        typeUtils.getPrimitiveType( TypeKind.VOID );
-    }
-
-    private ImplementationType getImplementationType(TypeMirror mirror) {
-        if ( mirror.getKind() != TypeKind.DECLARED ) {
+    private ImplementationType getImplementationType(TypeDescriptor descriptor) {
+        if ( descriptor == null || descriptor.kind() != LangTypeKind.DECLARED ) {
             return null;
         }
 
-        DeclaredType declaredType = (DeclaredType) mirror;
+        Optional<String> qualifiedName = descriptor.qualifiedName();
+        if ( !qualifiedName.isPresent() ) {
+            return null;
+        }
 
-        ImplementationType implementation = implementationTypes.get(
-            ( (TypeElement) declaredType.asElement() ).getQualifiedName()
-                .toString()
-        );
+        ImplementationType implementation = implementationTypes.get( qualifiedName.get() );
 
         if ( implementation != null ) {
             Type implementationType = implementation.getType();
-            Type replacement = new Type(
-                typeUtils,
-                elementUtils,
-                this,
-                roundContext.getAnnotationProcessorContext().getAccessorNaming(),
-                typeUtils.getDeclaredType(
-                    implementationType.getTypeElement(),
-                    declaredType.getTypeArguments().toArray( new TypeMirror[] { } )
-                ),
-                implementationType.getTypeElement(),
-                getTypeParameters( mirror, true ),
-                null,
-                null,
-                implementationType.getPackageName(),
-                implementationType.getName(),
-                implementationType.getFullyQualifiedName(),
-                implementationType.isInterface(),
-                implementationType.isEnumType(),
-                implementationType.isIterableType(),
-                implementationType.isCollectionType(),
-                implementationType.isMapType(),
-                implementationType.isStreamType(),
-                toBeImportedTypes,
-                notToBeImportedTypes,
-                null,
-                implementationType.isLiteral(),
-                loggingVerbose
-            );
+            Type replacement = implementationType;
+
+            List<TypeDescriptor> typeArguments = descriptor.typeArguments();
+            if ( !typeArguments.isEmpty() ) {
+                TypeDescriptor implementationDescriptor = implementationType.getTypeDescriptor();
+                TypeElementDescriptor implElement = implementationDescriptor != null
+                    ? implementationDescriptor.typeElement().orElse( null )
+                    : null;
+
+                if ( implElement != null ) {
+                    List<TypeDescriptor> normalizedArguments = new ArrayList<>( typeArguments.size() );
+                    for ( TypeDescriptor typeArgument : typeArguments ) {
+                        normalizedArguments.add( normalizeImplementationTypeArgument( typeArgument ) );
+                    }
+                    TypeDescriptor replacementDescriptor = langTypes.declaredType( implElement, normalizedArguments );
+                    replacement = getType( replacementDescriptor ).withoutBounds();
+                }
+            }
+
             return implementation.createNew( replacement );
         }
 
         return null;
     }
 
-    private BuilderInfo findBuilder(TypeMirror type, BuilderGem builderGem, boolean report) {
+    private TypeDescriptor normalizeImplementationTypeArgument(TypeDescriptor typeArgument) {
+        if ( typeArgument == null ) {
+            return null;
+        }
+
+        LangTypeKind kind = typeArgument.kind();
+        if ( kind == LangTypeKind.WILDCARD || kind == LangTypeKind.TYPE_PARAMETER ) {
+            TypeDescriptor boundDescriptor = getTypeBoundDescriptor( typeArgument );
+            if ( boundDescriptor == null ) {
+                return typeArgument;
+            }
+
+            if ( boundDescriptor.kind() == LangTypeKind.INTERSECTION ) {
+                return langTypes.erasure( boundDescriptor );
+            }
+
+            return boundDescriptor;
+        }
+
+        return typeArgument;
+    }
+
+    private BuilderDescriptor findBuilder(Type type, BuilderGem builderGem, boolean report) {
+        if ( type == null ) {
+            return null;
+        }
         if ( builderGem != null && builderGem.disableBuilder().get() ) {
             return null;
         }
+
+        TypeDescriptor descriptor = type.getTypeDescriptor();
+        if ( descriptor == null ) {
+            return null;
+        }
+
         try {
-            return roundContext.getAnnotationProcessorContext()
-                .getBuilderProvider()
-                .findBuilderInfo( type );
+            return builderIntrospector.findBuilder( descriptor );
+        }
+        catch ( org.mapstruct.ap.langmodel.BuilderIntrospectionException ex ) {
+            if ( report ) {
+                messager.printMessage(
+                    type.getTypeElementDescriptor(),
+                    Message.BUILDER_MORE_THAN_ONE_BUILDER_CREATION_METHOD,
+                    type.getFullyQualifiedName(),
+                    describeExecutables( ex.getConflictingCreationMethods() )
+                );
+            }
         }
         catch ( MoreThanOneBuilderCreationMethodException ex ) {
             if ( report ) {
                 messager.printMessage(
-                        typeUtils.asElement( type ),
-                        Message.BUILDER_MORE_THAN_ONE_BUILDER_CREATION_METHOD,
-                        type,
-                        Strings.join( ex.getBuilderInfo(), ", ", BUILDER_INFO_CREATION_METHOD_EXTRACTOR )
+                    type.getTypeElementDescriptor(),
+                    Message.BUILDER_MORE_THAN_ONE_BUILDER_CREATION_METHOD,
+                    type.getFullyQualifiedName(),
+                    describeBuilderInfos( ex.getBuilderInfo() )
                 );
             }
         }
@@ -624,13 +714,56 @@ public class TypeFactory {
         return null;
     }
 
-    private TypeMirror getComponentType(TypeMirror mirror) {
-        if ( mirror.getKind() != TypeKind.ARRAY ) {
-            return null;
+    private String describeBuilderInfos(Collection<BuilderInfo> builderInfos) {
+        if ( builderInfos == null || builderInfos.isEmpty() ) {
+            return "";
         }
+        List<ExecutableDescriptor> executables = new ArrayList<>( builderInfos.size() );
+        for ( BuilderInfo info : builderInfos ) {
+            if ( info == null ) {
+                continue;
+            }
+            Object creation = info.getBuilderCreationMethod();
+            if ( creation != null ) {
+                executables.add( (ExecutableDescriptor) descriptorFactory.elementDescriptor( creation ) );
+            }
+        }
+        return describeExecutables( executables );
+    }
 
-        ArrayType arrayType = (ArrayType) mirror;
-        return arrayType.getComponentType();
+    private String describeExecutables(Collection<ExecutableDescriptor> executables) {
+        if ( executables == null || executables.isEmpty() ) {
+            return "";
+        }
+        return executables.stream()
+            .filter( executable -> executable != null )
+            .map( this::describeExecutable )
+            .collect( Collectors.joining( ", " ) );
+    }
+
+    private String describeExecutable(ExecutableDescriptor executable) {
+        StringBuilder sb = new StringBuilder( executable.simpleName().content() );
+        sb.append( '(' );
+        List<ParameterDescriptor> parameters = executable.parameters();
+        if ( parameters != null && !parameters.isEmpty() ) {
+            sb.append(
+                parameters.stream()
+                    .map( parameter -> {
+                        TypeDescriptor type = parameter.type();
+                        if ( type == null ) {
+                            return "?";
+                        }
+                        Type resolvedType = getType( type );
+                        if ( resolvedType != null ) {
+                            return sanitizeDisplayName( resolvedType.getFullyQualifiedName() );
+                        }
+                        return sanitizeDisplayName( type.displayName() );
+                    } )
+                    .collect( Collectors.joining( ", " ) )
+            );
+        }
+        sb.append( ')' );
+        return sb.toString();
     }
 
     /**
@@ -639,7 +772,7 @@ public class TypeFactory {
      * @return void type
      */
     public Type createVoidType() {
-        return getType( typeUtils.getNoType( TypeKind.VOID ) );
+        return getType( langTypes.voidType() );
     }
 
     /**
@@ -651,85 +784,63 @@ public class TypeFactory {
      * <li>{@code <T extends Number>, returns Number}</li>
      * </ol>
      *
-     * @param typeMirror the type to return the bound for
+     * @param descriptor the type to return the bound for
      * @return the bound for this parameter
      */
-    public TypeMirror getTypeBound(TypeMirror typeMirror) {
-        if ( typeMirror.getKind() == TypeKind.WILDCARD ) {
-            WildcardType wildCardType = (WildcardType) typeMirror;
-            if ( wildCardType.getExtendsBound() != null ) {
-                return wildCardType.getExtendsBound();
+    public TypeDescriptor getTypeBoundDescriptor(TypeDescriptor descriptor) {
+        if ( descriptor == null ) {
+            return null;
+        }
+        if ( descriptor.kind() == LangTypeKind.WILDCARD ) {
+            Optional<TypeDescriptor> extendsBound = descriptor.wildcardExtendsBound();
+            if ( extendsBound.isPresent() ) {
+                return extendsBound.get();
             }
 
-            if ( wildCardType.getSuperBound() != null ) {
-                return wildCardType.getSuperBound();
+            Optional<TypeDescriptor> superBound = descriptor.wildcardSuperBound();
+            if ( superBound.isPresent() ) {
+                return superBound.get();
             }
 
-            String wildCardName = wildCardType.toString();
-            if ( "?".equals( wildCardName ) ) {
-                return elementUtils.getTypeElement( Object.class.getCanonicalName() ).asType();
+            if ( "?".equals( descriptor.displayName() ) ) {
+                TypeElementDescriptor objectElement = langElements.typeElement( Object.class.getCanonicalName() );
+                if ( objectElement != null ) {
+                    return objectElement.asType();
+                }
             }
         }
-        else if ( typeMirror.getKind() == TypeKind.TYPEVAR ) {
-            TypeVariable typeVariableType = (TypeVariable) typeMirror;
-            if ( typeVariableType.getUpperBound() != null ) {
-                return typeVariableType.getUpperBound();
+        else if ( descriptor.kind() == LangTypeKind.TYPE_PARAMETER ) {
+            Optional<TypeDescriptor> upper = descriptor.typeVariableUpperBound();
+            if ( upper.isPresent() ) {
+                return upper.get();
             }
-            // lower bounds ( T super Number ) cannot be used for argument parameters, but can be used for
-            // method parameters: e.g.  <T super Number> T map (T in);
-            if ( typeVariableType.getLowerBound() != null ) {
-                return typeVariableType.getLowerBound();
+
+            Optional<TypeDescriptor> lower = descriptor.typeVariableLowerBound();
+            if ( lower.isPresent() ) {
+                return lower.get();
             }
         }
 
-        return typeMirror;
+        return descriptor;
     }
 
-    /**
-     * Whether the given type is ready to be processed or not. It can be processed if it is not of kind
-     * {@link TypeKind#ERROR} and all {@link AstModifyingAnnotationProcessor}s (if any) indicated that they've fully
-     * processed the type.
-     */
-    private boolean canBeProcessed(TypeMirror type) {
-        if ( type.getKind() == TypeKind.ERROR ) {
-            return false;
-        }
-
-        if ( type.getKind() != TypeKind.DECLARED ) {
-            return true;
-        }
-
-        if ( roundContext.isReadyForProcessing( type ) ) {
-            return true;
-        }
-
-        List<AstModifyingAnnotationProcessor> astModifyingAnnotationProcessors = roundContext
-                .getAnnotationProcessorContext()
-                .getAstModifyingAnnotationProcessors();
-
-        for ( AstModifyingAnnotationProcessor processor : astModifyingAnnotationProcessors ) {
-            if ( !processor.isTypeComplete( type ) ) {
-                return false;
-            }
-        }
-
-        roundContext.addTypeReadyForProcessing( type );
-
-        return true;
+    public Type getTypeBound(TypeDescriptor descriptor) {
+        TypeDescriptor bound = getTypeBoundDescriptor( descriptor );
+        return bound == null ? null : getType( bound );
     }
 
     public BuilderType builderTypeFor( Type type, BuilderGem builder ) {
         if ( type != null ) {
-            BuilderInfo builderInfo = findBuilder( type.getTypeMirror(), builder, true );
-            return BuilderType.create( builderInfo, type, this, this.typeUtils );
+            BuilderDescriptor builderDescriptor = findBuilder( type, builder, true );
+            return BuilderType.create( builderDescriptor, type, this, this.langTypes );
         }
         return null;
     }
 
     public Type effectiveResultTypeFor( Type type, BuilderGem builder ) {
         if ( type != null ) {
-            BuilderInfo builderInfo = findBuilder( type.getTypeMirror(), builder, false );
-            BuilderType builderType = BuilderType.create( builderInfo, type, this, this.typeUtils );
+            BuilderDescriptor builderDescriptor = findBuilder( type, builder, false );
+            BuilderType builderType = BuilderType.create( builderDescriptor, type, this, this.langTypes );
             return builderType != null ? builderType.getBuilder() : type;
         }
         return type;

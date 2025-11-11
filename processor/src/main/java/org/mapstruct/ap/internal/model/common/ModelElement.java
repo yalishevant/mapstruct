@@ -7,8 +7,8 @@ package org.mapstruct.ap.internal.model.common;
 
 import java.util.Set;
 
-import org.mapstruct.ap.internal.writer.FreeMarkerWritable;
-import org.mapstruct.ap.internal.writer.Writable;
+import org.mapstruct.ap.internal.codegen.template.TemplateRenderable;
+import org.mapstruct.ap.internal.codegen.template.Writable;
 
 /**
  * Base class of all model elements. Implements the {@link Writable} contract to write model elements into source code
@@ -16,7 +16,7 @@ import org.mapstruct.ap.internal.writer.Writable;
  *
  * @author Gunnar Morling
  */
-public abstract class ModelElement extends FreeMarkerWritable {
+public abstract class ModelElement extends TemplateRenderable {
 
     /**
      * Returns a set containing those {@link Type}s referenced by this model element for which an import statement needs

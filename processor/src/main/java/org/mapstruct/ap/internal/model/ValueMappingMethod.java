@@ -12,20 +12,23 @@ import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
-import javax.lang.model.element.TypeElement;
-import javax.lang.model.type.TypeMirror;
+import java.util.stream.Collectors;
 
 import org.mapstruct.ap.internal.gem.BeanMappingGem;
 import org.mapstruct.ap.internal.model.common.Parameter;
 import org.mapstruct.ap.internal.model.common.Type;
+import org.mapstruct.ap.internal.model.common.TypeFactory;
 import org.mapstruct.ap.internal.model.source.EnumMappingOptions;
 import org.mapstruct.ap.internal.model.source.Method;
 import org.mapstruct.ap.internal.model.source.SelectionParameters;
 import org.mapstruct.ap.internal.model.source.ValueMappingOptions;
+import org.mapstruct.ap.internal.util.AnnotationDescriptorUtils;
 import org.mapstruct.ap.internal.util.Message;
 import org.mapstruct.ap.internal.util.Strings;
-import org.mapstruct.ap.internal.util.TypeUtils;
+import org.mapstruct.ap.descriptor.AnnotationDescriptor;
+import org.mapstruct.ap.descriptor.TypeDescriptor;
 import org.mapstruct.ap.spi.EnumTransformationStrategy;
 
 import static org.mapstruct.ap.internal.gem.MappingConstantsGem.ANY_REMAINING;
@@ -95,9 +98,10 @@ public class ValueMappingMethod extends MappingMethod {
             Type targetType = method.getResultType();
 
             if ( targetType.isEnumType() && valueMappings.nullTarget == null ) {
-                // If null target is not set it means that the user has not explicitly defined a mapping for null
-                valueMappings.nullValueTarget = ctx.getEnumMappingStrategy()
-                    .getDefaultNullEnumConstant( targetType.getTypeElement() );
+                TypeDescriptor targetDescriptor = targetType.getTypeDescriptor();
+                valueMappings.nullValueTarget = targetDescriptor != null
+                    ? ctx.getEnumMappingSupport().defaultNullEnumConstant( targetDescriptor )
+                    : null;
             }
 
             // enum-to-enum
@@ -112,7 +116,7 @@ public class ValueMappingMethod extends MappingMethod {
             }
 
             // do before / after lifecycle mappings
-            SelectionParameters selectionParameters = getSelectionParameters( method, ctx.getTypeUtils() );
+            SelectionParameters selectionParameters = getSelectionParameters( method, ctx.getTypeFactory() );
             Set<String> existingVariables = new HashSet<>( method.getParameterNames() );
             List<LifecycleCallbackMethodReference> beforeMappingMethods =
                 LifecycleMethodResolver.beforeMappingMethods( method, selectionParameters, ctx, existingVariables );
@@ -126,7 +130,6 @@ public class ValueMappingMethod extends MappingMethod {
                 annotations = new ArrayList<>();
                 AdditionalAnnotationsBuilder additionalAnnotationsBuilder =
                     new AdditionalAnnotationsBuilder(
-                        ctx.getElementUtils(),
                         ctx.getTypeFactory(),
                         ctx.getMessager() );
 
@@ -169,8 +172,8 @@ public class ValueMappingMethod extends MappingMethod {
                 if ( !enumTransformationIllegalReported ) {
                     enumTransformationIllegalReported = true;
                     ctx.getMessager().printMessage(
-                        method.getExecutable(),
-                        enumMapping.getMirror(),
+                        method.getExecutableDescriptor(),
+                        enumMapping.getAnnotation(),
                         Message.ENUMMAPPING_ILLEGAL_TRANSFORMATION,
                         enumTransformationInvoker.transformationStrategy.getStrategyName(),
                         ex.getMessage()
@@ -205,9 +208,9 @@ public class ValueMappingMethod extends MappingMethod {
                 Map<String, String> targetConstants = new LinkedHashMap<>();
 
                 boolean enumMappingInverse = enumMapping.isInverse();
-                TypeElement targetTypeElement = method.getReturnType().getTypeElement();
-                for ( String targetEnumConstant : method.getReturnType().getEnumConstants() ) {
-                    String targetNameEnum = getEnumConstant( targetTypeElement, targetEnumConstant );
+                Type returnType = method.getReturnType();
+                for ( String targetEnumConstant : returnType.getEnumConstants() ) {
+                    String targetNameEnum = getEnumConstant( returnType, targetEnumConstant );
                     if ( enumMappingInverse ) {
                         // If the mapping is inverse we have to change the target enum constant
                         targetConstants.put(
@@ -220,9 +223,8 @@ public class ValueMappingMethod extends MappingMethod {
                     }
                 }
 
-                TypeElement sourceTypeElement = sourceType.getTypeElement();
                 for ( String sourceConstant : new ArrayList<>( unmappedSourceConstants ) ) {
-                    String sourceNameConstant = getEnumConstant( sourceTypeElement, sourceConstant );
+                    String sourceNameConstant = getEnumConstant( sourceType, sourceConstant );
                     String targetConstant;
                     if ( !enumMappingInverse ) {
                         targetConstant = transform( sourceNameConstant );
@@ -252,7 +254,7 @@ public class ValueMappingMethod extends MappingMethod {
                     }
                     // all sources should now be matched, there's no default to fall back to, so if sources remain,
                     // we have an issue.
-                    ctx.getMessager().printMessage( method.getExecutable(),
+                    ctx.getMessager().printMessage( method.getExecutableDescriptor(),
                         Message.VALUEMAPPING_UNMAPPED_SOURCES,
                         sourceErrorMessage,
                         targetErrorMessage,
@@ -283,10 +285,9 @@ public class ValueMappingMethod extends MappingMethod {
             // add mappings based on name
             if ( !valueMappings.hasMapAnyUnmapped ) {
 
-                TypeElement sourceTypeElement = sourceType.getTypeElement();
                 // all remaining constants are mapped
                 for ( String sourceConstant : unmappedSourceConstants ) {
-                    String sourceNameConstant = getEnumConstant( sourceTypeElement, sourceConstant );
+                    String sourceNameConstant = getEnumConstant( sourceType, sourceConstant );
                     String targetConstant = transform( sourceNameConstant );
                     mappings.add( new MappingEntry( sourceConstant, targetConstant ) );
                 }
@@ -315,10 +316,9 @@ public class ValueMappingMethod extends MappingMethod {
             // add mappings based on name
             if ( !valueMappings.hasMapAnyUnmapped ) {
                 mappedSources.add( NULL );
-                TypeElement targetTypeElement = targetType.getTypeElement();
                 // all remaining constants are mapped
                 for ( String sourceConstant : unmappedSourceConstants ) {
-                    String sourceNameConstant = getEnumConstant( targetTypeElement, sourceConstant );
+                    String sourceNameConstant = getEnumConstant( targetType, sourceConstant );
                     String stringConstant = transform( sourceNameConstant );
                     if ( !mappedSources.contains( stringConstant ) ) {
                         mappings.add( new MappingEntry( stringConstant, sourceConstant ) );
@@ -328,19 +328,48 @@ public class ValueMappingMethod extends MappingMethod {
             return mappings;
         }
 
-        private String getEnumConstant(TypeElement typeElement, String enumConstant) {
-            return ctx.getEnumMappingStrategy().getEnumConstant( typeElement, enumConstant );
+        private String getEnumConstant(Type type, String enumConstant) {
+            if ( type == null ) {
+                return null;
+            }
+            TypeDescriptor descriptor = type.getTypeDescriptor();
+            if ( descriptor == null ) {
+                return null;
+            }
+            return ctx.getEnumMappingSupport().enumConstant( descriptor, enumConstant );
         }
 
-        private SelectionParameters getSelectionParameters(Method method, TypeUtils typeUtils) {
-            BeanMappingGem beanMapping = BeanMappingGem.instanceOn( method.getExecutable() );
+        private SelectionParameters getSelectionParameters(Method method, TypeFactory typeFactory) {
+            AnnotationDescriptor beanMappingAnnotation = AnnotationDescriptorUtils.findAnnotation(
+                typeFactory.langElements(),
+                method.getExecutable(),
+                "org.mapstruct.BeanMapping"
+            ).orElse( null );
+            BeanMappingGem beanMapping = ctx.getTypeFactory()
+                .annotationGems()
+                .beanMapping( beanMappingAnnotation );
             if ( beanMapping != null ) {
-                List<TypeMirror> qualifiers = beanMapping.qualifiedBy().get();
-                List<String> qualifyingNames = beanMapping.qualifiedByName().get();
-                TypeMirror resultType = beanMapping.resultType().get();
-                return new SelectionParameters( qualifiers, qualifyingNames, resultType, typeUtils );
+                return new SelectionParameters(
+                    toTypeDescriptors( typeFactory, beanMapping.qualifiedBy().get() ),
+                    beanMapping.qualifiedByName().get(),
+                    toTypeDescriptor( typeFactory, beanMapping.resultType().get() )
+                );
             }
             return null;
+        }
+
+        private List<TypeDescriptor> toTypeDescriptors(TypeFactory typeFactory, List<?> mirrors) {
+            if ( mirrors == null || mirrors.isEmpty() ) {
+                return Collections.emptyList();
+            }
+            return mirrors.stream()
+                .filter( Objects::nonNull )
+                .map( handle -> typeFactory.getDescriptorFactory().typeDescriptor( handle ) )
+                .collect( Collectors.toList() );
+        }
+
+        private TypeDescriptor toTypeDescriptor(TypeFactory typeFactory, Object handle) {
+            return handle == null ? null : typeFactory.getDescriptorFactory().typeDescriptor( handle );
         }
 
         private boolean reportErrorIfMappedSourceEnumConstantsDontExist(Method method, Type sourceType) {
@@ -352,8 +381,8 @@ public class ValueMappingMethod extends MappingMethod {
 
                 if ( !enumMapping.isInverse() && THROW_EXCEPTION.equals( mappedConstant.getSource() ) ) {
                     ctx.getMessager().printMessage(
-                        method.getExecutable(),
-                        mappedConstant.getMirror(),
+                        method.getExecutableDescriptor(),
+                        mappedConstant.getAnnotation(),
                         mappedConstant.getSourceAnnotationValue(),
                         Message.VALUEMAPPING_THROW_EXCEPTION_SOURCE
                     );
@@ -361,14 +390,14 @@ public class ValueMappingMethod extends MappingMethod {
                 }
                 else if ( !sourceEnumConstants.contains( mappedConstant.getSource() ) ) {
 
-                    ctx.getMessager().printMessage(
-                        method.getExecutable(),
-                        mappedConstant.getMirror(),
-                        mappedConstant.getSourceAnnotationValue(),
-                        Message.VALUEMAPPING_NON_EXISTING_CONSTANT,
-                        mappedConstant.getSource(),
-                        sourceType
-                    );
+                ctx.getMessager().printMessage(
+                    method.getExecutableDescriptor(),
+                    mappedConstant.getAnnotation(),
+                    mappedConstant.getSourceAnnotationValue(),
+                    Message.VALUEMAPPING_NON_EXISTING_CONSTANT,
+                    mappedConstant.getSource(),
+                    sourceType
+                );
                     foundIncorrectMapping = true;
                 }
             }
@@ -380,8 +409,8 @@ public class ValueMappingMethod extends MappingMethod {
 
             if ( valueMappings.hasMapAnyRemaining ) {
                 ctx.getMessager().printMessage(
-                    method.getExecutable(),
-                    valueMappings.defaultTarget.getMirror(),
+                    method.getExecutableDescriptor(),
+                    valueMappings.defaultTarget.getAnnotation(),
                     valueMappings.defaultTarget.getSourceAnnotationValue(),
                     Message.VALUEMAPPING_ANY_REMAINING_FOR_NON_ENUM,
                     method.getResultType()
@@ -411,8 +440,8 @@ public class ValueMappingMethod extends MappingMethod {
                     && !THROW_EXCEPTION.equals( mappedConstant.getTarget() )
                     && !targetEnumConstants.contains( mappedConstant.getTarget() ) ) {
                     ctx.getMessager().printMessage(
-                        method.getExecutable(),
-                        mappedConstant.getMirror(),
+                        method.getExecutableDescriptor(),
+                        mappedConstant.getAnnotation(),
                         mappedConstant.getTargetAnnotationValue(),
                         Message.VALUEMAPPING_NON_EXISTING_CONSTANT,
                         mappedConstant.getTarget(),
@@ -427,8 +456,8 @@ public class ValueMappingMethod extends MappingMethod {
                 && !NULL.equals( valueMappings.defaultTarget.getTarget() )
                 && !targetEnumConstants.contains( valueMappings.defaultTarget.getTarget() ) ) {
                 ctx.getMessager().printMessage(
-                    method.getExecutable(),
-                    valueMappings.defaultTarget.getMirror(),
+                    method.getExecutableDescriptor(),
+                    valueMappings.defaultTarget.getAnnotation(),
                     valueMappings.defaultTarget.getTargetAnnotationValue(),
                     Message.VALUEMAPPING_NON_EXISTING_CONSTANT,
                     valueMappings.defaultTarget.getTarget(),
@@ -439,8 +468,9 @@ public class ValueMappingMethod extends MappingMethod {
 
             if ( valueMappings.nullTarget != null && NULL.equals( valueMappings.nullTarget.getTarget() )
                 && !targetEnumConstants.contains( valueMappings.nullTarget.getTarget() ) ) {
-                ctx.getMessager().printMessage( method.getExecutable(),
-                    valueMappings.nullTarget.getMirror(),
+                ctx.getMessager().printMessage(
+                    method.getExecutableDescriptor(),
+                    valueMappings.nullTarget.getAnnotation(),
                     valueMappings.nullTarget.getTargetAnnotationValue(),
                     Message.VALUEMAPPING_NON_EXISTING_CONSTANT,
                     valueMappings.nullTarget.getTarget(),
@@ -466,13 +496,13 @@ public class ValueMappingMethod extends MappingMethod {
         }
 
         private Type determineUnexpectedValueMappingException() {
-            TypeMirror unexpectedValueMappingException = enumMapping.getUnexpectedValueMappingException();
+            TypeDescriptor unexpectedValueMappingException = enumMapping.getUnexpectedValueMappingException();
             if ( unexpectedValueMappingException != null ) {
                 return ctx.getTypeFactory().getType( unexpectedValueMappingException );
             }
 
-            return ctx.getTypeFactory()
-                .getType( ctx.getEnumMappingStrategy().getUnexpectedValueMappingExceptionType() );
+            TypeDescriptor descriptor = ctx.getEnumMappingSupport().unexpectedValueMappingExceptionType();
+            return descriptor != null ? ctx.getTypeFactory().getType( descriptor ) : null;
         }
     }
 

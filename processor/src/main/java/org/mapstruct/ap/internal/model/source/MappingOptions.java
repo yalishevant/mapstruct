@@ -6,6 +6,7 @@
 package org.mapstruct.ap.internal.model.source;
 
 import java.util.Collections;
+import java.util.List;
 import java.util.LinkedHashSet;
 import java.util.Objects;
 import java.util.Optional;
@@ -14,20 +15,21 @@ import java.util.function.Predicate;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
-import javax.lang.model.element.AnnotationMirror;
-import javax.lang.model.element.AnnotationValue;
-import javax.lang.model.element.Element;
-import javax.lang.model.element.ExecutableElement;
 
 import org.mapstruct.ap.internal.gem.MappingGem;
-import org.mapstruct.ap.internal.gem.MappingsGem;
 import org.mapstruct.ap.internal.gem.NullValueCheckStrategyGem;
 import org.mapstruct.ap.internal.gem.NullValuePropertyMappingStrategyGem;
 import org.mapstruct.ap.internal.model.common.FormattingParameters;
-import org.mapstruct.ap.internal.util.ElementUtils;
+import org.mapstruct.ap.internal.model.common.TypeFactory;
+import org.mapstruct.ap.internal.util.AnnotationValueUtils;
 import org.mapstruct.ap.internal.util.FormattingMessager;
 import org.mapstruct.ap.internal.util.Message;
-import org.mapstruct.ap.internal.util.TypeUtils;
+import org.mapstruct.ap.descriptor.AnnotationDescriptor;
+import org.mapstruct.ap.langmodel.AnnotationGemFactory;
+import org.mapstruct.ap.descriptor.AnnotationValueDescriptor;
+import org.mapstruct.ap.descriptor.ElementDescriptor;
+import org.mapstruct.ap.descriptor.ExecutableDescriptor;
+import org.mapstruct.ap.descriptor.TypeDescriptor;
 import org.mapstruct.tools.gem.GemValue;
 
 /**
@@ -52,12 +54,14 @@ public class MappingOptions extends DelegatingOptions {
     private final boolean isIgnored;
     private final Set<String> dependsOn;
 
-    private final Element element;
-    private final AnnotationValue sourceAnnotationValue;
-    private final AnnotationValue targetAnnotationValue;
+    private final ElementDescriptor element;
+    private final AnnotationValueDescriptor sourceAnnotationValue;
+    private final AnnotationValueDescriptor targetAnnotationValue;
     private final MappingGem mapping;
 
     private final InheritContext inheritContext;
+    private final AnnotationDescriptor annotation;
+    private final AnnotationValueDescriptor dependsOnAnnotationValue;
 
     public static class InheritContext {
 
@@ -92,30 +96,74 @@ public class MappingOptions extends DelegatingOptions {
             .collect( Collectors.toCollection( LinkedHashSet::new ) );
     }
 
-    public static void addInstances(MappingsGem gem, ExecutableElement method,
-                                    BeanMappingOptions beanMappingOptions,
-                                    FormattingMessager messager, TypeUtils typeUtils,
-                                    Set<MappingOptions> mappings) {
+    public static void addAnnotation(MappingGem mapping,
+                                     ExecutableDescriptor method,
+                                     BeanMappingOptions beanMappingOptions,
+                                     FormattingMessager messager,
+                                     TypeFactory typeFactory,
+                                     Set<MappingOptions> mappings) {
+        Objects.requireNonNull( typeFactory, "typeFactory" );
+        if ( mapping == null || method == null ) {
+            return;
+        }
+        addInstance(
+            mapping,
+            method,
+            null,
+            beanMappingOptions,
+            messager,
+            typeFactory,
+            mappings
+        );
+    }
 
-        for ( MappingGem mapping : gem.value().getValue() ) {
-            addInstance( mapping, method, beanMappingOptions, messager, typeUtils, mappings );
+    public static void addAnnotation(AnnotationDescriptor annotation,
+                                     ExecutableDescriptor method,
+                                     BeanMappingOptions beanMappingOptions,
+                                     FormattingMessager messager,
+                                     TypeFactory typeFactory,
+                                     AnnotationGemFactory annotationGems,
+                                     Set<MappingOptions> mappings) {
+        Objects.requireNonNull( typeFactory, "typeFactory" );
+        if ( annotation == null ) {
+            return;
+        }
+        MappingGem mapping = annotationGems.mapping( annotation );
+        addInstance(
+            mapping,
+            method,
+            annotation,
+            beanMappingOptions,
+            messager,
+            typeFactory,
+            mappings
+        );
+    }
+
+    public static void addAnnotations(Iterable<AnnotationDescriptor> annotations,
+                                      ExecutableDescriptor method,
+                                      BeanMappingOptions beanMappingOptions,
+                                      FormattingMessager messager,
+                                      TypeFactory typeFactory,
+                                      AnnotationGemFactory annotationGems,
+                                      Set<MappingOptions> mappings) {
+        Objects.requireNonNull( typeFactory, "typeFactory" );
+        if ( annotations == null ) {
+            return;
+        }
+        for ( AnnotationDescriptor annotation : annotations ) {
+            addAnnotation( annotation, method, beanMappingOptions, messager, typeFactory, annotationGems, mappings );
         }
     }
 
-    public static void addInstance(MappingGem mapping, ExecutableElement method,
+    public static void addInstance(MappingGem mapping, ExecutableDescriptor method,
+                                   AnnotationDescriptor annotation,
                                    BeanMappingOptions beanMappingOptions, FormattingMessager messager,
-                                   TypeUtils typeUtils,
+                                   TypeFactory typeFactory,
                                    Set<MappingOptions> mappings) {
-
-        if ( !isConsistent( mapping, method, messager ) ) {
-            return;
-        }
 
         String source = mapping.source().getValue();
         String constant = mapping.constant().getValue();
-        String expression = getExpression( mapping, method, messager );
-        String defaultExpression = getDefaultExpression( mapping, method, messager );
-        String conditionExpression = getConditionExpression( mapping, method, messager );
         String dateFormat = mapping.dateFormat().getValue();
         String numberFormat = mapping.numberFormat().getValue();
         String locale = mapping.locale().getValue();
@@ -126,29 +174,68 @@ public class MappingOptions extends DelegatingOptions {
             new LinkedHashSet<>( mapping.dependsOn().getValue() ) :
             Collections.emptySet();
 
+        AnnotationDescriptor mappingAnnotation = annotation != null ? annotation
+            : typeFactory.getDescriptorFactory().annotationDescriptor( mapping.mirror() );
+
+        if ( !isConsistent( mapping, method, messager, typeFactory, mappingAnnotation ) ) {
+            return;
+        }
+
+        String expression = getExpression( mapping, method, messager, typeFactory, mappingAnnotation );
+        String defaultExpression = getDefaultExpression( mapping, method, messager, typeFactory, mappingAnnotation );
+        String conditionExpression =
+            getConditionExpression( mapping, method, messager, typeFactory, mappingAnnotation );
         FormattingParameters formattingParam = new FormattingParameters(
             dateFormat,
             numberFormat,
-            mapping.mirror(),
-            mapping.dateFormat().getAnnotationValue(),
+            mappingAnnotation,
+            typeFactory.getDescriptorFactory().annotationValueDescriptor( mapping.dateFormat().getAnnotationValue() ),
             method,
             locale
         );
+        List<TypeDescriptor> qualifiers;
+        if ( mapping.qualifiedBy().hasValue() ) {
+            qualifiers = AnnotationValueUtils.asTypeList(
+                typeFactory.getDescriptorFactory()
+                    .annotationValueDescriptor( mapping.qualifiedBy().getAnnotationValue() )
+            );
+        }
+        else {
+            qualifiers = Collections.<TypeDescriptor>emptyList();
+        }
+        List<TypeDescriptor> conditionQualifiers;
+        if ( mapping.conditionQualifiedBy().hasValue() ) {
+            conditionQualifiers = AnnotationValueUtils.asTypeList(
+                typeFactory.getDescriptorFactory()
+                    .annotationValueDescriptor( mapping.conditionQualifiedBy().getAnnotationValue() )
+            );
+        }
+        else {
+            conditionQualifiers = Collections.<TypeDescriptor>emptyList();
+        }
+        TypeDescriptor resultType = mapping.resultType().hasValue()
+            ? AnnotationValueUtils.asType(
+                typeFactory.getDescriptorFactory()
+                    .annotationValueDescriptor( mapping.resultType().getAnnotationValue() )
+            )
+            : null;
+
         SelectionParameters selectionParams = new SelectionParameters(
-            mapping.qualifiedBy().get(),
+            qualifiers,
             mapping.qualifiedByName().get(),
-            mapping.conditionQualifiedBy().get(),
+            conditionQualifiers,
             mapping.conditionQualifiedByName().get(),
-            mapping.resultType().getValue(),
-            typeUtils
+            resultType
         );
 
         MappingOptions options = new MappingOptions(
             mapping.target().getValue(),
             method,
-            mapping.target().getAnnotationValue(),
+            typeFactory.getDescriptorFactory()
+                .annotationValueDescriptor( mapping.target().getAnnotationValue() ),
             source,
-            mapping.source().getAnnotationValue(),
+            typeFactory.getDescriptorFactory()
+                .annotationValueDescriptor( mapping.source().getAnnotationValue() ),
             constant,
             expression,
             defaultExpression,
@@ -159,7 +246,12 @@ public class MappingOptions extends DelegatingOptions {
             selectionParams,
             dependsOn,
             mapping,
+            mapping.dependsOn().hasValue()
+                ? typeFactory.getDescriptorFactory()
+                    .annotationValueDescriptor( mapping.dependsOn().getAnnotationValue() )
+                : null,
             null,
+            mappingAnnotation,
             beanMappingOptions
         );
 
@@ -171,7 +263,7 @@ public class MappingOptions extends DelegatingOptions {
         }
     }
 
-   public static MappingOptions forIgnore(String targetName) {
+    public static MappingOptions forIgnore(String targetName) {
         return new MappingOptions(
             targetName,
             null,
@@ -189,18 +281,21 @@ public class MappingOptions extends DelegatingOptions {
             Collections.emptySet(),
             null,
             null,
+            null,
+            null,
             null
         );
     }
 
-    private static boolean isConsistent(MappingGem gem, ExecutableElement method,
-                                        FormattingMessager messager) {
+    private static boolean isConsistent(MappingGem gem, ExecutableDescriptor method,
+                                        FormattingMessager messager, TypeFactory typeFactory,
+                                        AnnotationDescriptor mappingAnnotation) {
 
         if ( !gem.target().hasValue() ) {
             messager.printMessage(
                 method,
-                gem.mirror(),
-                gem.target().getAnnotationValue(),
+                mappingAnnotation,
+                typeFactory.getDescriptorFactory().annotationValueDescriptor( gem.target().getAnnotationValue() ),
                 Message.PROPERTYMAPPING_EMPTY_TARGET
             );
             return false;
@@ -271,17 +366,17 @@ public class MappingOptions extends DelegatingOptions {
             return true;
         }
         else {
-            messager.printMessage( method, gem.mirror(), message );
+            messager.printMessage( method, mappingAnnotation, message );
             return false;
         }
     }
 
     @SuppressWarnings("checkstyle:parameternumber")
     private MappingOptions(String targetName,
-                           Element element,
-                           AnnotationValue targetAnnotationValue,
+                           ElementDescriptor element,
+                           AnnotationValueDescriptor targetAnnotationValue,
                            String sourceName,
-                           AnnotationValue sourceAnnotationValue,
+                           AnnotationValueDescriptor sourceAnnotationValue,
                            String constant,
                            String javaExpression,
                            String defaultJavaExpression,
@@ -292,7 +387,9 @@ public class MappingOptions extends DelegatingOptions {
                            SelectionParameters selectionParameters,
                            Set<String> dependsOn,
                            MappingGem mapping,
+                           AnnotationValueDescriptor dependsOnAnnotationValue,
                            InheritContext inheritContext,
+                           AnnotationDescriptor annotation,
                            DelegatingOptions next
     ) {
         super( next );
@@ -311,11 +408,14 @@ public class MappingOptions extends DelegatingOptions {
         this.selectionParameters = selectionParameters;
         this.dependsOn = dependsOn;
         this.mapping = mapping;
+        this.dependsOnAnnotationValue = dependsOnAnnotationValue;
         this.inheritContext = inheritContext;
+        this.annotation = annotation;
     }
 
-    private static String getExpression(MappingGem mapping, ExecutableElement element,
-                                        FormattingMessager messager) {
+    private static String getExpression(MappingGem mapping, ExecutableDescriptor element,
+                                        FormattingMessager messager, TypeFactory typeFactory,
+                                        AnnotationDescriptor mappingAnnotation) {
         if ( !mapping.expression().hasValue() ) {
             return null;
         }
@@ -325,8 +425,9 @@ public class MappingOptions extends DelegatingOptions {
         if ( !javaExpressionMatcher.matches() ) {
             messager.printMessage(
                 element,
-                mapping.mirror(),
-                mapping.expression().getAnnotationValue(),
+                mappingAnnotation,
+                typeFactory.getDescriptorFactory()
+                    .annotationValueDescriptor( mapping.expression().getAnnotationValue() ),
                 Message.PROPERTYMAPPING_INVALID_EXPRESSION
             );
             return null;
@@ -335,8 +436,11 @@ public class MappingOptions extends DelegatingOptions {
         return javaExpressionMatcher.group( 1 ).trim();
     }
 
-    private static String getDefaultExpression(MappingGem mapping, ExecutableElement element,
-                                        FormattingMessager messager) {
+    private static String getDefaultExpression(MappingGem mapping,
+                                               ExecutableDescriptor element,
+                                               FormattingMessager messager,
+                                               TypeFactory typeFactory,
+                                               AnnotationDescriptor mappingAnnotation) {
         if ( !mapping.defaultExpression().hasValue() ) {
             return null;
         }
@@ -346,8 +450,9 @@ public class MappingOptions extends DelegatingOptions {
         if ( !javaExpressionMatcher.matches() ) {
             messager.printMessage(
                 element,
-                mapping.mirror(),
-                mapping.defaultExpression().getAnnotationValue(),
+                mappingAnnotation,
+                typeFactory.getDescriptorFactory()
+                    .annotationValueDescriptor( mapping.defaultExpression().getAnnotationValue() ),
                 Message.PROPERTYMAPPING_INVALID_DEFAULT_EXPRESSION
             );
             return null;
@@ -356,8 +461,11 @@ public class MappingOptions extends DelegatingOptions {
         return javaExpressionMatcher.group( 1 ).trim();
     }
 
-    private static String getConditionExpression(MappingGem mapping, ExecutableElement element,
-                                        FormattingMessager messager) {
+    private static String getConditionExpression(MappingGem mapping,
+                                                 ExecutableDescriptor element,
+                                                 FormattingMessager messager,
+                                                 TypeFactory typeFactory,
+                                                 AnnotationDescriptor mappingAnnotation) {
         if ( !mapping.conditionExpression().hasValue() ) {
             return null;
         }
@@ -367,8 +475,9 @@ public class MappingOptions extends DelegatingOptions {
         if ( !javaExpressionMatcher.matches() ) {
             messager.printMessage(
                 element,
-                mapping.mirror(),
-                mapping.conditionExpression().getAnnotationValue(),
+                mappingAnnotation,
+                typeFactory.getDescriptorFactory()
+                    .annotationValueDescriptor( mapping.conditionExpression().getAnnotationValue() ),
                 Message.PROPERTYMAPPING_INVALID_CONDITION_EXPRESSION
             );
             return null;
@@ -381,7 +490,7 @@ public class MappingOptions extends DelegatingOptions {
         return targetName;
     }
 
-    public AnnotationValue getTargetAnnotationValue() {
+    public AnnotationValueDescriptor getTargetAnnotationValue() {
         return targetAnnotationValue;
     }
 
@@ -395,7 +504,7 @@ public class MappingOptions extends DelegatingOptions {
         return sourceName;
     }
 
-    public AnnotationValue getSourceAnnotationValue() {
+    public AnnotationValueDescriptor getSourceAnnotationValue() {
         return sourceAnnotationValue;
     }
 
@@ -431,19 +540,16 @@ public class MappingOptions extends DelegatingOptions {
         return isIgnored;
     }
 
-    public AnnotationMirror getMirror() {
-        return Optional.ofNullable( mapping ).map( MappingGem::mirror ).orElse( null );
-    }
-
-    public Element getElement() {
+    public ElementDescriptor getElement() {
         return element;
     }
 
-    public AnnotationValue getDependsOnAnnotationValue() {
-        return Optional.ofNullable( mapping )
-            .map( MappingGem::dependsOn )
-            .map( GemValue::getAnnotationValue )
-            .orElse( null );
+    public AnnotationDescriptor getAnnotation() {
+        return annotation;
+    }
+
+    public AnnotationValueDescriptor getDependsOnAnnotationValue() {
+        return dependsOnAnnotationValue;
     }
 
     public Set<String> getDependsOn() {
@@ -473,12 +579,14 @@ public class MappingOptions extends DelegatingOptions {
     }
 
     @Override
-    public MappingControl getMappingControl(ElementUtils elementUtils) {
+    public MappingControl getMappingControl(TypeFactory typeFactory) {
         return Optional.ofNullable( mapping ).map( MappingGem::mappingControl )
             .filter( GemValue::hasValue )
             .map( GemValue::getValue )
-            .map( mc -> MappingControl.fromTypeMirror( mc, elementUtils ) )
-            .orElse( next().getMappingControl( elementUtils ) );
+            .map( mc -> MappingControl.fromTypeDescriptor(
+                typeFactory.getDescriptorFactory().typeDescriptor( mc ),
+                typeFactory.langElements() ) )
+            .orElse( next().getMappingControl( typeFactory ) );
     }
 
     /**
@@ -495,7 +603,7 @@ public class MappingOptions extends DelegatingOptions {
 
         MappingOptions mappingOptions = new MappingOptions(
             sourceName != null ? sourceName : targetName,
-            templateMethod.getExecutable(),
+            templateMethod.getExecutableDescriptor(),
             targetAnnotationValue,
             sourceName != null ? targetName : null,
             sourceAnnotationValue,
@@ -509,7 +617,9 @@ public class MappingOptions extends DelegatingOptions {
             selectionParameters,
             Collections.emptySet(),
             mapping,
+            dependsOnAnnotationValue,
             new InheritContext( true, false, templateMethod ),
+            annotation,
             beanMappingOptions
         );
         return mappingOptions;
@@ -528,7 +638,7 @@ public class MappingOptions extends DelegatingOptions {
                                                     BeanMappingOptions beanMappingOptions ) {
         MappingOptions mappingOptions = new MappingOptions(
             targetName,
-            templateMethod.getExecutable(),
+            templateMethod.getExecutableDescriptor(),
             targetAnnotationValue,
             sourceName,
             sourceAnnotationValue,
@@ -542,7 +652,9 @@ public class MappingOptions extends DelegatingOptions {
             selectionParameters,
             dependsOn,
             mapping,
+            dependsOnAnnotationValue,
             new InheritContext( false, true, templateMethod ),
+            annotation,
             beanMappingOptions
         );
         return mappingOptions;
@@ -583,4 +695,3 @@ public class MappingOptions extends DelegatingOptions {
     }
 
 }
-

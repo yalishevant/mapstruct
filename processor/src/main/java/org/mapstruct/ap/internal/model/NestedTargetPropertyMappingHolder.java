@@ -668,7 +668,7 @@ public class NestedTargetPropertyMappingHolder {
                     mappingContext.getMessager()
                         .printMessage(
                             mapping.getElement(),
-                            mapping.getMirror(),
+                            mapping.getAnnotation(),
                             mapping.getTargetAnnotationValue(),
                             Message.BEANMAPPING_UNKNOWN_PROPERTY_IN_TYPE,
                             targetPropertyName,

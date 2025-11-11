@@ -13,26 +13,33 @@ import java.util.Map;
 import java.util.Set;
 import java.util.function.Supplier;
 
-import javax.lang.model.element.AnnotationMirror;
-import javax.lang.model.element.TypeElement;
-
 import org.mapstruct.ap.internal.model.common.Assignment;
 import org.mapstruct.ap.internal.model.common.FormattingParameters;
 import org.mapstruct.ap.internal.model.common.SourceRHS;
 import org.mapstruct.ap.internal.model.common.Type;
+import org.mapstruct.ap.langmodel.api.EnumMappingSupport;
+import org.mapstruct.ap.langmodel.api.LangElements;
+import org.mapstruct.ap.langmodel.LangModelContext;
+import org.mapstruct.ap.internal.langmodel.MissingLangModelCapabilityException;
+import org.mapstruct.ap.langmodel.api.MappingExclusionSupport;
+import org.mapstruct.ap.descriptor.TypeDescriptor;
+import org.mapstruct.ap.descriptor.TypeElementDescriptor;
 import org.mapstruct.ap.internal.model.common.TypeFactory;
 import org.mapstruct.ap.internal.model.source.Method;
 import org.mapstruct.ap.internal.model.source.SourceMethod;
 import org.mapstruct.ap.internal.model.source.selector.SelectionCriteria;
 import org.mapstruct.ap.internal.option.Options;
 import org.mapstruct.ap.internal.util.AccessorNamingUtils;
-import org.mapstruct.ap.internal.util.ElementUtils;
 import org.mapstruct.ap.internal.util.FormattingMessager;
+import org.mapstruct.ap.internal.util.Message;
 import org.mapstruct.ap.internal.util.Services;
-import org.mapstruct.ap.internal.util.TypeUtils;
+import org.mapstruct.ap.descriptor.AnnotationDescriptor;
 import org.mapstruct.ap.spi.EnumMappingStrategy;
 import org.mapstruct.ap.spi.EnumTransformationStrategy;
+import org.mapstruct.ap.spi.lang.EnumMappingCapability;
+import org.mapstruct.ap.spi.lang.MappingExclusionCapability;
 import org.mapstruct.ap.spi.MappingExclusionProvider;
+import org.mapstruct.ap.internal.spi.DefaultMappingExclusionProvider;
 
 /**
  * This class provides the context for the builders.
@@ -83,7 +90,7 @@ public class MappingBuilderContext {
          * @param formattingParameters used for formatting dates and numbers
          * @param criteria parameters criteria in the selection process
          * @param sourceRHS source information
-         * @param positionHint the mirror for reporting problems
+         * @param positionHint the annotation for reporting problems
          * @param forger the supplier of the callback method to forge a method
          *
          * @return an assignment to a method parameter, which can either be:
@@ -97,7 +104,7 @@ public class MappingBuilderContext {
         Assignment getTargetAssignment(Method mappingMethod, ForgedMethodHistory description, Type targetType,
                                        FormattingParameters formattingParameters,
                                        SelectionCriteria criteria, SourceRHS sourceRHS,
-                                       AnnotationMirror positionHint,
+                                       AnnotationDescriptor positionHint,
                                        Supplier<Assignment> forger);
 
         Set<SupportingMappingMethod> getUsedSupportedMappings();
@@ -106,14 +113,16 @@ public class MappingBuilderContext {
     }
 
     private final TypeFactory typeFactory;
-    private final ElementUtils elementUtils;
-    private final TypeUtils typeUtils;
+    private final LangModelContext<?, ?, ?, ?> langModelContext;
+    private final LangElements langElements;
     private final FormattingMessager messager;
     private final AccessorNamingUtils accessorNaming;
     private final EnumMappingStrategy enumMappingStrategy;
+    private final EnumMappingSupport enumMappingSupport;
+    private final MappingExclusionSupport mappingExclusionSupport;
     private final Map<String, EnumTransformationStrategy> enumTransformationStrategies;
     private final Options options;
-    private final TypeElement mapperTypeElement;
+    private final TypeElementDescriptor mapperTypeDescriptor;
     private final List<SourceMethod> sourceModel;
     private final List<MapperReference> mapperReferences;
     private final MappingResolver mappingResolver;
@@ -123,27 +132,44 @@ public class MappingBuilderContext {
 
     //CHECKSTYLE:OFF
     public MappingBuilderContext(TypeFactory typeFactory,
-                          ElementUtils elementUtils,
-                          TypeUtils typeUtils,
+                          LangModelContext<?, ?, ?, ?> langModelContext,
                           FormattingMessager messager,
                           AccessorNamingUtils accessorNaming,
                           EnumMappingStrategy enumMappingStrategy,
                           Map<String, EnumTransformationStrategy> enumTransformationStrategies,
                           Options options,
                           MappingResolver mappingResolver,
-                          TypeElement mapper,
+                          TypeElementDescriptor mapperDescriptor,
                           List<SourceMethod> sourceModel,
                           List<MapperReference> mapperReferences) {
         this.typeFactory = typeFactory;
-        this.elementUtils = elementUtils;
-        this.typeUtils = typeUtils;
+        this.langModelContext = langModelContext;
+        this.langElements = langModelContext.elementQuery().elements();
         this.messager = messager;
         this.accessorNaming = accessorNaming;
         this.enumMappingStrategy = enumMappingStrategy;
+        EnumMappingCapability enumMappingCapability = langModelContext.optional( EnumMappingCapability.class )
+            .orElseThrow( () -> MissingLangModelCapabilityException.required( EnumMappingCapability.class ) );
+        this.enumMappingSupport = enumMappingCapability.enumMappingSupport( enumMappingStrategy );
+        MappingExclusionCapability mappingExclusionCapability =
+            langModelContext.optional( MappingExclusionCapability.class ).orElse( null );
+        if ( mappingExclusionCapability != null ) {
+            this.mappingExclusionSupport = mappingExclusionCapability.mappingExclusionSupport(
+                SUB_MAPPING_EXCLUSION_PROVIDER
+            );
+        }
+        else {
+            this.mappingExclusionSupport = descriptor -> false;
+            messager.printMessage(
+                Message.OPTIONAL_CAPABILITY_MISSING,
+                "MappingExclusionCapability",
+                "Mapping exclusion configuration"
+            );
+        }
         this.enumTransformationStrategies = enumTransformationStrategies;
         this.options = options;
         this.mappingResolver = mappingResolver;
-        this.mapperTypeElement = mapper;
+        this.mapperTypeDescriptor = mapperDescriptor;
         this.sourceModel = sourceModel;
         this.mapperReferences = mapperReferences;
     }
@@ -162,10 +188,6 @@ public class MappingBuilderContext {
         return forgedMethodsUnderCreation;
     }
 
-    public TypeElement getMapperTypeElement() {
-        return mapperTypeElement;
-    }
-
     public List<SourceMethod> getSourceModel() {
         return sourceModel;
     }
@@ -178,14 +200,6 @@ public class MappingBuilderContext {
         return typeFactory;
     }
 
-    public ElementUtils getElementUtils() {
-        return elementUtils;
-    }
-
-    public TypeUtils getTypeUtils() {
-        return typeUtils;
-    }
-
     public FormattingMessager getMessager() {
         return messager;
     }
@@ -196,6 +210,22 @@ public class MappingBuilderContext {
 
     public EnumMappingStrategy getEnumMappingStrategy() {
         return enumMappingStrategy;
+    }
+
+    public EnumMappingSupport getEnumMappingSupport() {
+        return enumMappingSupport;
+    }
+
+    public LangModelContext getLangModelContext() {
+        return langModelContext;
+    }
+
+    public LangElements getLangElements() {
+        return langElements;
+    }
+
+    public TypeElementDescriptor getMapperTypeDescriptor() {
+        return mapperTypeDescriptor;
     }
 
     public Map<String, EnumTransformationStrategy> getEnumTransformationStrategies() {
@@ -264,7 +294,8 @@ public class MappingBuilderContext {
      * @return {@code true} if the type is not excluded from the {@link MappingExclusionProvider}
      */
     private boolean canGenerateAutoSubMappingFor(Type type) {
-        return type.getTypeElement() != null && !SUB_MAPPING_EXCLUSION_PROVIDER.isExcluded( type.getTypeElement() );
+        TypeDescriptor descriptor = type.getTypeDescriptor();
+        return descriptor != null && !mappingExclusionSupport.isExcluded( descriptor );
     }
 
     public boolean isErroneous() {

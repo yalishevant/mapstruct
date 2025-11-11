@@ -6,14 +6,12 @@
 package org.mapstruct.ap.internal.model.source.selector;
 
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.List;
 
+import org.mapstruct.ap.internal.model.common.TypeFactory;
 import org.mapstruct.ap.internal.model.source.Method;
 import org.mapstruct.ap.internal.option.Options;
-import org.mapstruct.ap.internal.util.ElementUtils;
 import org.mapstruct.ap.internal.util.FormattingMessager;
-import org.mapstruct.ap.internal.util.TypeUtils;
 
 /**
  * Applies all known {@link MethodSelector}s in order.
@@ -24,27 +22,23 @@ public class MethodSelectors {
 
     private final List<MethodSelector> selectors;
 
-    public MethodSelectors(TypeUtils typeUtils, ElementUtils elementUtils,
-                           FormattingMessager messager, Options options) {
-        List<MethodSelector> selectorList = new ArrayList<>( Arrays.asList(
-            new MethodFamilySelector(),
-            new TypeSelector( messager ),
-            new QualifierSelector( typeUtils, elementUtils ),
-            new TargetTypeSelector( typeUtils ),
-            new JavaxXmlElementDeclSelector( typeUtils ),
-            new JakartaXmlElementDeclSelector( typeUtils ),
-            new InheritanceSelector()
-        ) );
+    public MethodSelectors(TypeFactory typeFactory, FormattingMessager messager, Options options) {
+        List<MethodSelector> selectorList = new ArrayList<>();
+        selectorList.add( new MethodFamilySelector() );
+        selectorList.add( new TypeSelector( messager ) );
+        selectorList.add( new QualifierSelector( typeFactory ) );
+        selectorList.add( new TargetTypeSelector( typeFactory.langTypes() ) );
+        selectorList.add( new JavaxXmlElementDeclSelector( typeFactory.langElements(), typeFactory.langTypes() ) );
+        selectorList.add( new JakartaXmlElementDeclSelector( typeFactory.langElements(), typeFactory.langTypes() ) );
+        selectorList.add( new InheritanceSelector() );
         if ( options != null && !options.isDisableLifecycleOverloadDeduplicateSelector() ) {
             selectorList.add( new LifecycleOverloadDeduplicateSelector() );
         }
 
-        selectorList.addAll( Arrays.asList(
-            new CreateOrUpdateSelector(),
-            new SourceRhsSelector(),
-            new FactoryParameterSelector(),
-            new MostSpecificResultTypeSelector()
-        ) );
+        selectorList.add( new CreateOrUpdateSelector() );
+        selectorList.add( new SourceRhsSelector() );
+        selectorList.add( new FactoryParameterSelector() );
+        selectorList.add( new MostSpecificResultTypeSelector() );
         this.selectors = selectorList;
     }
 

@@ -8,10 +8,9 @@ package org.mapstruct.ap.internal.model.source;
 import java.util.Collections;
 import java.util.List;
 import java.util.Objects;
-import javax.lang.model.type.TypeMirror;
-import org.mapstruct.ap.internal.util.TypeUtils;
 
 import org.mapstruct.ap.internal.model.common.SourceRHS;
+import org.mapstruct.ap.descriptor.TypeDescriptor;
 
 /**
  * Holding parameters common to the selection process, common to IterableMapping, BeanMapping, PropertyMapping and
@@ -27,16 +26,14 @@ public class SelectionParameters {
         Collections.emptyList(),
         Collections.emptyList(),
         null,
-        null,
         null
     );
 
-    private final List<TypeMirror> qualifiers;
+    private final List<TypeDescriptor> qualifiers;
     private final List<String> qualifyingNames;
-    private final List<TypeMirror> conditionQualifiers;
+    private final List<TypeDescriptor> conditionQualifiers;
     private final List<String> conditionQualifyingNames;
-    private final TypeMirror resultType;
-    private final TypeUtils typeUtils;
+    private final TypeDescriptor resultType;
     private final SourceRHS sourceRHS;
 
     /**
@@ -58,41 +55,62 @@ public class SelectionParameters {
             selectionParameters.qualifyingNames,
             selectionParameters.conditionQualifiers,
             selectionParameters.conditionQualifyingNames,
-            null,
-            selectionParameters.typeUtils
+            null
         );
     }
 
-    public SelectionParameters(List<TypeMirror> qualifiers, List<String> qualifyingNames, TypeMirror resultType,
-        TypeUtils typeUtils) {
+    public SelectionParameters(List<TypeDescriptor> qualifiers, List<String> qualifyingNames,
+                               TypeDescriptor resultType) {
         this(
             qualifiers,
             qualifyingNames,
             Collections.emptyList(),
             Collections.emptyList(),
             resultType,
-            typeUtils,
-            null
+            null,
+            false
         );
     }
 
-    public SelectionParameters(List<TypeMirror> qualifiers, List<String> qualifyingNames,
-                               List<TypeMirror> conditionQualifiers, List<String> conditionQualifyingNames,
-                               TypeMirror resultType,
-                               TypeUtils typeUtils) {
-        this( qualifiers, qualifyingNames, conditionQualifiers, conditionQualifyingNames, resultType, typeUtils, null );
+    public SelectionParameters(List<TypeDescriptor> qualifiers, List<String> qualifyingNames,
+                               List<TypeDescriptor> conditionQualifiers, List<String> conditionQualifyingNames,
+                               TypeDescriptor resultType) {
+        this(
+            qualifiers,
+            qualifyingNames,
+            conditionQualifiers,
+            conditionQualifyingNames,
+            resultType,
+            null,
+            false
+        );
     }
 
-    private SelectionParameters(List<TypeMirror> qualifiers, List<String> qualifyingNames,
-                                List<TypeMirror> conditionQualifiers, List<String> conditionQualifyingNames,
-                                TypeMirror resultType,
-                                TypeUtils typeUtils, SourceRHS sourceRHS) {
+    public SelectionParameters(List<TypeDescriptor> qualifiers, List<String> qualifyingNames,
+                               List<TypeDescriptor> conditionQualifiers, List<String> conditionQualifyingNames,
+                               TypeDescriptor resultType,
+                               SourceRHS sourceRHS) {
+        this(
+            qualifiers,
+            qualifyingNames,
+            conditionQualifiers,
+            conditionQualifyingNames,
+            resultType,
+            sourceRHS,
+            false
+        );
+    }
+
+    private SelectionParameters(List<TypeDescriptor> qualifiers, List<String> qualifyingNames,
+                                List<TypeDescriptor> conditionQualifiers, List<String> conditionQualifyingNames,
+                                TypeDescriptor resultType,
+                                SourceRHS sourceRHS,
+                                boolean unused) {
         this.qualifiers = qualifiers;
         this.qualifyingNames = qualifyingNames;
         this.conditionQualifiers = conditionQualifiers;
         this.conditionQualifyingNames = conditionQualifyingNames;
         this.resultType = resultType;
-        this.typeUtils = typeUtils;
         this.sourceRHS = sourceRHS;
     }
 
@@ -100,7 +118,7 @@ public class SelectionParameters {
      *
      * @return qualifiers used for further select the appropriate mapping method based on class and name
      */
-    public List<TypeMirror> getQualifiers() {
+    public List<TypeDescriptor> getQualifiers() {
         return qualifiers;
     }
 
@@ -115,7 +133,7 @@ public class SelectionParameters {
     /**
      * @return qualifiers used for further select the appropriate presence check method based on class and name
      */
-    public List<TypeMirror> getConditionQualifiers() {
+    public List<TypeDescriptor> getConditionQualifiers() {
         return conditionQualifiers;
     }
 
@@ -132,7 +150,7 @@ public class SelectionParameters {
      * @return resultType used for further select the appropriate mapping method based on resultType (bean mapping)
      * targetType (Iterable- and MapMapping)
      */
-    public TypeMirror getResultType() {
+    public TypeDescriptor getResultType() {
         return resultType;
     }
 
@@ -147,7 +165,7 @@ public class SelectionParameters {
     public int hashCode() {
         int hash = 3;
         hash = 97 * hash + (this.qualifyingNames != null ? this.qualifyingNames.hashCode() : 0);
-        hash = 97 * hash + (this.resultType != null ? this.resultType.toString().hashCode() : 0);
+        hash = 97 * hash + (this.resultType != null ? this.resultType.id().hashCode() : 0);
         return hash;
     }
 
@@ -172,7 +190,7 @@ public class SelectionParameters {
             return false;
         }
 
-        if ( !Objects.equals( this.conditionQualifiers, other.conditionQualifiers ) ) {
+        if ( !equals( this.conditionQualifiers, other.conditionQualifiers ) ) {
             return false;
         }
 
@@ -187,29 +205,31 @@ public class SelectionParameters {
         return equals( this.resultType, other.resultType );
     }
 
-    private boolean equals(List<TypeMirror> mirrors1, List<TypeMirror> mirrors2) {
-        if ( mirrors1 == null ) {
-            return (mirrors2 == null);
+    private boolean equals(List<TypeDescriptor> descriptors1, List<TypeDescriptor> descriptors2) {
+        if ( descriptors1 == null ) {
+            return descriptors2 == null;
         }
-        else if ( mirrors2 == null || mirrors1.size() != mirrors2.size() ) {
+        else if ( descriptors2 == null || descriptors1.size() != descriptors2.size() ) {
             return false;
         }
 
-        for ( int i = 0; i < mirrors1.size(); i++ ) {
-            if ( !equals( mirrors1.get( i ), mirrors2.get( i ) ) ) {
+        for ( int i = 0; i < descriptors1.size(); i++ ) {
+            if ( !equals( descriptors1.get( i ), descriptors2.get( i ) ) ) {
                 return false;
             }
         }
+
         return true;
     }
 
-    private boolean equals(TypeMirror mirror1, TypeMirror mirror2) {
-        if ( mirror1 == null ) {
-            return (mirror2 == null);
+    private boolean equals(TypeDescriptor descriptor1, TypeDescriptor descriptor2) {
+        if ( descriptor1 == descriptor2 ) {
+            return true;
         }
-        else {
-            return mirror2 != null && typeUtils.isSameType( mirror1, mirror2 );
+        if ( descriptor1 == null || descriptor2 == null ) {
+            return false;
         }
+        return Objects.equals( descriptor1.id(), descriptor2.id() );
     }
 
     public SelectionParameters withSourceRHS(SourceRHS sourceRHS) {
@@ -219,8 +239,8 @@ public class SelectionParameters {
             this.conditionQualifiers,
             this.conditionQualifyingNames,
             null,
-            this.typeUtils,
-            sourceRHS
+            sourceRHS,
+            false
         );
     }
 
@@ -231,8 +251,8 @@ public class SelectionParameters {
             Collections.emptyList(),
             Collections.emptyList(),
             null,
-            null,
-            sourceRHS
+            sourceRHS,
+            false
         );
     }
 

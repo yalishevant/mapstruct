@@ -10,7 +10,6 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 import java.util.Set;
-import javax.lang.model.element.ExecutableElement;
 
 import org.mapstruct.ap.internal.model.common.Accessibility;
 import org.mapstruct.ap.internal.model.common.ConversionContext;
@@ -19,6 +18,7 @@ import org.mapstruct.ap.internal.model.common.Type;
 import org.mapstruct.ap.internal.model.source.Method;
 import org.mapstruct.ap.internal.model.source.ParameterProvidedMethods;
 import org.mapstruct.ap.internal.util.Strings;
+import org.mapstruct.ap.descriptor.ExecutableDescriptor;
 
 /**
  * A non mapping method to be generated.
@@ -220,7 +220,7 @@ public abstract class HelperMethod implements Method {
     }
 
     @Override
-    public ExecutableElement getExecutable() {
+    public ExecutableDescriptor getExecutable() {
         return null;
     }
 

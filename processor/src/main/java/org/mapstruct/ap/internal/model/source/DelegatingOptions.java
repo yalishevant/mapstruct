@@ -8,8 +8,6 @@ package org.mapstruct.ap.internal.model.source;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
-import javax.lang.model.type.DeclaredType;
-import javax.lang.model.type.TypeMirror;
 
 import org.mapstruct.ap.internal.gem.BuilderGem;
 import org.mapstruct.ap.internal.gem.CollectionMappingStrategyGem;
@@ -20,8 +18,9 @@ import org.mapstruct.ap.internal.gem.NullValueMappingStrategyGem;
 import org.mapstruct.ap.internal.gem.NullValuePropertyMappingStrategyGem;
 import org.mapstruct.ap.internal.gem.ReportingPolicyGem;
 import org.mapstruct.ap.internal.gem.SubclassExhaustiveStrategyGem;
-import org.mapstruct.ap.internal.util.ElementUtils;
+import org.mapstruct.ap.internal.model.common.TypeFactory;
 import org.mapstruct.ap.spi.TypeHierarchyErroneousException;
+import org.mapstruct.ap.descriptor.TypeDescriptor;
 
 /**
  * Chain Of Responsibility Pattern.
@@ -44,11 +43,11 @@ public abstract class DelegatingOptions {
         return next.implementationPackage();
     }
 
-    public Set<DeclaredType> uses() {
+    public Set<TypeDescriptor> uses() {
         return next.uses();
     }
 
-    public Set<DeclaredType> imports() {
+    public Set<TypeDescriptor> imports() {
         return next.imports();
     }
 
@@ -106,7 +105,7 @@ public abstract class DelegatingOptions {
         return next.getSubclassExhaustiveStrategy();
     }
 
-    public TypeMirror getSubclassExhaustiveException() {
+    public TypeDescriptor getSubclassExhaustiveException() {
         return next.getSubclassExhaustiveException();
     }
 
@@ -122,11 +121,11 @@ public abstract class DelegatingOptions {
         return next.getBuilder();
     }
 
-    public MappingControl getMappingControl(ElementUtils elementUtils) {
-        return next.getMappingControl( elementUtils );
+    public MappingControl getMappingControl(TypeFactory typeFactory) {
+        return next.getMappingControl( typeFactory );
     }
 
-    public TypeMirror getUnexpectedValueMappingException() {
+    public TypeDescriptor getUnexpectedValueMappingException() {
         return next.getUnexpectedValueMappingException();
     }
 
@@ -134,18 +133,15 @@ public abstract class DelegatingOptions {
         return next;
     }
 
-    protected Set<DeclaredType> toDeclaredTypes(List<TypeMirror> in, Set<DeclaredType> next) {
-        Set<DeclaredType> result = new LinkedHashSet<>();
-        for ( TypeMirror typeMirror : in ) {
-            if ( typeMirror == null ) {
-                // When a class used in uses or imports is created by another annotation processor
-                // then javac will not return correct TypeMirror with TypeKind#ERROR, but rather a string "<error>"
-                // the gem tools would return a null TypeMirror in that case.
-                // Therefore throw TypeHierarchyErroneousException so we can postpone the generation of the mapper
-                throw new TypeHierarchyErroneousException( typeMirror );
+    protected Set<TypeDescriptor> mergeTypeDescriptors(List<TypeDescriptor> descriptors, Set<TypeDescriptor> next) {
+        Set<TypeDescriptor> result = new LinkedHashSet<>();
+        if ( descriptors != null ) {
+            for ( TypeDescriptor descriptor : descriptors ) {
+                if ( descriptor == null ) {
+                    throw new TypeHierarchyErroneousException();
+                }
+                result.add( descriptor );
             }
-
-            result.add( (DeclaredType) typeMirror );
         }
         result.addAll( next );
         return result;

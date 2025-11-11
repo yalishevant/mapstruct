@@ -6,7 +6,8 @@
 package org.mapstruct.ap.internal.model.source;
 
 import java.util.List;
-import javax.lang.model.element.ExecutableElement;
+
+import org.mapstruct.ap.descriptor.ExecutableDescriptor;
 
 import org.mapstruct.ap.internal.model.common.Accessibility;
 import org.mapstruct.ap.internal.model.common.Parameter;
@@ -140,7 +141,11 @@ public interface Method {
      */
     boolean overridesMethod();
 
-    ExecutableElement getExecutable();
+    ExecutableDescriptor getExecutable();
+
+    default ExecutableDescriptor getExecutableDescriptor() {
+        return getExecutable();
+    }
 
     /**
      * Whether this method is static or an instance method
@@ -174,6 +179,7 @@ public interface Method {
     boolean isUpdateMethod();
 
     /**
+     * Returns the mapping options declared for this method.
      *
      * @return the mapping options for this method
      */
@@ -184,15 +190,18 @@ public interface Method {
     }
 
     /**
+     * Checks whether the mapping target parameter is assignable to the return type.
      *
-     * @return true when @MappingTarget annotated parameter is the same type as the return type. The method has
-     * to be an update method in order for this to be true.
+     * @return true when {@code @MappingTarget} annotated parameter is the same type as the return type; the method
+     * has to be an update method in order for this to be true.
      */
     default boolean isMappingTargetAssignableToReturnType() {
         return isUpdateMethod() && getResultType().isAssignableTo( getReturnType() );
     }
 
     /**
+     * Returns the first source type (for single-source mapping methods).
+     *
      * @return the first source type, intended for mapping methods from single source to target
      */
     default Type getMappingSourceType() {
@@ -200,6 +209,8 @@ public interface Method {
     }
 
     /**
+     * Returns either the short or fully-qualified method name depending on the verbosity.
+     *
      * @return the short name for error messages when verbose, full name when not
      */
     String describe();

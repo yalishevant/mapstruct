@@ -7,28 +7,28 @@ package org.mapstruct.ap.internal.model.source;
 
 import java.util.Collections;
 import java.util.Set;
-import javax.lang.model.type.DeclaredType;
-import javax.lang.model.type.TypeMirror;
 
 import org.mapstruct.ap.internal.gem.BuilderGem;
 import org.mapstruct.ap.internal.gem.CollectionMappingStrategyGem;
 import org.mapstruct.ap.internal.gem.InjectionStrategyGem;
-import org.mapstruct.ap.internal.gem.MapperGem;
 import org.mapstruct.ap.internal.gem.MappingInheritanceStrategyGem;
 import org.mapstruct.ap.internal.gem.NullValueCheckStrategyGem;
 import org.mapstruct.ap.internal.gem.NullValueMappingStrategyGem;
 import org.mapstruct.ap.internal.gem.NullValuePropertyMappingStrategyGem;
 import org.mapstruct.ap.internal.gem.ReportingPolicyGem;
 import org.mapstruct.ap.internal.gem.SubclassExhaustiveStrategyGem;
+import org.mapstruct.ap.internal.model.common.TypeFactory;
 import org.mapstruct.ap.internal.option.Options;
-import org.mapstruct.ap.internal.util.ElementUtils;
+import org.mapstruct.ap.langmodel.AnnotationAttribute;
+import org.mapstruct.ap.langmodel.MapperAnnotation;
+import org.mapstruct.ap.descriptor.TypeDescriptor;
 
 public class DefaultOptions extends DelegatingOptions {
 
-    private final MapperGem mapper;
+    private final MapperAnnotation mapper;
     private final Options options;
 
-    DefaultOptions(MapperGem mapper, Options options) {
+    DefaultOptions(MapperAnnotation mapper, Options options) {
         super( null );
         this.mapper = mapper;
         this.options = options;
@@ -36,21 +36,21 @@ public class DefaultOptions extends DelegatingOptions {
 
     @Override
     public String implementationName() {
-        return mapper.implementationName().getDefaultValue();
+        return mapper.implementationName().defaultValue();
     }
 
     @Override
     public String implementationPackage() {
-        return mapper.implementationPackage().getDefaultValue();
+        return mapper.implementationPackage().defaultValue();
     }
 
     @Override
-    public Set<DeclaredType> uses() {
+    public Set<TypeDescriptor> uses() {
         return Collections.emptySet();
     }
 
     @Override
-    public Set<DeclaredType> imports() {
+    public Set<TypeDescriptor> imports() {
         return Collections.emptySet();
     }
 
@@ -60,7 +60,7 @@ public class DefaultOptions extends DelegatingOptions {
         if ( unmappedTargetPolicy != null ) {
             return unmappedTargetPolicy;
         }
-        return ReportingPolicyGem.valueOf( mapper.unmappedTargetPolicy().getDefaultValue() );
+        return ReportingPolicyGem.valueOf( mapper.unmappedTargetPolicy().defaultValue() );
     }
 
     @Override
@@ -69,12 +69,12 @@ public class DefaultOptions extends DelegatingOptions {
         if ( unmappedSourcePolicy != null ) {
             return unmappedSourcePolicy;
         }
-        return ReportingPolicyGem.valueOf( mapper.unmappedSourcePolicy().getDefaultValue() );
+        return ReportingPolicyGem.valueOf( mapper.unmappedSourcePolicy().defaultValue() );
     }
 
     @Override
     public ReportingPolicyGem typeConversionPolicy() {
-        return ReportingPolicyGem.valueOf( mapper.typeConversionPolicy().getDefaultValue() );
+        return ReportingPolicyGem.valueOf( mapper.typeConversionPolicy().defaultValue() );
     }
 
     @Override
@@ -83,19 +83,20 @@ public class DefaultOptions extends DelegatingOptions {
         if ( defaultComponentModel != null ) {
             return defaultComponentModel;
         }
-        return mapper.componentModel().getDefaultValue();
+        return mapper.componentModel().defaultValue();
     }
 
     public boolean suppressTimestampInGenerated() {
-        if ( mapper.suppressTimestampInGenerated().hasValue() ) {
-            return mapper.suppressTimestampInGenerated().getValue();
+        AnnotationAttribute<Boolean> attribute = mapper.suppressTimestampInGenerated();
+        if ( attribute.hasValue() ) {
+            return Boolean.TRUE.equals( attribute.value().orElse( null ) );
         }
         return options.isSuppressGeneratorTimestamp();
     }
 
     @Override
     public MappingInheritanceStrategyGem getMappingInheritanceStrategy() {
-        return MappingInheritanceStrategyGem.valueOf( mapper.mappingInheritanceStrategy().getDefaultValue() );
+        return MappingInheritanceStrategyGem.valueOf( mapper.mappingInheritanceStrategy().defaultValue() );
     }
 
     @Override
@@ -104,39 +105,39 @@ public class DefaultOptions extends DelegatingOptions {
         if ( defaultInjectionStrategy != null ) {
             return InjectionStrategyGem.valueOf( defaultInjectionStrategy.toUpperCase() );
         }
-        return InjectionStrategyGem.valueOf( mapper.injectionStrategy().getDefaultValue() );
+        return InjectionStrategyGem.valueOf( mapper.injectionStrategy().defaultValue() );
     }
 
     @Override
     public Boolean isDisableSubMappingMethodsGeneration() {
-        return mapper.disableSubMappingMethodsGeneration().getDefaultValue();
+        return mapper.disableSubMappingMethodsGeneration().defaultValue();
     }
 
     // BeanMapping and Mapping
 
     public CollectionMappingStrategyGem getCollectionMappingStrategy() {
-        return CollectionMappingStrategyGem.valueOf( mapper.collectionMappingStrategy().getDefaultValue() );
+        return CollectionMappingStrategyGem.valueOf( mapper.collectionMappingStrategy().defaultValue() );
     }
 
     public NullValueCheckStrategyGem getNullValueCheckStrategy() {
-        return NullValueCheckStrategyGem.valueOf( mapper.nullValueCheckStrategy().getDefaultValue() );
+        return NullValueCheckStrategyGem.valueOf( mapper.nullValueCheckStrategy().defaultValue() );
     }
 
     public NullValuePropertyMappingStrategyGem getNullValuePropertyMappingStrategy() {
         return NullValuePropertyMappingStrategyGem.valueOf(
-            mapper.nullValuePropertyMappingStrategy().getDefaultValue() );
+            mapper.nullValuePropertyMappingStrategy().defaultValue() );
     }
 
     public NullValueMappingStrategyGem getNullValueMappingStrategy() {
-        return NullValueMappingStrategyGem.valueOf( mapper.nullValueMappingStrategy().getDefaultValue() );
+        return NullValueMappingStrategyGem.valueOf( mapper.nullValueMappingStrategy().defaultValue() );
     }
 
     public SubclassExhaustiveStrategyGem getSubclassExhaustiveStrategy() {
-        return SubclassExhaustiveStrategyGem.valueOf( mapper.subclassExhaustiveStrategy().getDefaultValue() );
+        return SubclassExhaustiveStrategyGem.valueOf( mapper.subclassExhaustiveStrategy().defaultValue() );
     }
 
-    public TypeMirror getSubclassExhaustiveException() {
-        return mapper.subclassExhaustiveException().getDefaultValue();
+    public TypeDescriptor getSubclassExhaustiveException() {
+        return mapper.subclassExhaustiveException().defaultValue();
     }
 
     public NullValueMappingStrategyGem getNullValueIterableMappingStrategy() {
@@ -144,7 +145,7 @@ public class DefaultOptions extends DelegatingOptions {
         if ( nullValueIterableMappingStrategy != null ) {
             return nullValueIterableMappingStrategy;
         }
-        return NullValueMappingStrategyGem.valueOf( mapper.nullValueIterableMappingStrategy().getDefaultValue() );
+        return NullValueMappingStrategyGem.valueOf( mapper.nullValueIterableMappingStrategy().defaultValue() );
     }
 
     public NullValueMappingStrategyGem getNullValueMapMappingStrategy() {
@@ -152,7 +153,7 @@ public class DefaultOptions extends DelegatingOptions {
         if ( nullValueMapMappingStrategy != null ) {
             return nullValueMapMappingStrategy;
         }
-        return NullValueMappingStrategyGem.valueOf( mapper.nullValueMapMappingStrategy().getDefaultValue() );
+        return NullValueMappingStrategyGem.valueOf( mapper.nullValueMapMappingStrategy().defaultValue() );
     }
 
     public BuilderGem getBuilder() {
@@ -163,12 +164,15 @@ public class DefaultOptions extends DelegatingOptions {
     }
 
     @Override
-    public MappingControl getMappingControl(ElementUtils elementUtils) {
-        return MappingControl.fromTypeMirror( mapper.mappingControl().getDefaultValue(), elementUtils );
+    public MappingControl getMappingControl(TypeFactory typeFactory) {
+        return MappingControl.fromTypeDescriptor(
+            mapper.mappingControl().defaultValue(),
+            typeFactory.langElements()
+        );
     }
 
     @Override
-    public TypeMirror getUnexpectedValueMappingException() {
+    public TypeDescriptor getUnexpectedValueMappingException() {
         return null;
     }
 

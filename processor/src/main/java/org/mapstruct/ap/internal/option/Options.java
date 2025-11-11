@@ -62,6 +62,18 @@ public class Options {
         return parseBoolean( MappingOption.VERBOSE );
     }
 
+    public String getLangModelBackend() {
+        if ( options.isEmpty() ) {
+            return null;
+        }
+        String backend = options.get( MappingOption.LANG_MODEL_BACKEND.getOptionName() );
+        if ( backend == null ) {
+            return null;
+        }
+        String trimmed = backend.trim();
+        return trimmed.isEmpty() ? null : trimmed;
+    }
+
     public NullValueMappingStrategyGem getNullValueIterableMappingStrategy() {
         return parseEnum( MappingOption.NULL_VALUE_ITERABLE_MAPPING_STRATEGY, NullValueMappingStrategyGem.class );
     }

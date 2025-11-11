@@ -25,6 +25,11 @@ public abstract class AbstractToXmlGregorianCalendar extends BuiltInMethod {
     private final Set<Type> importTypes;
     private final Type dataTypeFactoryType;
 
+    /**
+     * Creates an XML calendar helper backed by the provided {@link TypeFactory}.
+     *
+     * @param typeFactory factory used to resolve built-in types required by the converter
+     */
     public AbstractToXmlGregorianCalendar(TypeFactory typeFactory) {
         this.returnType = typeFactory.getType( XmlConstants.JAVAX_XML_XML_GREGORIAN_CALENDAR );
         this.dataTypeFactoryType = typeFactory.getType( XmlConstants.JAVAX_XML_DATATYPE_FACTORY );

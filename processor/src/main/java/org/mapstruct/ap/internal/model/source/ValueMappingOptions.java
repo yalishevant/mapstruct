@@ -7,14 +7,14 @@ package org.mapstruct.ap.internal.model.source;
 
 import java.util.Objects;
 import java.util.Set;
-import javax.lang.model.element.AnnotationMirror;
-import javax.lang.model.element.AnnotationValue;
-import javax.lang.model.element.ExecutableElement;
 
-import org.mapstruct.ap.internal.gem.ValueMappingGem;
-import org.mapstruct.ap.internal.gem.ValueMappingsGem;
 import org.mapstruct.ap.internal.util.FormattingMessager;
 import org.mapstruct.ap.internal.util.Message;
+import org.mapstruct.ap.internal.util.AnnotationDescriptorUtils;
+import org.mapstruct.ap.internal.util.AnnotationValueUtils;
+import org.mapstruct.ap.descriptor.AnnotationDescriptor;
+import org.mapstruct.ap.descriptor.AnnotationValueDescriptor;
+import org.mapstruct.ap.descriptor.ExecutableDescriptor;
 
 import static org.mapstruct.ap.internal.gem.MappingConstantsGem.ANY_REMAINING;
 import static org.mapstruct.ap.internal.gem.MappingConstantsGem.ANY_UNMAPPED;
@@ -29,16 +29,17 @@ public class ValueMappingOptions {
 
     private final String source;
     private final String target;
-    private final AnnotationMirror mirror;
-    private final AnnotationValue sourceAnnotationValue;
-    private final AnnotationValue targetAnnotationValue;
+    private final AnnotationDescriptor mirror;
+    private final AnnotationValueDescriptor sourceAnnotationValue;
+    private final AnnotationValueDescriptor targetAnnotationValue;
 
-    public static void fromMappingsGem(ValueMappingsGem mappingsGem, ExecutableElement method,
-                                       FormattingMessager messager, Set<ValueMappingOptions> mappings) {
-
+    public static void collect(Iterable<AnnotationDescriptor> annotations,
+                               ExecutableDescriptor method,
+                               FormattingMessager messager,
+                               Set<ValueMappingOptions> mappings) {
         boolean anyFound = false;
-        for ( ValueMappingGem mappingGem : mappingsGem.value().get() ) {
-            ValueMappingOptions mapping = fromMappingGem( mappingGem );
+        for ( AnnotationDescriptor annotation : annotations ) {
+            ValueMappingOptions mapping = fromAnnotation( annotation );
             if ( mapping != null ) {
 
                 if ( !mappings.contains( mapping ) ) {
@@ -47,10 +48,10 @@ public class ValueMappingOptions {
                 else {
                     messager.printMessage(
                         method,
-                        mappingGem.mirror(),
-                        mappingGem.target().getAnnotationValue(),
+                        mapping.mirror,
+                        mapping.targetAnnotationValue,
                         Message.VALUEMAPPING_DUPLICATE_SOURCE,
-                        mappingGem.source().get()
+                        mapping.source
                     );
                 }
                 if ( ANY_REMAINING.equals( mapping.source )
@@ -58,10 +59,10 @@ public class ValueMappingOptions {
                     if ( anyFound ) {
                         messager.printMessage(
                             method,
-                            mappingGem.mirror(),
-                            mappingGem.target().getAnnotationValue(),
+                            mapping.mirror,
+                            mapping.targetAnnotationValue,
                             Message.VALUEMAPPING_ANY_AREADY_DEFINED,
-                            mappingGem.source().get()
+                            mapping.source
                         );
                     }
                     anyFound = true;
@@ -70,14 +71,28 @@ public class ValueMappingOptions {
         }
     }
 
-    public static ValueMappingOptions fromMappingGem(ValueMappingGem mapping ) {
-
-        return new ValueMappingOptions( mapping.source().get(), mapping.target().get(), mapping.mirror(),
-            mapping.source().getAnnotationValue(), mapping.target().getAnnotationValue() );
+    public static ValueMappingOptions fromAnnotation(AnnotationDescriptor annotation) {
+        AnnotationValueDescriptor sourceValue = AnnotationDescriptorUtils.getValue( annotation, "source" );
+        AnnotationValueDescriptor targetValue = AnnotationDescriptorUtils.getValue( annotation, "target" );
+        String source = AnnotationValueUtils.asString( sourceValue );
+        String target = AnnotationValueUtils.asString( targetValue );
+        if ( source == null || target == null ) {
+            return null;
+        }
+        return new ValueMappingOptions(
+            source,
+            target,
+            annotation,
+            sourceValue,
+            targetValue
+        );
     }
 
-    private ValueMappingOptions(String source, String target, AnnotationMirror mirror,
-                                AnnotationValue sourceAnnotationValue, AnnotationValue targetAnnotationValue ) {
+    private ValueMappingOptions(String source,
+                                String target,
+                                AnnotationDescriptor mirror,
+                                AnnotationValueDescriptor sourceAnnotationValue,
+                                AnnotationValueDescriptor targetAnnotationValue ) {
         this.source = source;
         this.target = target;
         this.mirror = mirror;
@@ -99,15 +114,15 @@ public class ValueMappingOptions {
         return target;
     }
 
-    public AnnotationMirror getMirror() {
+    public AnnotationDescriptor getAnnotation() {
         return mirror;
     }
 
-    public AnnotationValue getSourceAnnotationValue() {
+    public AnnotationValueDescriptor getSourceAnnotationValue() {
         return sourceAnnotationValue;
     }
 
-    public AnnotationValue getTargetAnnotationValue() {
+    public AnnotationValueDescriptor getTargetAnnotationValue() {
         return targetAnnotationValue;
     }
 
@@ -118,13 +133,18 @@ public class ValueMappingOptions {
                 target,
                 source,
                 mirror,
-                sourceAnnotationValue,
-                targetAnnotationValue );
+                targetAnnotationValue,
+                sourceAnnotationValue
+            );
         }
         else {
             result = null;
         }
         return result;
+    }
+
+    public boolean isAnyMapping() {
+        return ANY_REMAINING.equals( source ) || ANY_UNMAPPED.equals( source );
     }
 
     @Override

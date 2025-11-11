@@ -5,9 +5,9 @@
  */
 package org.mapstruct.ap.internal.model.common;
 
-import javax.lang.model.element.AnnotationMirror;
-import javax.lang.model.element.AnnotationValue;
-import javax.lang.model.element.Element;
+import org.mapstruct.ap.descriptor.AnnotationDescriptor;
+import org.mapstruct.ap.descriptor.AnnotationValueDescriptor;
+import org.mapstruct.ap.descriptor.ElementDescriptor;
 
 /**
  *
@@ -19,16 +19,20 @@ public class FormattingParameters {
 
     private final String date;
     private final String number;
-    private final AnnotationMirror mirror;
-    private final AnnotationValue dateAnnotationValue;
-    private final Element element;
+    private final AnnotationDescriptor annotation;
+    private final AnnotationValueDescriptor dateAnnotationValue;
+    private final ElementDescriptor element;
     private final String locale;
 
-    public FormattingParameters(String date, String number, AnnotationMirror mirror,
-        AnnotationValue dateAnnotationValue, Element element, String locale) {
+    public FormattingParameters(String date,
+                                String number,
+                                AnnotationDescriptor annotation,
+                                AnnotationValueDescriptor dateAnnotationValue,
+                                ElementDescriptor element,
+                                String locale) {
         this.date = date;
         this.number = number;
-        this.mirror = mirror;
+        this.annotation = annotation;
         this.dateAnnotationValue = dateAnnotationValue;
         this.element = element;
         this.locale = locale;
@@ -42,15 +46,15 @@ public class FormattingParameters {
         return number;
     }
 
-    public AnnotationMirror getMirror() {
-        return mirror;
+    public AnnotationDescriptor getAnnotation() {
+        return annotation;
     }
 
-    public AnnotationValue getDateAnnotationValue() {
+    public AnnotationValueDescriptor getDateAnnotationValue() {
         return dateAnnotationValue;
     }
 
-    public Element getElement() {
+    public ElementDescriptor getElement() {
         return element;
     }
 

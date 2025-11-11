@@ -10,17 +10,18 @@ import java.util.EnumSet;
 import java.util.List;
 import java.util.Set;
 import java.util.stream.Collectors;
-import javax.lang.model.element.ExecutableElement;
-import javax.lang.model.element.TypeElement;
-import javax.lang.model.type.DeclaredType;
-import javax.lang.model.type.TypeKind;
-import javax.lang.model.type.TypeMirror;
 
 import org.mapstruct.ap.internal.gem.ConditionGem;
 import org.mapstruct.ap.internal.gem.ConditionStrategyGem;
 import org.mapstruct.ap.internal.model.common.Parameter;
+import org.mapstruct.ap.internal.util.AnnotationDescriptorUtils;
 import org.mapstruct.ap.internal.util.FormattingMessager;
 import org.mapstruct.ap.internal.util.Message;
+import org.mapstruct.ap.descriptor.AnnotationDescriptor;
+import org.mapstruct.ap.descriptor.AnnotationValueDescriptor;
+import org.mapstruct.ap.descriptor.ExecutableDescriptor;
+import org.mapstruct.ap.descriptor.LangTypeKind;
+import org.mapstruct.ap.descriptor.TypeDescriptor;
 
 /**
  * @author Filip Hrisafov
@@ -37,25 +38,18 @@ public class ConditionOptions {
         return conditionStrategies;
     }
 
-    public static ConditionOptions getInstanceOn(ConditionGem condition, ExecutableElement method,
+    public static ConditionOptions getInstanceOn(ConditionGem condition,
+                                                 AnnotationDescriptor annotation,
+                                                 ExecutableDescriptor method,
                                                  List<Parameter> parameters,
                                                  FormattingMessager messager) {
         if ( condition == null ) {
             return null;
         }
 
-        TypeMirror returnType = method.getReturnType();
-        TypeKind returnTypeKind = returnType.getKind();
-        // We only allow methods that return boolean or Boolean to be condition methods
-        if ( returnTypeKind != TypeKind.BOOLEAN ) {
-            if ( returnTypeKind != TypeKind.DECLARED ) {
-                return null;
-            }
-            DeclaredType declaredType = (DeclaredType) returnType;
-            TypeElement returnTypeElement = (TypeElement) declaredType.asElement();
-            if ( !returnTypeElement.getQualifiedName().contentEquals( Boolean.class.getCanonicalName() ) ) {
-                return null;
-            }
+        TypeDescriptor returnType = method.returnType();
+        if ( !isBooleanReturnType( returnType ) ) {
+            return null;
         }
 
         Set<ConditionStrategyGem> strategies = condition.appliesTo().get()
@@ -64,10 +58,11 @@ public class ConditionOptions {
             .collect( Collectors.toCollection( () -> EnumSet.noneOf( ConditionStrategyGem.class ) ) );
 
         if ( strategies.isEmpty() ) {
+            AnnotationValueDescriptor appliesToValue = AnnotationDescriptorUtils.getValue( annotation, "appliesTo" );
             messager.printMessage(
                 method,
-                condition.mirror(),
-                condition.appliesTo().getAnnotationValue(),
+                annotation,
+                appliesToValue,
                 Message.CONDITION_MISSING_APPLIES_TO_STRATEGY
             );
 
@@ -77,7 +72,7 @@ public class ConditionOptions {
         boolean allStrategiesValid = true;
 
         for ( ConditionStrategyGem strategy : strategies ) {
-            boolean isStrategyValid = isValid( strategy, condition, method, parameters, messager );
+            boolean isStrategyValid = isValid( strategy, condition, annotation, method, parameters, messager );
             allStrategiesValid &= isStrategyValid;
         }
 
@@ -85,20 +80,23 @@ public class ConditionOptions {
     }
 
     protected static boolean isValid(ConditionStrategyGem strategy, ConditionGem condition,
-                                     ExecutableElement method, List<Parameter> parameters,
+                                     AnnotationDescriptor annotation,
+                                     ExecutableDescriptor method, List<Parameter> parameters,
                                      FormattingMessager messager) {
         if ( strategy == ConditionStrategyGem.SOURCE_PARAMETERS ) {
-            return hasValidStrategyForSourceProperties( condition, method, parameters, messager );
+            return hasValidStrategyForSourceProperties( condition, annotation, method, parameters, messager );
         }
         else if ( strategy == ConditionStrategyGem.PROPERTIES ) {
-            return hasValidStrategyForProperties( condition, method, parameters, messager );
+            return hasValidStrategyForProperties( condition, annotation, method, parameters, messager );
         }
         else {
             throw new IllegalStateException( "Invalid condition strategy: " + strategy );
         }
     }
 
-    protected static boolean hasValidStrategyForSourceProperties(ConditionGem condition, ExecutableElement method,
+    protected static boolean hasValidStrategyForSourceProperties(ConditionGem condition,
+                                                                 AnnotationDescriptor annotation,
+                                                                 ExecutableDescriptor method,
                                                                  List<Parameter> parameters,
                                                                  FormattingMessager messager) {
         for ( Parameter parameter : parameters ) {
@@ -114,7 +112,7 @@ public class ConditionOptions {
 
             messager.printMessage(
                 method,
-                condition.mirror(),
+                annotation,
                 Message.CONDITION_SOURCE_PARAMETERS_INVALID_PARAMETER,
                 parameter.describe()
             );
@@ -123,7 +121,9 @@ public class ConditionOptions {
         return true;
     }
 
-    protected static boolean hasValidStrategyForProperties(ConditionGem condition, ExecutableElement method,
+    protected static boolean hasValidStrategyForProperties(ConditionGem condition,
+                                                           AnnotationDescriptor annotation,
+                                                           ExecutableDescriptor method,
                                                            List<Parameter> parameters,
                                                            FormattingMessager messager) {
         for ( Parameter parameter : parameters ) {
@@ -157,14 +157,24 @@ public class ConditionOptions {
                 continue;
             }
 
-            messager.printMessage(
-                method,
-                condition.mirror(),
-                Message.CONDITION_PROPERTIES_INVALID_PARAMETER,
-                parameter
-            );
+            messager.printMessage( method, annotation, Message.CONDITION_PROPERTIES_INVALID_PARAMETER, parameter );
             return false;
         }
         return true;
+    }
+
+    private static boolean isBooleanReturnType(TypeDescriptor returnType) {
+        if ( returnType == null ) {
+            return false;
+        }
+        if ( returnType.isPrimitive() ) {
+            return "boolean".equals( returnType.displayName() );
+        }
+        if ( returnType.kind() == LangTypeKind.DECLARED ) {
+            return returnType.qualifiedName()
+                .map( Boolean.class.getCanonicalName()::equals )
+                .orElse( false );
+        }
+        return false;
     }
 }

@@ -5,44 +5,28 @@
  */
 package org.mapstruct.ap.internal.model.source.selector;
 
-import javax.lang.model.element.Element;
-
-import org.mapstruct.ap.internal.gem.XmlElementDeclGem;
-import org.mapstruct.ap.internal.gem.XmlElementRefGem;
-import org.mapstruct.ap.internal.util.TypeUtils;
+import org.mapstruct.ap.langmodel.api.LangElements;
+import org.mapstruct.ap.langmodel.api.LangTypes;
 
 /**
- * The concrete implementation of the {@link XmlElementDeclSelector} that
- * works with {@link javax.xml.bind.annotation.XmlElementRef} and
- * {@link javax.xml.bind.annotation.XmlElementDecl}.
- *
- * @author Iaroslav Bogdanchikov
+ * {@link XmlElementDeclSelector} variant for {@code javax.xml.bind.annotation} annotations.
  */
 class JavaxXmlElementDeclSelector extends XmlElementDeclSelector {
 
-    JavaxXmlElementDeclSelector(TypeUtils typeUtils) {
-        super( typeUtils );
+    private static final String XML_ELEMENT_DECL = "javax.xml.bind.annotation.XmlElementDecl";
+    private static final String XML_ELEMENT_REF = "javax.xml.bind.annotation.XmlElementRef";
+
+    JavaxXmlElementDeclSelector(LangElements langElements, LangTypes langTypes) {
+        super( langElements, langTypes );
     }
 
     @Override
-    XmlElementDeclInfo getXmlElementDeclInfo(Element element) {
-        XmlElementDeclGem gem = XmlElementDeclGem.instanceOn( element );
-
-        if (gem == null) {
-            return null;
-        }
-
-        return new XmlElementDeclInfo( gem.name().get(), gem.scope().get() );
+    protected String xmlElementDeclAnnotation() {
+        return XML_ELEMENT_DECL;
     }
 
     @Override
-    XmlElementRefInfo getXmlElementRefInfo(Element element) {
-        XmlElementRefGem gem = XmlElementRefGem.instanceOn( element );
-
-        if (gem == null) {
-            return null;
-        }
-
-        return new XmlElementRefInfo( gem.name().get(), gem.type().get() );
+    protected String xmlElementRefAnnotation() {
+        return XML_ELEMENT_REF;
     }
 }

@@ -127,7 +127,6 @@ public abstract class AbstractMappingMethodBuilder<B extends AbstractMappingMeth
         }
         AdditionalAnnotationsBuilder additionalAnnotationsBuilder =
                 new AdditionalAnnotationsBuilder(
-                        ctx.getElementUtils(),
                         ctx.getTypeFactory(),
                         ctx.getMessager() );
         List<Annotation> annotations = new ArrayList<>(

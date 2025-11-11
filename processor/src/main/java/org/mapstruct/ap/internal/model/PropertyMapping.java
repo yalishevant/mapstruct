@@ -12,8 +12,6 @@ import java.util.List;
 import java.util.Objects;
 import java.util.Set;
 import java.util.function.Supplier;
-import javax.lang.model.element.AnnotationMirror;
-
 import org.mapstruct.ap.internal.gem.BuilderGem;
 import org.mapstruct.ap.internal.gem.NullValueCheckStrategyGem;
 import org.mapstruct.ap.internal.gem.NullValuePropertyMappingStrategyGem;
@@ -51,6 +49,7 @@ import org.mapstruct.ap.internal.util.Strings;
 import org.mapstruct.ap.internal.util.accessor.Accessor;
 import org.mapstruct.ap.internal.util.accessor.AccessorType;
 import org.mapstruct.ap.internal.util.accessor.ReadAccessor;
+import org.mapstruct.ap.descriptor.AnnotationDescriptor;
 
 import static org.mapstruct.ap.internal.gem.NullValueCheckStrategyGem.ALWAYS;
 import static org.mapstruct.ap.internal.gem.NullValuePropertyMappingStrategyGem.IGNORE;
@@ -94,7 +93,7 @@ public class PropertyMapping extends ModelElement {
 
         protected Set<String> dependsOn;
         protected Set<String> existingVariableNames;
-        protected AnnotationMirror positionHint;
+        protected AnnotationDescriptor positionHint;
 
         MappingBuilderBase(Class<T> selfType) {
             super( selfType );
@@ -115,8 +114,8 @@ public class PropertyMapping extends ModelElement {
             return (T) this;
         }
 
-        T mirror(AnnotationMirror mirror) {
-            this.positionHint = mirror;
+        T mirror(AnnotationDescriptor annotation) {
+            this.positionHint = annotation;
             return (T) this;
         }
 
@@ -218,7 +217,7 @@ public class PropertyMapping extends ModelElement {
         }
 
         public PropertyMappingBuilder options(DelegatingOptions options) {
-            this.mappingControl = options.getMappingControl( ctx.getElementUtils() );
+            this.mappingControl = options.getMappingControl( ctx.getTypeFactory() );
             this.nvcs = options.getNullValueCheckStrategy();
             if ( method.isUpdateMethod() ) {
                 this.nvpms = options.getNullValuePropertyMappingStrategy();
@@ -414,7 +413,7 @@ public class PropertyMapping extends ModelElement {
             if ( rhs.isCallingUpdateMethod() ) {
                 if ( targetReadAccessor == null ) {
                     ctx.getMessager().printMessage(
-                        method.getExecutable(),
+                        method.getExecutableDescriptor(),
                         positionHint,
                         Message.PROPERTYMAPPING_NO_READ_ACCESSOR_FOR_TARGET_TYPE,
                         targetPropertyName
@@ -905,7 +904,7 @@ public class PropertyMapping extends ModelElement {
         }
 
         public ConstantMappingBuilder options(MappingOptions options) {
-            this.mappingControl = options.getMappingControl( ctx.getElementUtils() );
+            this.mappingControl = options.getMappingControl( ctx.getTypeFactory() );
             return this;
         }
 
@@ -961,7 +960,7 @@ public class PropertyMapping extends ModelElement {
                     if ( assignment.isCallingUpdateMethod() ) {
                         if ( targetReadAccessor == null ) {
                             ctx.getMessager().printMessage(
-                                method.getExecutable(),
+                                method.getExecutableDescriptor(),
                                 positionHint,
                                 Message.CONSTANTMAPPING_NO_READ_ACCESSOR_FOR_TARGET_TYPE,
                                 targetPropertyName
@@ -997,7 +996,7 @@ public class PropertyMapping extends ModelElement {
             }
             else if ( errorMessageDetails == null ) {
                 ctx.getMessager().printMessage(
-                    method.getExecutable(),
+                    method.getExecutableDescriptor(),
                     positionHint,
                     Message.CONSTANTMAPPING_MAPPING_NOT_FOUND,
                     constantExpression,
@@ -1007,7 +1006,7 @@ public class PropertyMapping extends ModelElement {
             }
             else {
                 ctx.getMessager().printMessage(
-                    method.getExecutable(),
+                    method.getExecutableDescriptor(),
                     positionHint,
                     Message.CONSTANTMAPPING_MAPPING_NOT_FOUND_WITH_DETAILS,
                     constantExpression,
@@ -1040,7 +1039,7 @@ public class PropertyMapping extends ModelElement {
             }
             else {
                 ctx.getMessager().printMessage(
-                    method.getExecutable(),
+                    method.getExecutableDescriptor(),
                     positionHint,
                     Message.CONSTANTMAPPING_NON_EXISTING_CONSTANT,
                     constantExpression,

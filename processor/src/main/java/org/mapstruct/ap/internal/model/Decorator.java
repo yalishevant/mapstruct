@@ -9,14 +9,15 @@ import java.util.Arrays;
 import java.util.List;
 import java.util.Set;
 import java.util.SortedSet;
-import javax.lang.model.element.TypeElement;
 
-import org.mapstruct.ap.internal.gem.DecoratedWithGem;
 import org.mapstruct.ap.internal.model.common.Accessibility;
 import org.mapstruct.ap.internal.model.common.Type;
 import org.mapstruct.ap.internal.model.common.TypeFactory;
 import org.mapstruct.ap.internal.option.Options;
 import org.mapstruct.ap.internal.version.VersionInformation;
+import org.mapstruct.ap.descriptor.LangElementKind;
+import org.mapstruct.ap.descriptor.TypeDescriptor;
+import org.mapstruct.ap.descriptor.TypeElementDescriptor;
 
 /**
  * Represents a decorator applied to a generated mapper type.
@@ -27,8 +28,8 @@ public class Decorator extends GeneratedType {
 
     public static class Builder extends GeneratedTypeBuilder<Builder> {
 
-        private TypeElement mapperElement;
-        private DecoratedWithGem decorator;
+        private TypeElementDescriptor mapperDescriptor;
+        private TypeDescriptor decoratorTypeDescriptor;
 
         private boolean hasDelegateConstructor;
         private String implName;
@@ -40,13 +41,13 @@ public class Decorator extends GeneratedType {
             super( Builder.class );
         }
 
-        public Builder mapperElement(TypeElement mapperElement) {
-            this.mapperElement = mapperElement;
+        public Builder mapperDescriptor(TypeElementDescriptor mapperDescriptor) {
+            this.mapperDescriptor = mapperDescriptor;
             return this;
         }
 
-        public Builder decoratedWith(DecoratedWithGem decoratedGem) {
-            this.decorator = decoratedGem;
+        public Builder decoratorType(TypeDescriptor decoratorTypeDescriptor) {
+            this.decoratorTypeDescriptor = decoratorTypeDescriptor;
             return this;
         }
 
@@ -76,18 +77,21 @@ public class Decorator extends GeneratedType {
         }
 
         public Decorator build() {
-            String implementationName = implName.replace( Mapper.CLASS_NAME_PLACEHOLDER,
-                Mapper.getFlatName( mapperElement ) );
+            String implementationName = implName.replace(
+                Mapper.CLASS_NAME_PLACEHOLDER,
+                Mapper.getFlatName( mapperDescriptor )
+            );
 
-            Type decoratorType = typeFactory.getType( decorator.value().get() );
+            Type decoratorType = typeFactory.getType( decoratorTypeDescriptor );
             DecoratorConstructor decoratorConstructor = new DecoratorConstructor(
                 implementationName,
                 implementationName + "_",
                 hasDelegateConstructor );
 
-
-            Type mapperType = typeFactory.getType( mapperElement );
-            String elementPackage = mapperType.getPackageName();
+            Type mapperType = mapperDescriptor != null
+                ? typeFactory.getType( mapperDescriptor.asType() )
+                : null;
+            String elementPackage = mapperType != null ? mapperType.getPackageName() : "";
             String packageName = implPackage.replace( Mapper.PACKAGE_NAME_PLACEHOLDER, elementPackage );
 
             return new Decorator(
@@ -100,7 +104,7 @@ public class Decorator extends GeneratedType {
                 options,
                 versionInformation,
                 suppressGeneratorTimestamp,
-                Accessibility.fromModifiers( mapperElement.getModifiers() ),
+                Accessibility.fromModifiers( mapperDescriptor.modifiers() ),
                 extraImportedTypes,
                 decoratorConstructor,
                 customAnnotations
@@ -147,27 +151,34 @@ public class Decorator extends GeneratedType {
     @Override
     public SortedSet<Type> getImportTypes() {
         SortedSet<Type> importTypes = super.getImportTypes();
-        // DecoratorType needs special handling in case it is nested
+        // DecoratorType needs special handling in case it is nested.
         // calling addIfImportRequired is not the most correct approach since it would
         // lead to checking if the type is to be imported and that would be false
         // since the Decorator is a nested class within the Mapper.
         // However, when generating the Decorator this is not needed,
-        // because the Decorator is a top level class itself
-        // In a nutshell creating the Decorator should have its own ProcessorContext, but it doesn't
-        if ( decoratorType.getPackageName().equalsIgnoreCase( getPackageName() ) ) {
-            if ( decoratorType.getTypeElement() != null &&
-                decoratorType.getTypeElement().getNestingKind().isNested() ) {
+        // because the Decorator is a top level class itself.
+        if ( decoratorType != null && decoratorType.getPackageName().equalsIgnoreCase( getPackageName() ) ) {
+            TypeElementDescriptor decoratorDescriptor = decoratorType.getTypeElementDescriptor();
+            boolean nestedWithinType = decoratorDescriptor != null
+                && decoratorDescriptor.enclosingElement()
+                        .filter( enclosing -> enclosing.kind() == LangElementKind.CLASS
+                            || enclosing.kind() == LangElementKind.INTERFACE
+                            || enclosing.kind() == LangElementKind.ENUM
+                            || enclosing.kind() == LangElementKind.ANNOTATION_TYPE
+                            || enclosing.kind() == LangElementKind.RECORD )
+                        .isPresent();
+            if ( nestedWithinType ) {
                 importTypes.add( decoratorType );
             }
         }
-        else {
+        else if ( decoratorType != null ) {
             importTypes.add( decoratorType );
         }
         return importTypes;
     }
 
     @Override
-    protected String getTemplateName() {
+    public String getTemplateName() {
         return getTemplateNameForClass( GeneratedType.class );
     }
 
