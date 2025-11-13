@@ -7,6 +7,7 @@ package org.mapstruct.ap;
 
 import java.io.PrintWriter;
 import java.io.StringWriter;
+import java.lang.reflect.Proxy;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
@@ -34,6 +35,12 @@ import javax.lang.model.util.ElementKindVisitor6;
 import javax.tools.Diagnostic.Kind;
 
 import org.mapstruct.ap.internal.gem.MapperGem;
+import org.mapstruct.ap.internal.langmodel.LangModelContext;
+import org.mapstruct.ap.internal.langmodel.LangModelContextFactory;
+import org.mapstruct.ap.internal.langmodel.MapperEntryPoint;
+import org.mapstruct.ap.internal.langmodel.MissingLangModelCapabilityException;
+import org.mapstruct.ap.internal.langmodel.api.DescriptorUnwrapper;
+import org.mapstruct.ap.internal.langmodel.javax.JavaxLangModelContextFactory;
 import org.mapstruct.ap.internal.model.Mapper;
 import org.mapstruct.ap.internal.option.MappingOption;
 import org.mapstruct.ap.internal.option.Options;
@@ -44,6 +51,7 @@ import org.mapstruct.ap.internal.util.AnnotationProcessingException;
 import org.mapstruct.ap.internal.util.AnnotationProcessorContext;
 import org.mapstruct.ap.internal.util.RoundContext;
 import org.mapstruct.ap.internal.util.Services;
+import org.mapstruct.ap.internal.version.VersionInformation;
 import org.mapstruct.ap.spi.AdditionalSupportedOptionsProvider;
 import org.mapstruct.ap.spi.TypeHierarchyErroneousException;
 
@@ -120,6 +128,9 @@ public class MappingProcessor extends AbstractProcessor {
     private final String additionalSupportedOptionsError;
 
     private Options options;
+    private VersionInformation versionInformation;
+    private LangModelContextFactory langModelContextFactory;
+    private DescriptorUnwrapper descriptorUnwrapper;
 
     private AnnotationProcessorContext annotationProcessorContext;
 
@@ -154,6 +165,9 @@ public class MappingProcessor extends AbstractProcessor {
         super.init( processingEnv );
 
         options = new Options( processingEnv.getOptions() );
+        versionInformation = new ProcessorVersionInformation( processingEnv );
+        langModelContextFactory = resolveLangModelContextFactory();
+        descriptorUnwrapper = langModelContextFactory.descriptorUnwrapper();
         annotationProcessorContext = new AnnotationProcessorContext(
             processingEnv.getElementUtils(),
             processingEnv.getTypeUtils(),
@@ -251,6 +265,24 @@ public class MappingProcessor extends AbstractProcessor {
         return deferred;
     }
 
+    private LangModelContextFactory resolveLangModelContextFactory() {
+        List<LangModelContextFactory> factories = new ArrayList<>();
+        for ( LangModelContextFactory factory : Services.all( LangModelContextFactory.class ) ) {
+            factories.add( factory );
+        }
+        if ( factories.isEmpty() ) {
+            return new JavaxLangModelContextFactory();
+        }
+        if ( factories.size() > 1 ) {
+            processingEnv.getMessager().printMessage(
+                Kind.WARNING,
+                "Multiple LangModelContextFactory implementations detected. "
+                    + "Using " + factories.get( 0 ).getClass().getName()
+            );
+        }
+        return factories.get( 0 );
+    }
+
     private Set<TypeElement> getMappers(final Set<? extends TypeElement> annotations,
                                         final RoundEnvironment roundEnvironment) {
         Set<TypeElement> mapperTypes = new HashSet<>();
@@ -285,21 +317,26 @@ public class MappingProcessor extends AbstractProcessor {
     private void processMapperElements(Set<TypeElement> mapperElements, RoundContext roundContext) {
         for ( TypeElement mapperElement : mapperElements ) {
             try {
-                // create a new context for each generated mapper in order to have imports of referenced types
-                // correctly managed;
-                // note that this assumes that a new source file is created for each mapper which must not
-                // necessarily be the case, e.g. in case of several mapper interfaces declared as inner types
-                // of one outer interface
-                List<? extends Element> tst = mapperElement.getEnclosedElements();
-                ProcessorContext context = new DefaultModelElementProcessorContext(
-                    processingEnv,
-                    options,
-                    roundContext,
-                    getDeclaredTypesNotToBeImported( mapperElement ),
-                    mapperElement
-                );
+                MapperEntryPoint mapperEntryPoint = mapperEntryPointFor( mapperElement );
+                try ( LangModelContext langModelContext = langModelContextFactory.create( mapperEntryPoint ) ) {
+                    annotationProcessorContext.prepare( langModelContext );
+                    ProcessorContext context = new DefaultModelElementProcessorContext(
+                        processingEnv,
+                        options,
+                        roundContext,
+                        getDeclaredTypesNotToBeImported( mapperElement ),
+                        mapperElement,
+                        langModelContext,
+                        descriptorUnwrapper
+                    );
 
-                processMapperTypeElement( context, mapperElement );
+                    processMapperTypeElement( context, mapperElement );
+                }
+            }
+            catch ( MissingLangModelCapabilityException missingCapability ) {
+                processingEnv.getMessager()
+                    .printMessage( Kind.ERROR, missingCapability.getMessage(), mapperElement );
+                break;
             }
             catch ( TypeHierarchyErroneousException thie ) {
                 TypeMirror erroneousType = thie.getType();
@@ -326,6 +363,10 @@ public class MappingProcessor extends AbstractProcessor {
             .map( Element::getSimpleName )
             .map( Name::toString )
             .collect( Collectors.toMap( k -> k, v -> element.getQualifiedName().toString() + "." + v ) );
+    }
+
+    private MapperEntryPoint mapperEntryPointFor(TypeElement mapperElement) {
+        return MapperEntryPoint.of( versionInformation, processingEnv, mapperElement );
     }
 
     private void handleUncaughtError(Element element, Throwable thrown) {
@@ -451,6 +492,96 @@ public class MappingProcessor extends AbstractProcessor {
         @Override
         public int compare(ModelElementProcessor<?, ?> o1, ModelElementProcessor<?, ?> o2) {
             return Integer.compare( o1.getPriority(), o2.getPriority() );
+        }
+    }
+
+    private static final class ProcessorVersionInformation implements VersionInformation {
+
+        private final String runtimeVersion;
+        private final String runtimeVendor;
+        private final String mapStructVersion;
+        private final String compiler;
+        private final boolean sourceVersionAtLeast9;
+        private final boolean sourceVersionAtLeast19;
+        private final boolean eclipseJdt;
+        private final boolean javac;
+
+        ProcessorVersionInformation(ProcessingEnvironment processingEnv) {
+            this.runtimeVersion = System.getProperty( "java.version" );
+            this.runtimeVendor = System.getProperty( "java.vendor" );
+            this.mapStructVersion = detectMapStructVersion();
+            this.compiler = detectCompiler( processingEnv );
+            SourceVersion sourceVersion = processingEnv.getSourceVersion();
+            this.sourceVersionAtLeast9 = sourceVersion.compareTo( SourceVersion.RELEASE_6 ) > 2;
+            this.sourceVersionAtLeast19 = sourceVersion.compareTo( SourceVersion.RELEASE_6 ) > 12;
+            String className = processingEnv.getClass().getName();
+            this.eclipseJdt = className.startsWith( "org.eclipse.jdt" );
+            this.javac = className.equals( "com.sun.tools.javac.processing.JavacProcessingEnvironment" );
+        }
+
+        @Override
+        public String getRuntimeVersion() {
+            return runtimeVersion;
+        }
+
+        @Override
+        public String getRuntimeVendor() {
+            return runtimeVendor;
+        }
+
+        @Override
+        public String getMapStructVersion() {
+            return mapStructVersion;
+        }
+
+        @Override
+        public String getCompiler() {
+            return compiler;
+        }
+
+        @Override
+        public boolean isSourceVersionAtLeast9() {
+            return sourceVersionAtLeast9;
+        }
+
+        @Override
+        public boolean isSourceVersionAtLeast19() {
+            return sourceVersionAtLeast19;
+        }
+
+        @Override
+        public boolean isEclipseJDTCompiler() {
+            return eclipseJdt;
+        }
+
+        @Override
+        public boolean isJavacCompiler() {
+            return javac;
+        }
+
+        private static String detectMapStructVersion() {
+            Package pkg = MappingProcessor.class.getPackage();
+            if ( pkg != null ) {
+                String version = pkg.getImplementationVersion();
+                if ( version != null ) {
+                    return version;
+                }
+            }
+            return "";
+        }
+
+        private static String detectCompiler(ProcessingEnvironment processingEnv) {
+            String className = processingEnv.getClass().getName();
+            if ( Proxy.isProxyClass( processingEnv.getClass() ) ) {
+                className = processingEnv.toString();
+            }
+            if ( className.contains( "JavacProcessingEnvironment" ) ) {
+                return "javac";
+            }
+            if ( className.contains( "org.eclipse.jdt" ) ) {
+                return "Eclipse JDT";
+            }
+            return className;
         }
     }
 

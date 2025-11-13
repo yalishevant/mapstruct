@@ -22,6 +22,10 @@ public class TypeHierarchyErroneousException extends RuntimeException {
 
     private final TypeMirror type;
 
+    public TypeHierarchyErroneousException() {
+        this.type = null;
+    }
+
     public TypeHierarchyErroneousException(TypeElement element) {
         this( element.asType() );
     }

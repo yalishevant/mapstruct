@@ -19,6 +19,7 @@ import javax.lang.model.util.Elements;
 import javax.lang.model.util.Types;
 import javax.tools.Diagnostic;
 
+import org.mapstruct.ap.internal.langmodel.LangModelContext;
 import org.mapstruct.ap.spi.AccessorNamingStrategy;
 import org.mapstruct.ap.spi.AstModifyingAnnotationProcessor;
 import org.mapstruct.ap.spi.BuilderProvider;
@@ -67,6 +68,10 @@ public class AnnotationProcessorContext implements MapStructProcessingEnvironmen
         this.disableBuilder = disableBuilder;
         this.verbose = verbose;
         this.options = java.util.Collections.unmodifiableMap( options );
+    }
+
+    public void prepare(@SuppressWarnings("unused") LangModelContext langModelContext) {
+        // LangModelContext is reserved for upcoming descriptor integration (Stage 3 iterations).
     }
 
     /**

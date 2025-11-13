@@ -6,17 +6,20 @@
 package org.mapstruct.ap.internal.processor;
 
 import java.util.Map;
+import javax.tools.Diagnostic.Kind;
+
 import javax.annotation.processing.Filer;
 import javax.lang.model.element.TypeElement;
-import org.mapstruct.ap.internal.util.ElementUtils;
-import org.mapstruct.ap.internal.util.TypeUtils;
-import javax.tools.Diagnostic.Kind;
 
 import org.mapstruct.ap.internal.model.common.TypeFactory;
 import org.mapstruct.ap.internal.option.Options;
 import org.mapstruct.ap.internal.util.AccessorNamingUtils;
 import org.mapstruct.ap.internal.util.FormattingMessager;
 import org.mapstruct.ap.internal.version.VersionInformation;
+import org.mapstruct.ap.internal.langmodel.LangModelContext;
+import org.mapstruct.ap.internal.langmodel.api.DescriptorUnwrapper;
+import org.mapstruct.ap.internal.util.ElementUtils;
+import org.mapstruct.ap.internal.util.TypeUtils;
 import org.mapstruct.ap.spi.EnumMappingStrategy;
 import org.mapstruct.ap.spi.EnumTransformationStrategy;
 
@@ -61,6 +64,20 @@ public interface ModelElementProcessor<P, R> {
         Options getOptions();
 
         VersionInformation getVersionInformation();
+
+        /**
+         * Provides access to the active {@link LangModelContext}.
+         *
+         * @return language model context for the mapper currently being processed
+         */
+        LangModelContext getLangModelContext();
+
+        /**
+         * Provides backend-specific conversions for descriptor unwrapping.
+         *
+         * @return descriptor unwrapper to native compiler constructs
+         */
+        DescriptorUnwrapper getDescriptorUnwrapper();
 
         /**
          * Whether the currently processed mapper type is erroneous which is the

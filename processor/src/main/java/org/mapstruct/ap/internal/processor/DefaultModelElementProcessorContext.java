@@ -16,6 +16,8 @@ import javax.lang.model.element.Element;
 import javax.lang.model.element.TypeElement;
 import javax.tools.Diagnostic.Kind;
 
+import org.mapstruct.ap.internal.langmodel.LangModelContext;
+import org.mapstruct.ap.internal.langmodel.api.DescriptorUnwrapper;
 import org.mapstruct.ap.internal.model.common.TypeFactory;
 import org.mapstruct.ap.internal.option.Options;
 import org.mapstruct.ap.internal.processor.ModelElementProcessor.ProcessorContext;
@@ -41,13 +43,16 @@ public class DefaultModelElementProcessorContext implements ProcessorContext {
     private final Options options;
     private final TypeFactory typeFactory;
     private final VersionInformation versionInformation;
+    private final LangModelContext langModelContext;
+    private final DescriptorUnwrapper descriptorUnwrapper;
     private final TypeUtils delegatingTypes;
     private final ElementUtils delegatingElements;
     private final AccessorNamingUtils accessorNaming;
     private final RoundContext roundContext;
 
     public DefaultModelElementProcessorContext(ProcessingEnvironment processingEnvironment, Options options,
-            RoundContext roundContext, Map<String, String> notToBeImported, TypeElement mapperElement) {
+            RoundContext roundContext, Map<String, String> notToBeImported, TypeElement mapperElement,
+            LangModelContext langModelContext, DescriptorUnwrapper descriptorUnwrapper) {
 
         this.processingEnvironment = processingEnvironment;
         this.messager = new DelegatingMessager( processingEnvironment.getMessager(), options.isVerbose() );
@@ -56,6 +61,8 @@ public class DefaultModelElementProcessorContext implements ProcessorContext {
         this.delegatingTypes = TypeUtils.create( processingEnvironment, versionInformation );
         this.delegatingElements = ElementUtils.create( processingEnvironment, versionInformation, mapperElement );
         this.roundContext = roundContext;
+        this.langModelContext = langModelContext;
+        this.descriptorUnwrapper = descriptorUnwrapper;
         this.typeFactory = new TypeFactory(
             delegatingElements,
             delegatingTypes,
@@ -94,6 +101,11 @@ public class DefaultModelElementProcessorContext implements ProcessorContext {
     }
 
     @Override
+    public LangModelContext getLangModelContext() {
+        return langModelContext;
+    }
+
+    @Override
     public AccessorNamingUtils getAccessorNaming() {
         return accessorNaming;
     }
@@ -121,6 +133,11 @@ public class DefaultModelElementProcessorContext implements ProcessorContext {
     @Override
     public boolean isErroneous() {
         return messager.isErroneous();
+    }
+
+    @Override
+    public DescriptorUnwrapper getDescriptorUnwrapper() {
+        return descriptorUnwrapper;
     }
 
     private static final class DelegatingMessager implements FormattingMessager {
