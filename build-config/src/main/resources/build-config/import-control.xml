@@ -10,6 +10,20 @@
         <!-- the annotation processor may not use the annotations or enums specified in org.mapstruct directly... -->
         <disallow pkg="org.mapstruct" exact-match="true" />
 
+        <subpackage name="internal">
+            <allow pkg=".*" regex="true" />
+            <!-- Freemarker usage must stay encapsulated in the dedicated codegen backend -->
+            <disallow pkg="freemarker" />
+            <!-- OptionalCapability must remain hidden behind LangModelContext.optional(...) -->
+            <disallow pkg="org.mapstruct.ap.langmodel" class="OptionalCapability" />
+
+            <subpackage name="codegen">
+                <subpackage name="freemarker">
+                    <allow pkg="freemarker" />
+                </subpackage>
+            </subpackage>
+        </subpackage>
+
         <subpackage name="internal.gem">
             <!-- ... with exception to the package org.mapstruct.ap.internal.gem -->
             <allow pkg=".*" regex="true" /> 

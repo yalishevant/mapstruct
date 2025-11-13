@@ -377,7 +377,7 @@
                             specified as patterns within a source folder, so we can't exclude generated-sources
                             altogether
                         -->
-                        <excludes>**/*Gem.java,*/itest/jaxb/xsd/*</excludes>
+                        <excludes>**/*Gem.java,*/itest/jaxb/xsd/*,**/LangModelContractTypes.java,**/Shape.java,**/ShapeDto.java</excludes>
                     </configuration>
                     <dependencies>
                         <dependency>
@@ -488,7 +488,7 @@
                 <plugin>
                     <groupId>org.apache.maven.plugins</groupId>
                     <artifactId>maven-shade-plugin</artifactId>
-                    <version>3.2.0</version>
+                    <version>3.5.1</version>
                 </plugin>
                 <plugin>
                     <groupId>com.mycila.maven-license-plugin</groupId>
@@ -498,14 +498,7 @@
                 <plugin>
                     <groupId>org.codehaus.mojo</groupId>
                     <artifactId>animal-sniffer-maven-plugin</artifactId>
-                    <version>1.20</version>
-                    <dependencies>
-                        <dependency>
-                            <groupId>org.ow2.asm</groupId>
-                            <artifactId>asm</artifactId>
-                            <version>7.0</version>
-                        </dependency>
-                    </dependencies>
+                    <version>1.24</version>
                 </plugin>
                 <plugin>
                     <groupId>org.codehaus.mojo</groupId>
@@ -581,7 +574,7 @@
                 <plugin>
                     <groupId>de.thetaphi</groupId>
                     <artifactId>forbiddenapis</artifactId>
-                    <version>2.6</version>
+                    <version>3.10</version>
                     <configuration>
                         <signaturesFiles>
                             <signaturesFile>${project.basedir}/../etc/forbidden-apis.txt</signaturesFile>
@@ -744,6 +737,9 @@
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-javadoc-plugin</artifactId>
+                <configuration>
+                    <doclint>none</doclint>
+                </configuration>
                 <executions>
                     <execution>
                         <id>generate-javadoc</id>

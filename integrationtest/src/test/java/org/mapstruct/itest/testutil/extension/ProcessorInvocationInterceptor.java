@@ -7,14 +7,27 @@ package org.mapstruct.itest.testutil.extension;
 
 import java.io.File;
 import java.io.IOException;
+import java.io.UncheckedIOException;
+import java.io.InputStream;
 import java.io.PrintStream;
 import java.lang.reflect.Constructor;
 import java.lang.reflect.Method;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
+import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.nio.file.StandardCopyOption;
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Properties;
+import java.util.Set;
+
+import javax.xml.XMLConstants;
+import javax.xml.parsers.DocumentBuilder;
+import javax.xml.parsers.DocumentBuilderFactory;
+import javax.xml.parsers.ParserConfigurationException;
 
 import org.apache.maven.it.Verifier;
 import org.junit.jupiter.api.condition.JRE;
@@ -22,9 +35,12 @@ import org.junit.jupiter.api.extension.ExtensionContext;
 import org.junit.jupiter.api.extension.InvocationInterceptor;
 import org.junit.jupiter.api.extension.ReflectiveInvocationContext;
 import org.junit.platform.commons.util.ReflectionUtils;
+import org.w3c.dom.Document;
+import org.w3c.dom.Element;
+import org.w3c.dom.Node;
+import org.w3c.dom.NodeList;
+import org.xml.sax.SAXException;
 
-import static org.apache.maven.it.util.ResourceExtractor.extractResourceToDestination;
-import static org.apache.maven.shared.utils.io.FileUtils.copyURLToFile;
 import static org.apache.maven.shared.utils.io.FileUtils.deleteDirectory;
 import static org.mapstruct.itest.testutil.extension.ProcessorTestTemplateInvocationContext.CURRENT_VERSION;
 
@@ -83,7 +99,12 @@ public class ProcessorInvocationInterceptor implements InvocationInterceptor {
         try {
             configureProcessor( verifier );
 
-            verifier.addCliOption( "-Dcompiler-source-target-version=" + sourceTargetVersion() );
+            String mapStructVersion = resolveMapStructVersion();
+            if ( hasText( mapStructVersion ) ) {
+                verifier.setSystemProperty( "mapstruct.version", mapStructVersion );
+            }
+
+            verifier.setSystemProperty( "compiler-source-target-version", sourceTargetVersion() );
 
             if ( Boolean.getBoolean( SYS_PROP_DEBUG ) ) {
                 originalOut.print( "Processor Integration Test: " );
@@ -142,10 +163,10 @@ public class ProcessorInvocationInterceptor implements InvocationInterceptor {
                 profile = "generate-via-compiler-plugin";
             }
             verifier.addCliOption( "-P" + profile );
-            verifier.addCliOption( "-Dcompiler-id=" + compilerId );
+            verifier.setSystemProperty( "compiler-id", compilerId );
             if ( processor == ProcessorTest.ProcessorType.JAVAC ) {
                 if ( CURRENT_VERSION.ordinal() >= JRE.JAVA_21.ordinal() ) {
-                    verifier.addCliOption( "-Dmaven.compiler.proc=full" );
+                    verifier.setSystemProperty( "maven.compiler.proc", "full" );
                 }
             }
         }
@@ -166,13 +187,150 @@ public class ProcessorInvocationInterceptor implements InvocationInterceptor {
         }
 
         File parentPom = new File( tempDirBase, "pom.xml" );
-        copyURLToFile( getClass().getResource( "/pom.xml" ), parentPom );
+        copyResourceFile( "pom.xml", parentPom );
 
         ProcessorTest.ProcessorType processorType = processorTestContext.getProcessor();
         File tempDir = new File( tempDirBase, processorType.name().toLowerCase() );
         deleteDirectory( tempDir );
+        Files.createDirectories( tempDir.toPath() );
 
-        return extractResourceToDestination( getClass(), "/" + processorTestContext.getBaseDir(), tempDir, true );
+        Path sourceDir = resolveResourcePath( processorTestContext.getBaseDir() );
+        copyResourceDirectory( sourceDir, tempDir );
+        Path parentPomPath = tempDirBase.toPath().resolve( "pom.xml" );
+        if ( Files.exists( parentPomPath ) ) {
+            Files.copy(
+                parentPomPath,
+                tempDir.toPath().resolve( "pom.xml" ),
+                StandardCopyOption.REPLACE_EXISTING
+            );
+            Path parentDir = tempDirBase.toPath().resolve( "parent" );
+            if ( Files.exists( parentDir.resolve( "pom.xml" ) ) ) {
+                Path targetParentDir = tempDir.toPath().resolve( "parent" );
+                Files.createDirectories( targetParentDir );
+                Files.copy(
+                    parentDir.resolve( "pom.xml" ),
+                    targetParentDir.resolve( "pom.xml" ),
+                    StandardCopyOption.REPLACE_EXISTING
+                );
+            }
+        }
+        return tempDir;
+    }
+
+    private void copyResourceFile(String resourceName, File destination) throws IOException {
+        Path source = resolveResourcePath( resourceName );
+        Files.createDirectories( destination.getParentFile().toPath() );
+        Files.copy( source, destination.toPath(), StandardCopyOption.REPLACE_EXISTING );
+
+        if ( "pom.xml".equals( resourceName ) ) {
+            Path tempDirBase = destination.getParentFile().toPath();
+            copyParentPom( tempDirBase );
+            rewriteParentReference( tempDirBase, destination.toPath() );
+            unescapePlaceholders( tempDirBase );
+            unescapePlaceholders( destination.toPath() );
+        }
+    }
+
+    private void copyResourceDirectory(Path source, File destination) throws IOException {
+        if ( Files.isDirectory( source ) ) {
+            Path destinationPath = destination.toPath();
+            Files.walk( source )
+                .forEach( path -> {
+                    try {
+                        Path relative = source.relativize( path );
+                        Path target = destinationPath.resolve( relative );
+                        if ( Files.isDirectory( path ) ) {
+                            Files.createDirectories( target );
+                        }
+                        else {
+                            Files.createDirectories( target.getParent() );
+                            Files.copy( path, target, StandardCopyOption.REPLACE_EXISTING );
+                        }
+                    }
+                    catch ( IOException e ) {
+                        throw new UncheckedIOException( e );
+                    }
+                } );
+            unescapePlaceholders( destinationPath );
+        }
+        else {
+            Files.createDirectories( destination.toPath() );
+            Path targetPath = destination.toPath().resolve( source.getFileName() );
+            Files.copy( source, targetPath, StandardCopyOption.REPLACE_EXISTING );
+            unescapePlaceholders( targetPath );
+        }
+    }
+
+    private void unescapePlaceholders(Path directory) throws IOException {
+        if ( directory == null || !Files.exists( directory ) ) {
+            return;
+        }
+
+        if ( Files.isDirectory( directory ) ) {
+            Files.walk( directory )
+                .filter( Files::isRegularFile )
+                .filter( path -> "pom.xml".equals( path.getFileName().toString() ) )
+                .forEach( this::unescapePlaceholder );
+        }
+        else if ( Files.isRegularFile( directory ) && "pom.xml".equals( directory.getFileName().toString() ) ) {
+            unescapePlaceholder( directory );
+        }
+    }
+
+    private void unescapePlaceholder(Path path) {
+        try {
+            String content = new String( Files.readAllBytes( path ), StandardCharsets.UTF_8 );
+            String updated = content
+                .replace( "\\${compiler-source-target-version}", "${compiler-source-target-version}" )
+                .replace( "\\${compiler-id}", "${compiler-id}" )
+                .replace( "\\${project.build.directory}", "${project.build.directory}" )
+                .replace( "\\${project.build.resources[0].directory}", "${project.build.resources[0].directory}" );
+            if ( !content.equals( updated ) ) {
+                Files.write( path, updated.getBytes( StandardCharsets.UTF_8 ) );
+            }
+        }
+        catch ( IOException e ) {
+            throw new RuntimeException( "Failed to unescape placeholders in " + path, e );
+        }
+    }
+
+    private Path resolveResourcePath(String resourceName) {
+        String normalized = resourceName.startsWith( "/" ) ? resourceName.substring( 1 ) : resourceName;
+        String relativePath = normalized.replace( '/', File.separatorChar );
+
+        Path[] baseDirectories = new Path[] {
+            Paths.get( "integrationtest", "target", "test-classes" ),
+            Paths.get( "target", "test-classes" ),
+            Paths.get( "integrationtest", "src", "test", "resources" ),
+            Paths.get( "src", "test", "resources" ),
+            Paths.get( "..", "integrationtest", "target", "test-classes" ),
+            Paths.get( "..", "integrationtest", "src", "test", "resources" )
+        };
+
+        for ( Path baseDir : baseDirectories ) {
+            Path candidate = baseDir.resolve( relativePath );
+            if ( Files.exists( candidate ) ) {
+                return candidate.toAbsolutePath().normalize();
+            }
+        }
+
+        throw new IllegalArgumentException( "Unable to locate test resource '" + resourceName + "'" );
+    }
+
+    private void rewriteParentReference(Path tempDirBase, Path pomPath) throws IOException {
+        String content = new String( Files.readAllBytes( pomPath ), StandardCharsets.UTF_8 );
+        content = content.replace(
+            "<relativePath>../../../../parent/pom.xml</relativePath>",
+            "<relativePath>parent/pom.xml</relativePath>"
+        );
+        Files.write( pomPath, content.getBytes( StandardCharsets.UTF_8 ) );
+    }
+
+    private void copyParentPom(Path tempDirBase) throws IOException {
+        Path targetDir = tempDirBase.resolve( "parent" );
+        Files.createDirectories( targetDir );
+        Path sourcePom = Paths.get( "parent", "pom.xml" );
+        Files.copy( sourcePom, targetDir.resolve( "pom.xml" ), StandardCopyOption.REPLACE_EXISTING );
     }
 
     private String getTmpDir() {
@@ -219,5 +377,138 @@ public class ProcessorInvocationInterceptor implements InvocationInterceptor {
         else {
             return CURRENT_VERSION.name().substring( 5 );
         }
+    }
+
+    private String resolveMapStructVersion() {
+        String systemProperty = System.getProperty( "mapstruct.version" );
+        if ( hasText( systemProperty ) ) {
+            return systemProperty;
+        }
+
+        String versionFromMetadata = resolveVersionFromMetadata();
+        if ( versionFromMetadata != null ) {
+            return versionFromMetadata;
+        }
+
+        String versionFromPom = resolveVersionFromPomHierarchy();
+        if ( versionFromPom != null ) {
+            return versionFromPom;
+        }
+
+        throw new IllegalStateException(
+            "Unable to resolve mapstruct.version system property; please ensure the build sets it explicitly." );
+    }
+
+    private String resolveVersionFromMetadata() {
+        try ( InputStream pomProperties = getClass().getClassLoader().getResourceAsStream(
+            "META-INF/maven/org.mapstruct/mapstruct-integrationtest/pom.properties" ) ) {
+            if ( pomProperties == null ) {
+                return null;
+            }
+            Properties properties = new Properties();
+            properties.load( pomProperties );
+            String version = properties.getProperty( "version" );
+            return hasText( version ) ? version : null;
+        }
+        catch ( IOException e ) {
+            throw new IllegalStateException( "Failed to resolve mapstruct.version from pom.properties", e );
+        }
+    }
+
+    private String resolveVersionFromPomHierarchy() {
+        for ( Path candidate : candidatePomPaths() ) {
+            String version = resolveVersionFromPom( candidate );
+            if ( hasText( version ) ) {
+                return version;
+            }
+        }
+        return null;
+    }
+
+    private List<Path> candidatePomPaths() {
+        Set<Path> candidates = new LinkedHashSet<>();
+        Path current = Paths.get( "" ).toAbsolutePath().normalize();
+        for ( int depth = 0; depth < 6 && current != null; depth++ ) {
+            candidates.add( current.resolve( "parent" ).resolve( "pom.xml" ) );
+            candidates.add( current.resolve( "pom.xml" ) );
+            current = current.getParent();
+        }
+        List<Path> ordered = new ArrayList<>( candidates.size() );
+        for ( Path candidate : candidates ) {
+            if ( Files.exists( candidate ) ) {
+                ordered.add( candidate );
+            }
+        }
+        return ordered;
+    }
+
+    private String resolveVersionFromPom(Path pomPath) {
+        if ( pomPath == null || !Files.exists( pomPath ) ) {
+            return null;
+        }
+        try ( InputStream inputStream = Files.newInputStream( pomPath ) ) {
+            DocumentBuilderFactory factory = DocumentBuilderFactory.newInstance();
+            factory.setNamespaceAware( true );
+            enableSecureProcessing( factory );
+            DocumentBuilder builder = factory.newDocumentBuilder();
+            Document document = builder.parse( inputStream );
+            Element project = document.getDocumentElement();
+            if ( project == null ) {
+                return null;
+            }
+
+            String projectVersion = childTextContent( project, "version" );
+            if ( projectVersion != null ) {
+                return projectVersion;
+            }
+
+            Element parent = childElement( project, "parent" );
+            if ( parent != null ) {
+                String parentVersion = childTextContent( parent, "version" );
+                if ( parentVersion != null ) {
+                    return parentVersion;
+                }
+            }
+            return null;
+        }
+        catch ( ParserConfigurationException | SAXException | IOException e ) {
+            throw new IllegalStateException( "Failed to parse " + pomPath + " when resolving mapstruct.version", e );
+        }
+    }
+
+    private void enableSecureProcessing(DocumentBuilderFactory factory) throws ParserConfigurationException {
+        factory.setFeature( XMLConstants.FEATURE_SECURE_PROCESSING, true );
+        factory.setFeature( "http://apache.org/xml/features/disallow-doctype-decl", true );
+        factory.setFeature( "http://xml.org/sax/features/external-general-entities", false );
+        factory.setFeature( "http://xml.org/sax/features/external-parameter-entities", false );
+        factory.setExpandEntityReferences( false );
+    }
+
+    private Element childElement(Element parent, String name) {
+        NodeList children = parent.getChildNodes();
+        for ( int i = 0; i < children.getLength(); i++ ) {
+            Node node = children.item( i );
+            if ( node instanceof Element && name.equals( node.getNodeName() ) ) {
+                return (Element) node;
+            }
+        }
+        return null;
+    }
+
+    private String childTextContent(Element parent, String name) {
+        Element child = childElement( parent, name );
+        if ( child == null ) {
+            return null;
+        }
+        String textContent = child.getTextContent();
+        if ( textContent == null ) {
+            return null;
+        }
+        String value = textContent.trim();
+        return value.isEmpty() ? null : value;
+    }
+
+    private static boolean hasText(String value) {
+        return value != null && !value.trim().isEmpty();
     }
 }
