@@ -1,0 +1,238 @@
+TYPE org.mapstruct.ap.test.langmodel.parity.AdderHolder
+  id: org.mapstruct.ap.test.langmodel.parity.AdderHolder
+  kind: CLASS
+  modifiers: []
+  record: false
+  sealed: false
+  permittedSubclasses: []
+  annotations:
+  fields:
+    - items : java.util.List<java.lang.String> (FIELD) modifiers=[FINAL, PRIVATE]
+        annotations:
+  recordComponents:
+  constructors:
+    - <init>() modifiers=[]
+        annotations:
+  methods:
+    - addItem(java.lang.String) -> void modifiers=[]
+        annotations:
+
+TYPE org.mapstruct.ap.test.langmodel.parity.Box
+  id: org.mapstruct.ap.test.langmodel.parity.Box
+  kind: CLASS
+  modifiers: []
+  record: false
+  sealed: false
+  permittedSubclasses: []
+  annotations:
+  fields:
+    - value : T (FIELD) modifiers=[PRIVATE]
+        annotations:
+  recordComponents:
+  constructors:
+    - <init>() modifiers=[]
+        annotations:
+  methods:
+    - getValue() -> T modifiers=[]
+        annotations:
+    - setValue(T) -> void modifiers=[]
+        annotations:
+
+TYPE org.mapstruct.ap.test.langmodel.parity.Circle
+  id: org.mapstruct.ap.test.langmodel.parity.Circle
+  kind: CLASS
+  modifiers: []
+  record: false
+  sealed: false
+  permittedSubclasses: []
+  annotations:
+  fields:
+    - radius : double (FIELD) modifiers=[FINAL, PRIVATE]
+        annotations:
+  recordComponents:
+  constructors:
+    - <init>(double) modifiers=[]
+        annotations:
+  methods:
+    - radius() -> double modifiers=[]
+        annotations:
+
+TYPE org.mapstruct.ap.test.langmodel.parity.MapperStub
+  id: org.mapstruct.ap.test.langmodel.parity.MapperStub
+  kind: CLASS
+  modifiers: []
+  record: false
+  sealed: false
+  permittedSubclasses: []
+  annotations:
+  fields:
+  recordComponents:
+  constructors:
+    - <init>() modifiers=[]
+        annotations:
+  methods:
+
+TYPE org.mapstruct.ap.test.langmodel.parity.MethodHolder
+  id: org.mapstruct.ap.test.langmodel.parity.MethodHolder
+  kind: CLASS
+  modifiers: []
+  record: false
+  sealed: false
+  permittedSubclasses: []
+  annotations:
+  fields:
+  recordComponents:
+  constructors:
+    - <init>() modifiers=[]
+        annotations:
+  methods:
+    - identity(R) -> R modifiers=[] typeParameters=[R]
+        annotations:
+    - @java.lang.Deprecated{since="", forRemoval=false}
+
+TYPE org.mapstruct.ap.test.langmodel.parity.MultipleConstructors
+  id: org.mapstruct.ap.test.langmodel.parity.MultipleConstructors
+  kind: CLASS
+  modifiers: []
+  record: false
+  sealed: false
+  permittedSubclasses: []
+  annotations:
+  fields:
+  recordComponents:
+  constructors:
+    - <init>() modifiers=[]
+        annotations:
+    - <init>(java.lang.String) modifiers=[]
+        annotations:
+    - <init>(int) modifiers=[PRIVATE]
+        annotations:
+  methods:
+
+TYPE org.mapstruct.ap.test.langmodel.parity.OverrideBase
+  id: org.mapstruct.ap.test.langmodel.parity.OverrideBase
+  kind: CLASS
+  modifiers: []
+  record: false
+  sealed: false
+  permittedSubclasses: []
+  annotations:
+  fields:
+  recordComponents:
+  constructors:
+    - <init>() modifiers=[]
+        annotations:
+  methods:
+    - label() -> java.lang.CharSequence modifiers=[]
+        annotations:
+    - value(java.lang.Number) -> java.lang.Number modifiers=[]
+        annotations:
+
+TYPE org.mapstruct.ap.test.langmodel.parity.OverrideChild
+  id: org.mapstruct.ap.test.langmodel.parity.OverrideChild
+  kind: CLASS
+  modifiers: []
+  record: false
+  sealed: false
+  permittedSubclasses: []
+  annotations:
+  fields:
+  recordComponents:
+  constructors:
+    - <init>() modifiers=[]
+        annotations:
+  methods:
+    - childOnly() -> void modifiers=[]
+        annotations:
+    - label() -> java.lang.String modifiers=[]
+        annotations:
+    - value(java.lang.Number) -> java.lang.Integer modifiers=[]
+        annotations:
+
+TYPE org.mapstruct.ap.test.langmodel.parity.Rectangle
+  id: org.mapstruct.ap.test.langmodel.parity.Rectangle
+  kind: CLASS
+  modifiers: []
+  record: false
+  sealed: false
+  permittedSubclasses: []
+  annotations:
+  fields:
+    - height : double (FIELD) modifiers=[FINAL, PRIVATE]
+        annotations:
+    - width : double (FIELD) modifiers=[FINAL, PRIVATE]
+        annotations:
+  recordComponents:
+  constructors:
+    - <init>(double, double) modifiers=[]
+        annotations:
+  methods:
+    - height() -> double modifiers=[]
+        annotations:
+    - width() -> double modifiers=[]
+        annotations:
+
+TYPE org.mapstruct.ap.test.langmodel.parity.SampleEnum
+  id: org.mapstruct.ap.test.langmodel.parity.SampleEnum
+  kind: ENUM
+  modifiers: []
+  record: false
+  sealed: false
+  permittedSubclasses: []
+  annotations:
+  fields:
+    - FIRST : org.mapstruct.ap.test.langmodel.parity.SampleEnum (ENUM_CONSTANT) modifiers=[FINAL, PUBLIC, STATIC]
+        annotations:
+    - SECOND : org.mapstruct.ap.test.langmodel.parity.SampleEnum (ENUM_CONSTANT) modifiers=[FINAL, PUBLIC, STATIC]
+        annotations:
+  recordComponents:
+  constructors:
+    - <init>() modifiers=[PRIVATE]
+        annotations:
+  methods:
+
+TYPE org.mapstruct.ap.test.langmodel.parity.Shape
+  id: org.mapstruct.ap.test.langmodel.parity.Shape
+  kind: INTERFACE
+  modifiers: [ABSTRACT]
+  record: false
+  sealed: true
+  permittedSubclasses: [org.mapstruct.ap.test.langmodel.parity.Circle, org.mapstruct.ap.test.langmodel.parity.Rectangle]
+  annotations:
+  fields:
+  recordComponents:
+  constructors:
+  methods:
+
+TYPE org.mapstruct.ap.test.langmodel.parity.WildcardHolder
+  id: org.mapstruct.ap.test.langmodel.parity.WildcardHolder
+  kind: CLASS
+  modifiers: []
+  record: false
+  sealed: false
+  permittedSubclasses: []
+  annotations:
+  fields:
+    - numberArray : java.lang.Number[] (FIELD) modifiers=[PRIVATE]
+        annotations:
+    - sink : java.util.List<java.lang.Integer> (FIELD) modifiers=[PRIVATE]
+        annotations:
+    - source : java.util.List<java.lang.Number> (FIELD) modifiers=[PRIVATE]
+        annotations:
+  recordComponents:
+  constructors:
+    - <init>() modifiers=[]
+        annotations:
+  methods:
+    - getNumberArray() -> java.lang.Number[] modifiers=[]
+        annotations:
+    - getSink() -> java.util.List<java.lang.Integer> modifiers=[]
+        annotations:
+    - getSource() -> java.util.List<java.lang.Number> modifiers=[]
+        annotations:
+    - setNumberArray(java.lang.Number[]) -> void modifiers=[]
+        annotations:
+    - setSink(java.util.List<java.lang.Integer>) -> void modifiers=[]
+        annotations:
+    - setSource(java.util.List<java.lang.Number>) -> void modifiers=[]
+        annotations:
