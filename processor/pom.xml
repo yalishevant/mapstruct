@@ -95,7 +95,6 @@
             <scope>test</scope>
         </dependency>
 
-        <!-- plexus-container-default is a runtime-dependency of the tycho-compiler -->
         <dependency>
             <groupId>org.codehaus.plexus</groupId>
             <artifactId>plexus-container-default</artifactId>
@@ -361,12 +360,8 @@
                 <configuration>
                     <parameter>
                         <includes>
-                            <include>org.mapstruct.ap</include>
+                            <include>org.mapstruct.ap.spi</include>
                         </includes>
-                        <excludes>
-                            <exclude>org.mapstruct.ap.internal</exclude>
-                            <exclude>org.mapstruct.ap.shaded</exclude>
-                        </excludes>
                     </parameter>
                 </configuration>
             </plugin>
