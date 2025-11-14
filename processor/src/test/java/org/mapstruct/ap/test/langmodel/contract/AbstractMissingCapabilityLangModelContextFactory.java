@@ -8,18 +8,25 @@ package org.mapstruct.ap.test.langmodel.contract;
 import java.util.Objects;
 import java.util.Set;
 
-import org.mapstruct.ap.langmodel.AccessorNamingAdapterFactory;
-import org.mapstruct.ap.langmodel.GeneratedFileAccess;
-import org.mapstruct.ap.langmodel.LangModelContext;
-import org.mapstruct.ap.langmodel.LangModelContextFactory;
-import org.mapstruct.ap.langmodel.LangModelElementQuery;
-import org.mapstruct.ap.langmodel.LangModelTypeSystem;
-import org.mapstruct.ap.langmodel.MapperEntryPoint;
-import org.mapstruct.ap.langmodel.OptionalCapability;
-import org.mapstruct.ap.langmodel.api.DescriptorUnwrapper;
-import org.mapstruct.ap.langmodel.codegen.GeneratedFileSink;
-import org.mapstruct.ap.langmodel.javax.JavaxLangModelContextFactory;
-import org.mapstruct.ap.spi.lang.LangDiagnostics;
+import org.mapstruct.ap.internal.langmodel.AccessorNamingAdapterFactory;
+import org.mapstruct.ap.internal.langmodel.GeneratedFileAccess;
+import org.mapstruct.ap.internal.langmodel.LangDescriptorFactory;
+import org.mapstruct.ap.internal.langmodel.LangModelContext;
+import org.mapstruct.ap.internal.langmodel.LangModelContextFactory;
+import org.mapstruct.ap.internal.langmodel.LangModelElementQuery;
+import org.mapstruct.ap.internal.langmodel.LangModelTypeSystem;
+import org.mapstruct.ap.internal.langmodel.api.LangTypes;
+import org.mapstruct.ap.internal.langmodel.MapperAnnotation;
+import org.mapstruct.ap.internal.langmodel.MapperConfigAnnotation;
+import org.mapstruct.ap.internal.langmodel.MapperEntryPoint;
+import org.mapstruct.ap.internal.langmodel.OptionalCapability;
+import org.mapstruct.ap.internal.langmodel.TypeIntrospector;
+import org.mapstruct.ap.internal.langmodel.api.DescriptorUnwrapper;
+import org.mapstruct.ap.internal.langmodel.api.LangElements;
+import org.mapstruct.ap.internal.langmodel.descriptor.TypeDescriptor;
+import org.mapstruct.ap.internal.langmodel.descriptor.TypeElementDescriptor;
+import org.mapstruct.ap.internal.langmodel.javax.JavaxLangModelContextFactory;
+import org.mapstruct.ap.internal.langmodel.spi.LangDiagnostics;
 
 /**
  * Test utility for stripping specific capabilities from the javax backend to validate fail-fast behaviour.
@@ -29,8 +36,8 @@ abstract class AbstractMissingCapabilityLangModelContextFactory implements LangM
     private final JavaxLangModelContextFactory delegate = new JavaxLangModelContextFactory();
 
     @Override
-    public LangModelContext<?, ?, ?, ?> create(MapperEntryPoint entryPoint) {
-        LangModelContext<?, ?, ?, ?> context = delegate.create( entryPoint );
+    public LangModelContext create(MapperEntryPoint entryPoint) {
+        LangModelContext context = delegate.create( entryPoint );
         return new MissingCapabilityContext<>( context, missingCapabilities() );
     }
 
@@ -44,27 +51,53 @@ abstract class AbstractMissingCapabilityLangModelContextFactory implements LangM
         return delegate.accessorNamingAdapterFactory();
     }
 
-    @Override
-    public GeneratedFileSink generatedFileSink(MapperEntryPoint entryPoint) {
-        return delegate.generatedFileSink( entryPoint );
-    }
-
     protected abstract Set<Class<?>> missingCapabilities();
 
-    private static final class MissingCapabilityContext<T, E, A, V> implements LangModelContext<T, E, A, V> {
+    private static final class MissingCapabilityContext<T, E, A, V> implements LangModelContext {
 
-        private final LangModelContext<T, E, A, V> delegate;
+        private final LangModelContext delegate;
         private final Set<Class<?>> missingCapabilities;
 
-        private MissingCapabilityContext(LangModelContext<T, E, A, V> delegate,
+        private MissingCapabilityContext(LangModelContext delegate,
                                          Set<Class<?>> missingCapabilities) {
             this.delegate = Objects.requireNonNull( delegate, "delegate" );
             this.missingCapabilities = Objects.requireNonNull( missingCapabilities, "missingCapabilities" );
         }
 
         @Override
+        public LangDescriptorFactory descriptors() {
+            return delegate.descriptors();
+        }
+
+        @Override
+        public LangTypes types() {
+            return delegate.types();
+        }
+
+        @Override
+        public TypeIntrospector typeIntrospector() {
+            return delegate.typeIntrospector();
+        }
+
+        @Override
+        public LangElements elements() {
+            return delegate.elements();
+        }
+
+        @Override
+        public MapperAnnotation mapperAnnotation(TypeElementDescriptor element) {
+            return delegate.mapperAnnotation( element );
+        }
+
+        @Override
+        public java.util.Optional<MapperConfigAnnotation> mapperConfig(TypeDescriptor configType) {
+            return delegate.mapperConfig( configType );
+        }
+
+        @Override
+        @SuppressWarnings("unchecked")
         public LangModelTypeSystem<T, E, A, V> typeSystem() {
-            return delegate.typeSystem();
+            return (LangModelTypeSystem<T, E, A, V>) delegate.typeSystem();
         }
 
         @Override

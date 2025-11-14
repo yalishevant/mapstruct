@@ -8,12 +8,12 @@ package org.mapstruct.ap.internal.model.common;
 import java.util.Collection;
 import java.util.Collections;
 
-import org.mapstruct.ap.descriptor.BuilderDescriptor;
-import org.mapstruct.ap.descriptor.ExecutableDescriptor;
-import org.mapstruct.ap.descriptor.LangElementKind;
-import org.mapstruct.ap.langmodel.api.LangTypes;
-import org.mapstruct.ap.descriptor.ElementDescriptor;
-import org.mapstruct.ap.descriptor.TypeDescriptor;
+import org.mapstruct.ap.internal.langmodel.descriptor.BuilderDescriptor;
+import org.mapstruct.ap.internal.langmodel.descriptor.ExecutableDescriptor;
+import org.mapstruct.ap.internal.langmodel.descriptor.LangElementKind;
+import org.mapstruct.ap.internal.langmodel.api.LangTypes;
+import org.mapstruct.ap.internal.langmodel.descriptor.ElementDescriptor;
+import org.mapstruct.ap.internal.langmodel.descriptor.TypeDescriptor;
 
 /**
  * @author Filip Hrisafov

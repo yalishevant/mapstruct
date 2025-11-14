@@ -16,9 +16,9 @@ import javax.tools.Diagnostic;
 import org.junit.jupiter.api.Test;
 import org.mapstruct.ap.internal.util.Message;
 import org.mapstruct.ap.internal.util.FormattingMessager;
-import org.mapstruct.ap.descriptor.AnnotationDescriptor;
-import org.mapstruct.ap.descriptor.AnnotationValueDescriptor;
-import org.mapstruct.ap.descriptor.ElementDescriptor;
+import org.mapstruct.ap.internal.langmodel.descriptor.AnnotationDescriptor;
+import org.mapstruct.ap.internal.langmodel.descriptor.AnnotationValueDescriptor;
+import org.mapstruct.ap.internal.langmodel.descriptor.ElementDescriptor;
 import org.mapstruct.ap.testutil.IssueKey;
 
 /**

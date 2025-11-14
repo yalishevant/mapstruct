@@ -8,6 +8,7 @@ package org.mapstruct.ap.internal.langmodel.annotation;
 import java.util.List;
 import java.util.Objects;
 
+import org.mapstruct.ap.internal.langmodel.AnnotationAttribute;
 import org.mapstruct.ap.internal.langmodel.descriptor.AnnotationDescriptor;
 import org.mapstruct.ap.internal.langmodel.descriptor.TypeDescriptor;
 import org.mapstruct.ap.internal.gem.BuilderGem;
@@ -240,4 +241,3 @@ public final class MapperConfigAnnotationView {
         return unexpectedValueMappingException;
     }
 }
-

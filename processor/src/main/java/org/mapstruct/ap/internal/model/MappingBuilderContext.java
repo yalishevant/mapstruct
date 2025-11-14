@@ -17,13 +17,13 @@ import org.mapstruct.ap.internal.model.common.Assignment;
 import org.mapstruct.ap.internal.model.common.FormattingParameters;
 import org.mapstruct.ap.internal.model.common.SourceRHS;
 import org.mapstruct.ap.internal.model.common.Type;
-import org.mapstruct.ap.langmodel.api.EnumMappingSupport;
-import org.mapstruct.ap.langmodel.api.LangElements;
-import org.mapstruct.ap.langmodel.LangModelContext;
+import org.mapstruct.ap.internal.langmodel.api.EnumMappingSupport;
+import org.mapstruct.ap.internal.langmodel.api.LangElements;
+import org.mapstruct.ap.internal.langmodel.LangModelContext;
 import org.mapstruct.ap.internal.langmodel.MissingLangModelCapabilityException;
-import org.mapstruct.ap.langmodel.api.MappingExclusionSupport;
-import org.mapstruct.ap.descriptor.TypeDescriptor;
-import org.mapstruct.ap.descriptor.TypeElementDescriptor;
+import org.mapstruct.ap.internal.langmodel.api.MappingExclusionSupport;
+import org.mapstruct.ap.internal.langmodel.descriptor.TypeDescriptor;
+import org.mapstruct.ap.internal.langmodel.descriptor.TypeElementDescriptor;
 import org.mapstruct.ap.internal.model.common.TypeFactory;
 import org.mapstruct.ap.internal.model.source.Method;
 import org.mapstruct.ap.internal.model.source.SourceMethod;
@@ -33,11 +33,11 @@ import org.mapstruct.ap.internal.util.AccessorNamingUtils;
 import org.mapstruct.ap.internal.util.FormattingMessager;
 import org.mapstruct.ap.internal.util.Message;
 import org.mapstruct.ap.internal.util.Services;
-import org.mapstruct.ap.descriptor.AnnotationDescriptor;
+import org.mapstruct.ap.internal.langmodel.descriptor.AnnotationDescriptor;
 import org.mapstruct.ap.spi.EnumMappingStrategy;
 import org.mapstruct.ap.spi.EnumTransformationStrategy;
-import org.mapstruct.ap.spi.lang.EnumMappingCapability;
-import org.mapstruct.ap.spi.lang.MappingExclusionCapability;
+import org.mapstruct.ap.internal.langmodel.spi.EnumMappingCapability;
+import org.mapstruct.ap.internal.langmodel.spi.MappingExclusionCapability;
 import org.mapstruct.ap.spi.MappingExclusionProvider;
 import org.mapstruct.ap.internal.spi.DefaultMappingExclusionProvider;
 
@@ -113,7 +113,7 @@ public class MappingBuilderContext {
     }
 
     private final TypeFactory typeFactory;
-    private final LangModelContext<?, ?, ?, ?> langModelContext;
+    private final LangModelContext langModelContext;
     private final LangElements langElements;
     private final FormattingMessager messager;
     private final AccessorNamingUtils accessorNaming;
@@ -132,7 +132,7 @@ public class MappingBuilderContext {
 
     //CHECKSTYLE:OFF
     public MappingBuilderContext(TypeFactory typeFactory,
-                          LangModelContext<?, ?, ?, ?> langModelContext,
+                          LangModelContext langModelContext,
                           FormattingMessager messager,
                           AccessorNamingUtils accessorNaming,
                           EnumMappingStrategy enumMappingStrategy,

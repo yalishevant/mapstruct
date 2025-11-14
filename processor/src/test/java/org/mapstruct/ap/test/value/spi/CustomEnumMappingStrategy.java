@@ -5,9 +5,10 @@
  */
 package org.mapstruct.ap.test.value.spi;
 
+import javax.lang.model.element.TypeElement;
+import javax.lang.model.type.TypeMirror;
+
 import org.mapstruct.MappingConstants;
-import org.mapstruct.ap.descriptor.TypeDescriptor;
-import org.mapstruct.ap.descriptor.TypeElementDescriptor;
 import org.mapstruct.ap.internal.gem.MappingConstantsGem;
 import org.mapstruct.ap.spi.DefaultEnumMappingStrategy;
 import org.mapstruct.ap.spi.EnumMappingStrategy;
@@ -19,7 +20,7 @@ import org.mapstruct.ap.test.value.CustomIllegalArgumentException;
 public class CustomEnumMappingStrategy extends DefaultEnumMappingStrategy implements EnumMappingStrategy {
 
     @Override
-    public String getDefaultNullEnumConstant(TypeDescriptor enumType) {
+    public String getDefaultNullEnumConstant(TypeElement enumType) {
         if ( isCustomThrowingEnum( enumType ) ) {
             return MappingConstants.THROW_EXCEPTION;
         }
@@ -32,7 +33,7 @@ public class CustomEnumMappingStrategy extends DefaultEnumMappingStrategy implem
     }
 
     @Override
-    public String getEnumConstant(TypeDescriptor enumType, String enumConstant) {
+    public String getEnumConstant(TypeElement enumType, String enumConstant) {
         if ( isCustomThrowingEnum( enumType ) ) {
             return getCustomEnumConstant( enumConstant );
         }
@@ -51,11 +52,11 @@ public class CustomEnumMappingStrategy extends DefaultEnumMappingStrategy implem
         return enumConstant.replace( "CUSTOM_", "" );
     }
 
-    protected boolean isCustomEnum(TypeDescriptor enumType) {
+    protected boolean isCustomEnum(TypeElement enumType) {
         return hasMarkerInterface( enumType, "org.mapstruct.ap.test.value.spi.CustomEnumMarker" );
     }
 
-    protected boolean isCustomThrowingEnum(TypeDescriptor enumType) {
+    protected boolean isCustomThrowingEnum(TypeElement enumType) {
         return hasMarkerInterface( enumType, "org.mapstruct.ap.test.value.spi.CustomThrowingEnumMarker" );
     }
 
@@ -64,22 +65,14 @@ public class CustomEnumMappingStrategy extends DefaultEnumMappingStrategy implem
         return CustomIllegalArgumentException.class;
     }
 
-    private boolean hasMarkerInterface(TypeDescriptor enumType, String markerQualifiedName) {
-        if ( enumType == null || types == null ) {
+    private boolean hasMarkerInterface(TypeElement enumType, String markerQualifiedName) {
+        if ( enumType == null || typeUtils == null ) {
             return false;
         }
 
-        for ( TypeDescriptor superType : types.directSupertypes( enumType ) ) {
-            if ( superType == null ) {
-                continue;
-            }
-
-            if ( superType.qualifiedName().filter( markerQualifiedName::equals ).isPresent() ) {
-                return true;
-            }
-
-            TypeElementDescriptor descriptor = types.asElement( superType );
-            if ( descriptor != null && markerQualifiedName.equals( descriptor.qualifiedName() ) ) {
+        for ( TypeMirror enumTypeInterface : enumType.getInterfaces() ) {
+            TypeElement descriptor = (TypeElement) typeUtils.asElement( enumTypeInterface );
+            if ( descriptor != null && markerQualifiedName.equals( descriptor.getQualifiedName().toString() ) ) {
                 return true;
             }
         }

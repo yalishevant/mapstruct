@@ -6,11 +6,14 @@
 package org.mapstruct.ap.internal.util.accessor;
 
 import java.util.Set;
-import javax.lang.model.element.Element;
-import javax.lang.model.element.Modifier;
-import javax.lang.model.type.TypeMirror;
+
+import org.mapstruct.ap.internal.langmodel.descriptor.ElementDescriptor;
+import org.mapstruct.ap.internal.langmodel.descriptor.LangModifier;
+import org.mapstruct.ap.internal.langmodel.descriptor.TypeDescriptor;
 
 /**
+ * Base accessor implementation that forwards all operations to a delegate {@link Accessor}.
+ *
  * @author Filip Hrisafov
  */
 public abstract class DelegateAccessor implements Accessor {
@@ -22,7 +25,7 @@ public abstract class DelegateAccessor implements Accessor {
     }
 
     @Override
-    public TypeMirror getAccessedType() {
+    public TypeDescriptor getAccessedType() {
         return delegate.getAccessedType();
     }
 
@@ -32,12 +35,12 @@ public abstract class DelegateAccessor implements Accessor {
     }
 
     @Override
-    public Set<Modifier> getModifiers() {
+    public Set<LangModifier> getModifiers() {
         return delegate.getModifiers();
     }
 
     @Override
-    public Element getElement() {
+    public ElementDescriptor getElement() {
         return delegate.getElement();
     }
 

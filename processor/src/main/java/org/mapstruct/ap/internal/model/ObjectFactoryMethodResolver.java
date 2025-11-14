@@ -20,8 +20,8 @@ import org.mapstruct.ap.internal.model.source.selector.MethodSelectors;
 import org.mapstruct.ap.internal.model.source.selector.SelectedMethod;
 import org.mapstruct.ap.internal.model.source.selector.SelectionContext;
 import org.mapstruct.ap.internal.util.Message;
-import org.mapstruct.ap.descriptor.ExecutableDescriptor;
-import org.mapstruct.ap.descriptor.LangElementKind;
+import org.mapstruct.ap.internal.langmodel.descriptor.ExecutableDescriptor;
+import org.mapstruct.ap.internal.langmodel.descriptor.LangElementKind;
 
 import static org.mapstruct.ap.internal.util.Collections.first;
 

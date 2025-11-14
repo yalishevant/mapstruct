@@ -26,6 +26,7 @@ import java.util.concurrent.ConcurrentNavigableMap;
 import java.util.concurrent.ConcurrentSkipListMap;
 import java.util.stream.Collectors;
 
+
 import org.mapstruct.ap.internal.gem.BuilderGem;
 import org.mapstruct.ap.internal.util.AnnotationProcessingException;
 import org.mapstruct.ap.internal.util.FormattingMessager;
@@ -35,26 +36,26 @@ import org.mapstruct.ap.internal.util.Message;
 import org.mapstruct.ap.internal.util.RoundContext;
 import org.mapstruct.ap.internal.util.accessor.Accessor;
 import org.mapstruct.ap.internal.version.VersionInformation;
-import org.mapstruct.ap.langmodel.AnnotationGemFactory;
-import org.mapstruct.ap.langmodel.AnnotationGemsCapability;
-import org.mapstruct.ap.descriptor.BuilderDescriptor;
-import org.mapstruct.ap.spi.lang.BuilderIntrospector;
-import org.mapstruct.ap.langmodel.BuilderIntrospectorCapability;
-import org.mapstruct.ap.descriptor.ElementDescriptor;
-import org.mapstruct.ap.descriptor.ExecutableDescriptor;
-import org.mapstruct.ap.langmodel.ExecutableSignature;
-import org.mapstruct.ap.langmodel.LangDescriptorFactory;
-import org.mapstruct.ap.langmodel.api.LangElements;
+import org.mapstruct.ap.internal.langmodel.AnnotationGemFactory;
+import org.mapstruct.ap.internal.langmodel.AnnotationGemsCapability;
+import org.mapstruct.ap.internal.langmodel.descriptor.BuilderDescriptor;
+import org.mapstruct.ap.internal.langmodel.spi.BuilderIntrospector;
+import org.mapstruct.ap.internal.langmodel.BuilderIntrospectorCapability;
+import org.mapstruct.ap.internal.langmodel.descriptor.ElementDescriptor;
+import org.mapstruct.ap.internal.langmodel.descriptor.ExecutableDescriptor;
+import org.mapstruct.ap.internal.langmodel.ExecutableSignature;
+import org.mapstruct.ap.internal.langmodel.LangDescriptorFactory;
+import org.mapstruct.ap.internal.langmodel.api.LangElements;
 import org.mapstruct.ap.internal.langmodel.MissingLangModelCapabilityException;
-import org.mapstruct.ap.langmodel.LangModelContext;
-import org.mapstruct.ap.langmodel.LangModelElementQuery;
-import org.mapstruct.ap.langmodel.LangModelTypeSystem;
-import org.mapstruct.ap.descriptor.LangTypeKind;
-import org.mapstruct.ap.langmodel.api.LangTypes;
-import org.mapstruct.ap.descriptor.ParameterDescriptor;
-import org.mapstruct.ap.descriptor.TypeDescriptor;
-import org.mapstruct.ap.descriptor.TypeElementDescriptor;
-import org.mapstruct.ap.langmodel.TypeIntrospector;
+import org.mapstruct.ap.internal.langmodel.LangModelContext;
+import org.mapstruct.ap.internal.langmodel.LangModelElementQuery;
+import org.mapstruct.ap.internal.langmodel.LangModelTypeSystem;
+import org.mapstruct.ap.internal.langmodel.descriptor.LangTypeKind;
+import org.mapstruct.ap.internal.langmodel.api.LangTypes;
+import org.mapstruct.ap.internal.langmodel.descriptor.ParameterDescriptor;
+import org.mapstruct.ap.internal.langmodel.descriptor.TypeDescriptor;
+import org.mapstruct.ap.internal.langmodel.descriptor.TypeElementDescriptor;
+import org.mapstruct.ap.internal.langmodel.TypeIntrospector;
 import org.mapstruct.ap.spi.BuilderInfo;
 import org.mapstruct.ap.spi.MoreThanOneBuilderCreationMethodException;
 
@@ -73,7 +74,7 @@ public class TypeFactory {
     private static final String LINKED_HASH_SET_FACTORY_METHOD_NAME = "newLinkedHashSet";
     private static final String LINKED_HASH_MAP_FACTORY_METHOD_NAME = "newLinkedHashMap";
 
-    private final LangModelContext<?, ?, ?, ?> langModelContext;
+    private final LangModelContext langModelContext;
     private final LangModelTypeSystem<?, ?, ?, ?> typeSystem;
     private final LangModelElementQuery elementQuery;
     private final LangTypes langTypes;
@@ -95,7 +96,7 @@ public class TypeFactory {
     private final Map<String, String> notToBeImportedTypes;
     private final boolean loggingVerbose;
 
-    public TypeFactory(LangModelContext<?, ?, ?, ?> langModelContext,
+    public TypeFactory(LangModelContext langModelContext,
                        FormattingMessager messager,
                        RoundContext roundContext, Map<String, String> notToBeImportedTypes, boolean loggingVerbose,
                        VersionInformation versionInformation) {
@@ -105,8 +106,8 @@ public class TypeFactory {
         this.langTypes = typeSystem.types();
         this.langElements = elementQuery.elements();
         @SuppressWarnings("unchecked")
-        LangDescriptorFactory<Object, Object, Object, Object> descriptorFactory =
-            (LangDescriptorFactory<Object, Object, Object, Object>) typeSystem.descriptors();
+        LangDescriptorFactory descriptorFactory =
+            (LangDescriptorFactory) typeSystem.descriptors();
         this.descriptorFactory = descriptorFactory;
         this.typeIntrospector = typeSystem.typeIntrospector();
         BuilderIntrospectorCapability builderIntrospectorCapability =
@@ -690,7 +691,7 @@ public class TypeFactory {
         try {
             return builderIntrospector.findBuilder( descriptor );
         }
-        catch ( org.mapstruct.ap.langmodel.BuilderIntrospectionException ex ) {
+        catch ( org.mapstruct.ap.internal.langmodel.BuilderIntrospectionException ex ) {
             if ( report ) {
                 messager.printMessage(
                     type.getTypeElementDescriptor(),
@@ -845,4 +846,5 @@ public class TypeFactory {
         }
         return type;
     }
+
 }

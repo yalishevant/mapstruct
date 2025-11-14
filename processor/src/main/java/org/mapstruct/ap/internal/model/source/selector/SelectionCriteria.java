@@ -11,7 +11,7 @@ import java.util.List;
 import org.mapstruct.ap.internal.model.common.SourceRHS;
 import org.mapstruct.ap.internal.model.source.MappingControl;
 import org.mapstruct.ap.internal.model.source.SelectionParameters;
-import org.mapstruct.ap.descriptor.TypeDescriptor;
+import org.mapstruct.ap.internal.langmodel.descriptor.TypeDescriptor;
 
 /**
  * This class groups the selection criteria in one class

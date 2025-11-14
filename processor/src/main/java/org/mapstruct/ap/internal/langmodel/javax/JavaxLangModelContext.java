@@ -16,30 +16,30 @@ import javax.lang.model.element.TypeElement;
 import javax.lang.model.type.TypeMirror;
 import javax.tools.Diagnostic;
 
-import org.mapstruct.ap.internal.util.AnnotationProcessorContext;
-import org.mapstruct.ap.internal.util.IgnoreJRERequirement;
-import org.mapstruct.ap.internal.version.VersionInformation;
 import org.mapstruct.ap.internal.langmodel.AnnotationGemFactory;
 import org.mapstruct.ap.internal.langmodel.AnnotationGemsCapability;
 import org.mapstruct.ap.internal.langmodel.BuilderIntrospectorCapability;
-import org.mapstruct.ap.internal.langmodel.api.DescriptorUnwrapper;
-import org.mapstruct.ap.internal.langmodel.spi.EnumMappingCapability;
-import org.mapstruct.ap.internal.langmodel.codegen.GeneratedFileAccess;
+import org.mapstruct.ap.internal.langmodel.GeneratedFileAccess;
 import org.mapstruct.ap.internal.langmodel.LangDescriptorFactory;
-import org.mapstruct.ap.internal.langmodel.spi.LangDiagnostics;
-import org.mapstruct.ap.internal.langmodel.api.LangElements;
 import org.mapstruct.ap.internal.langmodel.LangModelContext;
-import org.mapstruct.ap.internal.langmodel.api.LangTypes;
-import org.mapstruct.ap.internal.langmodel.annotation.MapperAnnotationView;
-import org.mapstruct.ap.internal.langmodel.annotation.MapperConfigAnnotationView;
-import org.mapstruct.ap.internal.langmodel.spi.MappingExclusionCapability;
+import org.mapstruct.ap.internal.langmodel.MapperAnnotation;
+import org.mapstruct.ap.internal.langmodel.MapperConfigAnnotation;
 import org.mapstruct.ap.internal.langmodel.OptionalCapability;
-import org.mapstruct.ap.internal.langmodel.spi.SpiBridgeCapability;
+import org.mapstruct.ap.internal.langmodel.TypeIntrospector;
+import org.mapstruct.ap.internal.langmodel.api.DescriptorUnwrapper;
+import org.mapstruct.ap.internal.langmodel.api.LangElements;
+import org.mapstruct.ap.internal.langmodel.api.LangTypes;
+import org.mapstruct.ap.internal.langmodel.codegen.GeneratedFileSink;
 import org.mapstruct.ap.internal.langmodel.descriptor.TypeDescriptor;
 import org.mapstruct.ap.internal.langmodel.descriptor.TypeElementDescriptor;
-import org.mapstruct.ap.internal.langmodel.TypeIntrospector;
-import org.mapstruct.ap.internal.langmodel.codegen.GeneratedFileSink;
 import org.mapstruct.ap.internal.langmodel.javax.codegen.JavaxGeneratedFileSink;
+import org.mapstruct.ap.internal.langmodel.spi.EnumMappingCapability;
+import org.mapstruct.ap.internal.langmodel.spi.LangDiagnostics;
+import org.mapstruct.ap.internal.langmodel.spi.MappingExclusionCapability;
+import org.mapstruct.ap.internal.langmodel.spi.SpiBridgeCapability;
+import org.mapstruct.ap.internal.processor.AnnotationProcessorContext;
+import org.mapstruct.ap.internal.util.IgnoreJRERequirement;
+import org.mapstruct.ap.internal.version.VersionInformation;
 import org.mapstruct.ap.spi.AstModifyingAnnotationProcessor;
 import org.mapstruct.ap.spi.TypeHierarchyErroneousException;
 
@@ -131,12 +131,16 @@ public final class JavaxLangModelContext implements LangModelContext {
             if ( !( context instanceof AnnotationProcessorContext ) ) {
                 throw new IllegalArgumentException( "Expected AnnotationProcessorContext" );
             }
-            return new JavaxBuilderIntrospector( (AnnotationProcessorContext) context );
+            return new JavaxBuilderIntrospector( JavaxLangModelContext.this, (AnnotationProcessorContext) context );
         };
         this.enumMappingCapability = strategy -> new JavaxEnumMappingSupport( JavaxLangModelContext.this, strategy );
         this.mappingExclusionCapability = provider -> new JavaxMappingExclusionSupport( provider );
-        this.spiBridgeCapability = options ->
-            new JavaxMapStructProcessingEnvironment( elements, types, new JavaxDescriptorUnwrapper(), options );
+        this.spiBridgeCapability = processorOptions ->
+            new JavaxMapStructProcessingEnvironment(
+                processingEnvironment.getElementUtils(),
+                processingEnvironment.getTypeUtils(),
+                processorOptions
+            );
     }
 
     public static JavaxLangModelContext create(ProcessingEnvironment processingEnvironment,
@@ -204,7 +208,7 @@ public final class JavaxLangModelContext implements LangModelContext {
     }
 
     @Override
-    public MapperAnnotationView mapperAnnotation(TypeElementDescriptor element) {
+    public MapperAnnotation mapperAnnotation(TypeElementDescriptor element) {
         TypeElement typeElement = element != null
             ? descriptorUnwrapper.type( element, TypeElement.class ).orElse( null )
             : null;
@@ -212,7 +216,7 @@ public final class JavaxLangModelContext implements LangModelContext {
     }
 
     @Override
-    public Optional<MapperConfigAnnotationView> mapperConfig(TypeDescriptor configType) {
+    public Optional<MapperConfigAnnotation> mapperConfig(TypeDescriptor configType) {
         return JavaxMapperAnnotations.mapperConfig( this, configType );
     }
 
@@ -267,24 +271,20 @@ public final class JavaxLangModelContext implements LangModelContext {
     }
 
     TypeHierarchyErroneousException typeHierarchyErroneousException(TypeDescriptor descriptor) {
-        TypeMirror type = descriptorUnwrapper.type( descriptor, TypeMirror.class ).orElse( null );
-        if ( type != null ) {
-            TypeDescriptor mapped = descriptorFactory.typeDescriptor( type );
-            if ( mapped != null ) {
-                return new TypeHierarchyErroneousException( mapped );
-            }
+        if ( descriptor == null ) {
+            return new TypeHierarchyErroneousException();
         }
 
-        TypeElement typeElement = descriptor != null
-            ? descriptorUnwrapper.type(
-                descriptor.typeElement().orElse( null ),
-                TypeElement.class
-            ).orElse( null )
-            : null;
-        if ( typeElement != null ) {
-            TypeDescriptor mapped = descriptorFactory.typeDescriptor( typeElement.asType() );
-            if ( mapped != null ) {
-                return new TypeHierarchyErroneousException( mapped );
+        Object unwrapped = descriptor.unwrap();
+        if ( unwrapped instanceof TypeMirror ) {
+            return new TypeHierarchyErroneousException( (TypeMirror) unwrapped );
+        }
+
+        TypeElementDescriptor elementDescriptor = descriptor.typeElement().orElse( null );
+        if ( elementDescriptor != null ) {
+            Object elementHandle = elementDescriptor.unwrap();
+            if ( elementHandle instanceof TypeElement ) {
+                return new TypeHierarchyErroneousException( (TypeElement) elementHandle );
             }
         }
 

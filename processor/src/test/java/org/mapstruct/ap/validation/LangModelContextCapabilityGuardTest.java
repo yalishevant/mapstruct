@@ -23,7 +23,7 @@ import org.junit.jupiter.api.Test;
 
 /**
  * Guard tests for {@code org.mapstruct.ap.internal} to enforce thin
- * {@link org.mapstruct.ap.langmodel.LangModelContext} usage.
+ * {@link org.mapstruct.ap.internal.langmodel.LangModelContext} usage.
  * The checks mirror the shell-based controls defined in the milestone roadmap
  * and prevent regressions when Kotlin backends rely on the minimal facade set.
  */

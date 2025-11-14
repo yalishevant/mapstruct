@@ -21,33 +21,29 @@ import javax.annotation.processing.RoundEnvironment;
 import javax.annotation.processing.SupportedAnnotationTypes;
 import javax.annotation.processing.SupportedSourceVersion;
 import javax.lang.model.SourceVersion;
-import javax.lang.model.element.AnnotationMirror;
-import javax.lang.model.element.AnnotationValue;
 import javax.lang.model.element.Element;
 import javax.lang.model.element.ElementKind;
 import javax.lang.model.element.ExecutableElement;
 import javax.lang.model.element.Name;
 import javax.lang.model.element.TypeElement;
-import javax.lang.model.type.TypeMirror;
 import javax.tools.Diagnostic;
 
-import org.mapstruct.ap.descriptor.ElementDescriptor;
-import org.mapstruct.ap.descriptor.ExecutableDescriptor;
-import org.mapstruct.ap.descriptor.ParameterDescriptor;
-import org.mapstruct.ap.descriptor.RecordComponentDescriptor;
-import org.mapstruct.ap.descriptor.TypeDescriptor;
-import org.mapstruct.ap.descriptor.TypeElementDescriptor;
-import org.mapstruct.ap.langmodel.javax.DefaultVersionInformation;
+import org.mapstruct.ap.internal.langmodel.descriptor.ElementDescriptor;
+import org.mapstruct.ap.internal.langmodel.descriptor.ExecutableDescriptor;
+import org.mapstruct.ap.internal.langmodel.descriptor.ParameterDescriptor;
+import org.mapstruct.ap.internal.langmodel.descriptor.RecordComponentDescriptor;
+import org.mapstruct.ap.internal.langmodel.descriptor.TypeDescriptor;
+import org.mapstruct.ap.internal.langmodel.descriptor.TypeElementDescriptor;
+import org.mapstruct.ap.internal.langmodel.javax.DefaultVersionInformation;
 import org.mapstruct.ap.internal.version.VersionInformation;
-import org.mapstruct.ap.langmodel.LangDescriptorFactory;
-import org.mapstruct.ap.langmodel.LangModelContext;
-import org.mapstruct.ap.langmodel.LangModelContextFactory;
-import org.mapstruct.ap.langmodel.LangModelElementQuery;
-import org.mapstruct.ap.langmodel.LangModelTypeSystem;
-import org.mapstruct.ap.langmodel.MapperEntryPoint;
-import org.mapstruct.ap.langmodel.TypeIntrospector;
-import org.mapstruct.ap.langmodel.api.LangElements;
-import org.mapstruct.ap.langmodel.javax.JavaxLangModelContextFactory;
+import org.mapstruct.ap.internal.langmodel.LangDescriptorFactory;
+import org.mapstruct.ap.internal.langmodel.LangModelContext;
+import org.mapstruct.ap.internal.langmodel.LangModelContextFactory;
+import org.mapstruct.ap.internal.langmodel.LangModelElementQuery;
+import org.mapstruct.ap.internal.langmodel.MapperEntryPoint;
+import org.mapstruct.ap.internal.langmodel.TypeIntrospector;
+import org.mapstruct.ap.internal.langmodel.api.LangElements;
+import org.mapstruct.ap.internal.langmodel.javax.JavaxLangModelContextFactory;
 
 /**
  * Processor validating that the thin language model reproduces the behaviour of {@code javax.lang.model} for selected
@@ -87,7 +83,7 @@ public class LangModelParityProcessor extends AbstractProcessor {
             }
             else {
                 MapperEntryPoint entryPoint = MapperEntryPoint.of( versionInformation, processingEnv, mapperElement );
-                try ( LangModelContext<TypeMirror, TypeElement, AnnotationMirror, AnnotationValue> context =
+                try ( LangModelContext context =
                     cast( factory.create( entryPoint ) ) ) {
                     if ( focus.contains( "overrides" ) ) {
                         verifyOverridesParity( factory, context, errors );
@@ -136,7 +132,7 @@ public class LangModelParityProcessor extends AbstractProcessor {
     }
 
     private void verifyOverridesParity(LangModelContextFactory factory,
-                                       LangModelContext<TypeMirror, TypeElement, AnnotationMirror, AnnotationValue> context,
+                                       LangModelContext context,
                                        List<String> errors) {
 
         LangModelElementQuery elementQuery = context.elementQuery();
@@ -169,7 +165,7 @@ public class LangModelParityProcessor extends AbstractProcessor {
     }
 
     private void verifyConstructorsParity(LangModelContextFactory factory,
-                                          LangModelContext<TypeMirror, TypeElement, AnnotationMirror, AnnotationValue> context,
+                                          LangModelContext context,
                                           List<String> errors) {
 
         LangModelElementQuery elementQuery = context.elementQuery();
@@ -204,7 +200,7 @@ public class LangModelParityProcessor extends AbstractProcessor {
     }
 
     private void verifyRecordComponentsParity(LangModelContextFactory factory,
-                                              LangModelContext<TypeMirror, TypeElement, AnnotationMirror, AnnotationValue> context,
+                                              LangModelContext context,
                                               List<String> errors) {
 
         LangModelElementQuery elementQuery = context.elementQuery();
@@ -236,13 +232,11 @@ public class LangModelParityProcessor extends AbstractProcessor {
     }
 
     private void verifyEnumMetadataParity(LangModelContextFactory factory,
-                                          LangModelContext<TypeMirror, TypeElement, AnnotationMirror, AnnotationValue> context,
+                                          LangModelContext context,
                                           List<String> errors) {
 
-        LangModelTypeSystem<TypeMirror, TypeElement, AnnotationMirror, AnnotationValue> typeSystem = context.typeSystem();
-        LangDescriptorFactory<TypeMirror, TypeElement, AnnotationMirror, AnnotationValue> descriptors =
-            typeSystem.descriptors();
-        TypeIntrospector typeIntrospector = typeSystem.typeIntrospector();
+        LangDescriptorFactory descriptors = context.descriptors();
+        TypeIntrospector typeIntrospector = context.typeIntrospector();
 
         TypeElement enumElement = processingEnv.getElementUtils().getTypeElement( ENUM_FQN );
         if ( enumElement == null ) {
@@ -323,9 +317,9 @@ public class LangModelParityProcessor extends AbstractProcessor {
     }
 
     @SuppressWarnings("unchecked")
-    private LangModelContext<TypeMirror, TypeElement, AnnotationMirror, AnnotationValue> cast(
-        LangModelContext<?, ?, ?, ?> context) {
-        return (LangModelContext<TypeMirror, TypeElement, AnnotationMirror, AnnotationValue>) context;
+    private LangModelContext cast(
+        LangModelContext context) {
+        return (LangModelContext) context;
     }
 
     private static VersionInformation resolveVersionInformation(ProcessingEnvironment processingEnvironment)

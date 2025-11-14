@@ -119,4 +119,8 @@ final class JavaxDescriptorFactory implements LangDescriptorFactory {
         String type = value == null ? "null" : value.getClass().getName();
         return new IllegalArgumentException( "Unsupported " + kind + " handle: " + type );
     }
+
+    JavaxLangModelContext context() {
+        return context;
+    }
 }

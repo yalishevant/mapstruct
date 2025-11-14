@@ -16,16 +16,16 @@ import org.mapstruct.ap.internal.model.source.Method;
 import org.mapstruct.ap.internal.model.source.SourceMethod;
 import org.mapstruct.ap.internal.util.AnnotationDescriptorUtils;
 import org.mapstruct.ap.internal.util.AnnotationValueUtils;
-import org.mapstruct.ap.descriptor.AnnotationDescriptor;
-import org.mapstruct.ap.descriptor.AnnotationValueDescriptor;
-import org.mapstruct.ap.descriptor.ElementDescriptor;
-import org.mapstruct.ap.descriptor.ExecutableDescriptor;
-import org.mapstruct.ap.descriptor.FieldDescriptor;
-import org.mapstruct.ap.descriptor.LangElementKind;
-import org.mapstruct.ap.langmodel.api.LangElements;
-import org.mapstruct.ap.langmodel.api.LangTypes;
-import org.mapstruct.ap.descriptor.TypeDescriptor;
-import org.mapstruct.ap.descriptor.TypeElementDescriptor;
+import org.mapstruct.ap.internal.langmodel.descriptor.AnnotationDescriptor;
+import org.mapstruct.ap.internal.langmodel.descriptor.AnnotationValueDescriptor;
+import org.mapstruct.ap.internal.langmodel.descriptor.ElementDescriptor;
+import org.mapstruct.ap.internal.langmodel.descriptor.ExecutableDescriptor;
+import org.mapstruct.ap.internal.langmodel.descriptor.FieldDescriptor;
+import org.mapstruct.ap.internal.langmodel.descriptor.LangElementKind;
+import org.mapstruct.ap.internal.langmodel.api.LangElements;
+import org.mapstruct.ap.internal.langmodel.api.LangTypes;
+import org.mapstruct.ap.internal.langmodel.descriptor.TypeDescriptor;
+import org.mapstruct.ap.internal.langmodel.descriptor.TypeElementDescriptor;
 
 /**
  * Finds the {@code XmlElementRef} annotation on a field (of the mapping result type or its super types) matching the

@@ -12,9 +12,9 @@ import java.util.Objects;
 import java.util.stream.Collectors;
 
 import org.junit.jupiter.api.Test;
-import org.mapstruct.ap.descriptor.LangTypeKind;
-import org.mapstruct.ap.descriptor.TypeDescriptor;
-import org.mapstruct.ap.descriptor.TypeElementDescriptor;
+import org.mapstruct.ap.internal.langmodel.descriptor.LangTypeKind;
+import org.mapstruct.ap.internal.langmodel.descriptor.TypeDescriptor;
+import org.mapstruct.ap.internal.langmodel.descriptor.TypeElementDescriptor;
 
 import static org.assertj.core.api.Assertions.assertThat;
 

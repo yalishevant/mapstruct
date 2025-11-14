@@ -13,9 +13,9 @@ import org.mapstruct.ap.internal.model.Mapper;
 import org.mapstruct.ap.internal.model.ServicesEntry;
 import org.mapstruct.ap.internal.model.common.Type;
 import org.mapstruct.ap.internal.model.source.MapperOptions;
-import org.mapstruct.ap.langmodel.LangModelContext;
-import org.mapstruct.ap.langmodel.MapperAnnotation;
-import org.mapstruct.ap.descriptor.TypeElementDescriptor;
+import org.mapstruct.ap.internal.langmodel.LangModelContext;
+import org.mapstruct.ap.internal.langmodel.MapperAnnotation;
+import org.mapstruct.ap.internal.langmodel.descriptor.TypeElementDescriptor;
 
 /**
  * A {@link ModelElementProcessor} which creates files in the {@code META-INF/services}
@@ -38,7 +38,7 @@ public class MapperServiceProcessor  implements ModelElementProcessor<Mapper, Vo
             spiGenerationNeeded = true;
         }
         else {
-            LangModelContext<?, ?, ?, ?> langModelContext = context.getLangModelContext();
+            LangModelContext langModelContext = context.getLangModelContext();
             MapperAnnotation mapperAnnotation = langModelContext.elementQuery().mapperAnnotation( mapperDescriptor );
             MapperOptions mapperOptions = MapperOptions.fromAnnotation(
                 mapperAnnotation,

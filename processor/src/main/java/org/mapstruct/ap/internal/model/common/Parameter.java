@@ -9,10 +9,10 @@ import java.util.List;
 import java.util.Objects;
 import java.util.Set;
 import java.util.stream.Collectors;
-import org.mapstruct.ap.descriptor.AnnotationDescriptor;
-import org.mapstruct.ap.descriptor.ElementDescriptor;
-import org.mapstruct.ap.descriptor.ParameterDescriptor;
-import org.mapstruct.ap.descriptor.TypeElementDescriptor;
+import org.mapstruct.ap.internal.langmodel.descriptor.AnnotationDescriptor;
+import org.mapstruct.ap.internal.langmodel.descriptor.ElementDescriptor;
+import org.mapstruct.ap.internal.langmodel.descriptor.ParameterDescriptor;
+import org.mapstruct.ap.internal.langmodel.descriptor.TypeElementDescriptor;
 import org.mapstruct.ap.internal.util.Collections;
 
 /**

@@ -17,11 +17,11 @@ import org.mapstruct.ap.internal.model.common.Parameter;
 import org.mapstruct.ap.internal.util.AnnotationDescriptorUtils;
 import org.mapstruct.ap.internal.util.FormattingMessager;
 import org.mapstruct.ap.internal.util.Message;
-import org.mapstruct.ap.descriptor.AnnotationDescriptor;
-import org.mapstruct.ap.descriptor.AnnotationValueDescriptor;
-import org.mapstruct.ap.descriptor.ExecutableDescriptor;
-import org.mapstruct.ap.descriptor.LangTypeKind;
-import org.mapstruct.ap.descriptor.TypeDescriptor;
+import org.mapstruct.ap.internal.langmodel.descriptor.AnnotationDescriptor;
+import org.mapstruct.ap.internal.langmodel.descriptor.AnnotationValueDescriptor;
+import org.mapstruct.ap.internal.langmodel.descriptor.ExecutableDescriptor;
+import org.mapstruct.ap.internal.langmodel.descriptor.LangTypeKind;
+import org.mapstruct.ap.internal.langmodel.descriptor.TypeDescriptor;
 
 /**
  * @author Filip Hrisafov

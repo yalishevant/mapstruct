@@ -35,17 +35,17 @@ import org.mapstruct.ap.internal.util.accessor.ElementAccessor;
 import org.mapstruct.ap.internal.util.accessor.MapValueAccessor;
 import org.mapstruct.ap.internal.util.accessor.PresenceCheckAccessor;
 import org.mapstruct.ap.internal.util.accessor.ReadAccessor;
-import org.mapstruct.ap.descriptor.ElementDescriptor;
-import org.mapstruct.ap.descriptor.LangElementKind;
-import org.mapstruct.ap.descriptor.ExecutableDescriptor;
-import org.mapstruct.ap.descriptor.FieldDescriptor;
-import org.mapstruct.ap.descriptor.LangModifier;
-import org.mapstruct.ap.descriptor.LangTypeKind;
-import org.mapstruct.ap.langmodel.api.LangTypes;
-import org.mapstruct.ap.descriptor.RecordComponentDescriptor;
-import org.mapstruct.ap.descriptor.TypeDescriptor;
-import org.mapstruct.ap.descriptor.TypeElementDescriptor;
-import org.mapstruct.ap.langmodel.TypeIntrospector;
+import org.mapstruct.ap.internal.langmodel.descriptor.ElementDescriptor;
+import org.mapstruct.ap.internal.langmodel.descriptor.LangElementKind;
+import org.mapstruct.ap.internal.langmodel.descriptor.ExecutableDescriptor;
+import org.mapstruct.ap.internal.langmodel.descriptor.FieldDescriptor;
+import org.mapstruct.ap.internal.langmodel.descriptor.LangModifier;
+import org.mapstruct.ap.internal.langmodel.descriptor.LangTypeKind;
+import org.mapstruct.ap.internal.langmodel.api.LangTypes;
+import org.mapstruct.ap.internal.langmodel.descriptor.RecordComponentDescriptor;
+import org.mapstruct.ap.internal.langmodel.descriptor.TypeDescriptor;
+import org.mapstruct.ap.internal.langmodel.descriptor.TypeElementDescriptor;
+import org.mapstruct.ap.internal.langmodel.TypeIntrospector;
 
 import static org.mapstruct.ap.internal.util.Collections.first;
 

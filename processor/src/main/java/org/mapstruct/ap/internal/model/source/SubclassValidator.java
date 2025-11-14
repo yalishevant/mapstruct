@@ -10,10 +10,10 @@ import java.util.List;
 
 import org.mapstruct.ap.internal.util.FormattingMessager;
 import org.mapstruct.ap.internal.util.Message;
-import org.mapstruct.ap.descriptor.AnnotationDescriptor;
-import org.mapstruct.ap.descriptor.ExecutableDescriptor;
-import org.mapstruct.ap.langmodel.api.LangTypes;
-import org.mapstruct.ap.descriptor.TypeDescriptor;
+import org.mapstruct.ap.internal.langmodel.descriptor.AnnotationDescriptor;
+import org.mapstruct.ap.internal.langmodel.descriptor.ExecutableDescriptor;
+import org.mapstruct.ap.internal.langmodel.api.LangTypes;
+import org.mapstruct.ap.internal.langmodel.descriptor.TypeDescriptor;
 
 /**
  * Handles the validation of multiple @SubclassMapping annotations on the same method.

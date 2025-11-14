@@ -17,9 +17,9 @@ import org.mapstruct.ap.internal.gem.NullValueMappingStrategyGem;
 import org.mapstruct.ap.internal.gem.NullValuePropertyMappingStrategyGem;
 import org.mapstruct.ap.internal.gem.ReportingPolicyGem;
 import org.mapstruct.ap.internal.gem.SubclassExhaustiveStrategyGem;
-import org.mapstruct.ap.langmodel.AnnotationAttribute;
-import org.mapstruct.ap.langmodel.MapperConfigAnnotation;
-import org.mapstruct.ap.descriptor.TypeDescriptor;
+import org.mapstruct.ap.internal.langmodel.AnnotationAttribute;
+import org.mapstruct.ap.internal.langmodel.MapperConfigAnnotation;
+import org.mapstruct.ap.internal.langmodel.descriptor.TypeDescriptor;
 
 public class MapperConfigOptions extends DelegatingOptions {
 

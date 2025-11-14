@@ -13,14 +13,14 @@ import java.util.Set;
 import org.mapstruct.ap.internal.gem.MappingControlUseGem;
 import org.mapstruct.ap.internal.util.AnnotationDescriptorUtils;
 import org.mapstruct.ap.internal.util.AnnotationValueUtils;
-import org.mapstruct.ap.descriptor.AnnotationDescriptor;
-import org.mapstruct.ap.descriptor.AnnotationValueDescriptor;
-import org.mapstruct.ap.descriptor.LangElementKind;
-import org.mapstruct.ap.langmodel.api.LangElements;
-import org.mapstruct.ap.descriptor.LangTypeKind;
-import org.mapstruct.ap.langmodel.api.PackageDescriptor;
-import org.mapstruct.ap.descriptor.TypeDescriptor;
-import org.mapstruct.ap.descriptor.TypeElementDescriptor;
+import org.mapstruct.ap.internal.langmodel.descriptor.AnnotationDescriptor;
+import org.mapstruct.ap.internal.langmodel.descriptor.AnnotationValueDescriptor;
+import org.mapstruct.ap.internal.langmodel.descriptor.LangElementKind;
+import org.mapstruct.ap.internal.langmodel.api.LangElements;
+import org.mapstruct.ap.internal.langmodel.descriptor.LangTypeKind;
+import org.mapstruct.ap.internal.langmodel.api.PackageDescriptor;
+import org.mapstruct.ap.internal.langmodel.descriptor.TypeDescriptor;
+import org.mapstruct.ap.internal.langmodel.descriptor.TypeElementDescriptor;
 
 public class MappingControl {
 

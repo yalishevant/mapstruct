@@ -30,6 +30,7 @@ abstract class JavaxElementDescriptor implements ElementDescriptor {
     final Element element;
     private final JavaxNameDescriptor name;
     private final Set<LangModifier> modifiers;
+    private final String id;
 
     JavaxElementDescriptor(JavaxLangModelContext context,
                            JavaxDescriptorFactory factory,
@@ -39,6 +40,7 @@ abstract class JavaxElementDescriptor implements ElementDescriptor {
         this.element = element;
         this.name = new JavaxNameDescriptor( element.getSimpleName() );
         this.modifiers = convertModifiers( element.getModifiers() );
+        this.id = element != null ? element.toString() : "<unknown>";
     }
 
     private static final boolean RECORD_KIND_SUPPORTED = isElementKindPresent( "RECORD" );
@@ -100,6 +102,11 @@ abstract class JavaxElementDescriptor implements ElementDescriptor {
     }
 
     @Override
+    public String id() {
+        return id;
+    }
+
+    @Override
     public Optional<ElementDescriptor> enclosingElement() {
         Element enclosing = element.getEnclosingElement();
         if ( enclosing == null ) {
@@ -116,6 +123,11 @@ abstract class JavaxElementDescriptor implements ElementDescriptor {
     @Override
     public TypeDescriptor asType() {
         return factory.typeDescriptor( element.asType() );
+    }
+
+    @Override
+    public Object unwrap() {
+        return element;
     }
 
     Element element() {

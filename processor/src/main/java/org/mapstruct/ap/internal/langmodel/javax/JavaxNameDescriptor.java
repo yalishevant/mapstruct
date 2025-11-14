@@ -21,4 +21,9 @@ final class JavaxNameDescriptor implements NameDescriptor {
     public String content() {
         return name.toString();
     }
+
+    @Override
+    public boolean contentEquals(CharSequence other) {
+        return other != null && name.contentEquals( other );
+    }
 }

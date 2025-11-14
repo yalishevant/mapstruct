@@ -23,7 +23,7 @@ import org.mapstruct.ap.internal.model.source.MappingMethodOptions;
 import org.mapstruct.ap.internal.model.source.Method;
 import org.mapstruct.ap.internal.model.source.ParameterProvidedMethods;
 import org.mapstruct.ap.internal.util.Strings;
-import org.mapstruct.ap.descriptor.ExecutableDescriptor;
+import org.mapstruct.ap.internal.langmodel.descriptor.ExecutableDescriptor;
 
 /**
  * Represents a "built-in" mapping method which will be added as private method to the generated mapper. Built-in

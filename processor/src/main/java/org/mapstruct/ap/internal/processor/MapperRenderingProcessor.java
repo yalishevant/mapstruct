@@ -8,7 +8,7 @@ package org.mapstruct.ap.internal.processor;
 import org.mapstruct.ap.internal.codegen.GeneratedFile;
 import org.mapstruct.ap.internal.model.GeneratedType;
 import org.mapstruct.ap.internal.model.Mapper;
-import org.mapstruct.ap.descriptor.TypeElementDescriptor;
+import org.mapstruct.ap.internal.langmodel.descriptor.TypeElementDescriptor;
 
 /**
  * A {@link ModelElementProcessor} which creates a Java source file representing

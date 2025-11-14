@@ -46,7 +46,7 @@ public interface ModelElementProcessor<P, R> {
 
         CodeGenerationContext getCodeGenerationContext();
 
-        LangModelContext<?, ?, ?, ?> getLangModelContext();
+        LangModelContext getLangModelContext();
 
         TypeFactory getTypeFactory();
 

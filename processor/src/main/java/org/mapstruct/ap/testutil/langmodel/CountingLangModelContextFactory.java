@@ -5,13 +5,12 @@
  */
 package org.mapstruct.ap.testutil.langmodel;
 
-import org.mapstruct.ap.langmodel.AccessorNamingAdapterFactory;
-import org.mapstruct.ap.langmodel.LangModelContext;
-import org.mapstruct.ap.langmodel.LangModelContextFactory;
-import org.mapstruct.ap.langmodel.MapperEntryPoint;
-import org.mapstruct.ap.langmodel.api.DescriptorUnwrapper;
-import org.mapstruct.ap.langmodel.codegen.GeneratedFileSink;
-import org.mapstruct.ap.langmodel.javax.JavaxLangModelContextFactory;
+import org.mapstruct.ap.internal.langmodel.AccessorNamingAdapterFactory;
+import org.mapstruct.ap.internal.langmodel.LangModelContext;
+import org.mapstruct.ap.internal.langmodel.LangModelContextFactory;
+import org.mapstruct.ap.internal.langmodel.MapperEntryPoint;
+import org.mapstruct.ap.internal.langmodel.api.DescriptorUnwrapper;
+import org.mapstruct.ap.internal.langmodel.javax.JavaxLangModelContextFactory;
 
 /**
  * Test-only {@link LangModelContextFactory} that counts the number of contexts created while delegating to the
@@ -37,7 +36,7 @@ public final class CountingLangModelContextFactory implements LangModelContextFa
     }
 
     @Override
-    public LangModelContext<?, ?, ?, ?> create(MapperEntryPoint entryPoint) {
+    public LangModelContext create(MapperEntryPoint entryPoint) {
         incrementCounter();
         return delegate.create( entryPoint );
     }
@@ -50,11 +49,6 @@ public final class CountingLangModelContextFactory implements LangModelContextFa
     @Override
     public AccessorNamingAdapterFactory accessorNamingAdapterFactory() {
         return delegate.accessorNamingAdapterFactory();
-    }
-
-    @Override
-    public GeneratedFileSink generatedFileSink(MapperEntryPoint entryPoint) {
-        return delegate.generatedFileSink( entryPoint );
     }
 
     @Override

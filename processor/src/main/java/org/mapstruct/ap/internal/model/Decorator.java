@@ -15,9 +15,9 @@ import org.mapstruct.ap.internal.model.common.Type;
 import org.mapstruct.ap.internal.model.common.TypeFactory;
 import org.mapstruct.ap.internal.option.Options;
 import org.mapstruct.ap.internal.version.VersionInformation;
-import org.mapstruct.ap.descriptor.LangElementKind;
-import org.mapstruct.ap.descriptor.TypeDescriptor;
-import org.mapstruct.ap.descriptor.TypeElementDescriptor;
+import org.mapstruct.ap.internal.langmodel.descriptor.LangElementKind;
+import org.mapstruct.ap.internal.langmodel.descriptor.TypeDescriptor;
+import org.mapstruct.ap.internal.langmodel.descriptor.TypeElementDescriptor;
 
 /**
  * Represents a decorator applied to a generated mapper type.

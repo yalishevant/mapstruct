@@ -21,9 +21,6 @@ import javax.annotation.processing.SupportedAnnotationTypes;
 import javax.annotation.processing.SupportedSourceVersion;
 import javax.lang.model.SourceVersion;
 import javax.lang.model.element.TypeElement;
-import javax.lang.model.element.AnnotationMirror;
-import javax.lang.model.element.AnnotationValue;
-import javax.lang.model.type.TypeMirror;
 import javax.tools.Diagnostic;
 
 import org.mapstruct.ap.internal.model.MappingBuilderContext;
@@ -33,24 +30,29 @@ import org.mapstruct.ap.internal.util.AnnotationProcessorContextView;
 import org.mapstruct.ap.internal.util.FormattingMessager;
 import org.mapstruct.ap.internal.util.Message;
 import org.mapstruct.ap.internal.util.RoundContext;
-import org.mapstruct.ap.langmodel.javax.DefaultVersionInformation;
+import org.mapstruct.ap.internal.langmodel.javax.DefaultVersionInformation;
 import org.mapstruct.ap.internal.version.VersionInformation;
-import org.mapstruct.ap.langmodel.AnnotationGemsCapability;
-import org.mapstruct.ap.langmodel.api.DescriptorUnwrapper;
-import org.mapstruct.ap.spi.lang.EnumMappingCapability;
-import org.mapstruct.ap.spi.lang.MappingExclusionCapability;
-import org.mapstruct.ap.langmodel.LangModelContext;
-import org.mapstruct.ap.langmodel.LangModelContextFactory;
-import org.mapstruct.ap.langmodel.MapperEntryPoint;
-import org.mapstruct.ap.langmodel.OptionalCapability;
-import org.mapstruct.ap.descriptor.TypeDescriptor;
-import org.mapstruct.ap.langmodel.javax.JavaxLangModelContextFactory;
+import org.mapstruct.ap.internal.langmodel.AnnotationGemsCapability;
+import org.mapstruct.ap.internal.langmodel.api.DescriptorUnwrapper;
+import org.mapstruct.ap.internal.langmodel.spi.EnumMappingCapability;
+import org.mapstruct.ap.internal.langmodel.spi.MappingExclusionCapability;
+import org.mapstruct.ap.internal.langmodel.LangModelContext;
+import org.mapstruct.ap.internal.langmodel.LangModelContextFactory;
+import org.mapstruct.ap.internal.langmodel.LangDescriptorFactory;
+import org.mapstruct.ap.internal.langmodel.MapperEntryPoint;
+import org.mapstruct.ap.internal.langmodel.OptionalCapability;
+import org.mapstruct.ap.internal.langmodel.descriptor.TypeDescriptor;
+import org.mapstruct.ap.internal.langmodel.descriptor.TypeElementDescriptor;
+import org.mapstruct.ap.internal.langmodel.javax.JavaxLangModelContextFactory;
 import org.mapstruct.ap.spi.EnumMappingStrategy;
 import org.mapstruct.ap.spi.EnumTransformationStrategy;
 import org.mapstruct.ap.spi.TypeHierarchyErroneousException;
-import org.mapstruct.ap.langmodel.LangModelTypeSystem;
-import org.mapstruct.ap.langmodel.LangModelElementQuery;
-import org.mapstruct.ap.spi.lang.LangDiagnostics;
+import org.mapstruct.ap.internal.langmodel.TypeIntrospector;
+import org.mapstruct.ap.internal.langmodel.MapperAnnotation;
+import org.mapstruct.ap.internal.langmodel.MapperConfigAnnotation;
+import org.mapstruct.ap.internal.langmodel.api.LangElements;
+import org.mapstruct.ap.internal.langmodel.api.LangTypes;
+import org.mapstruct.ap.internal.langmodel.spi.LangDiagnostics;
 
 @SupportedAnnotationTypes("*")
 @SupportedSourceVersion(SourceVersion.RELEASE_21)
@@ -83,7 +85,7 @@ public class LangModelMinimalBackendContractProcessor extends AbstractProcessor 
                     processingEnv,
                     mapperElement
                 );
-                try ( LangModelContext<TypeMirror, TypeElement, AnnotationMirror, AnnotationValue> delegate =
+                try ( LangModelContext delegate =
                     cast( factory.create( entryPoint ) ) ) {
                     verifyMissingCapabilities( delegate, versionInformation, errors );
                 }
@@ -109,13 +111,13 @@ public class LangModelMinimalBackendContractProcessor extends AbstractProcessor 
     }
 
     @SuppressWarnings("unchecked")
-    private LangModelContext<TypeMirror, TypeElement, AnnotationMirror, AnnotationValue> cast(
-        LangModelContext<?, ?, ?, ?> context) {
-        return (LangModelContext<TypeMirror, TypeElement, AnnotationMirror, AnnotationValue>) context;
+    private LangModelContext cast(
+        LangModelContext context) {
+        return (LangModelContext) context;
     }
 
     private void verifyMissingCapabilities(
-        LangModelContext<TypeMirror, TypeElement, AnnotationMirror, AnnotationValue> delegate,
+        LangModelContext delegate,
         VersionInformation versionInformation,
         List<String> errors) {
 
@@ -134,17 +136,17 @@ public class LangModelMinimalBackendContractProcessor extends AbstractProcessor 
     }
 
     private void verifyAnnotationGemsCapability(
-        LangModelContext<TypeMirror, TypeElement, AnnotationMirror, AnnotationValue> delegate,
+        LangModelContext delegate,
         VersionInformation versionInformation,
         List<String> errors) {
 
-        LangModelContext<TypeMirror, TypeElement, AnnotationMirror, AnnotationValue> context =
+        LangModelContext context =
             override( delegate, AnnotationGemsCapability.class, OptionalCapability.empty() );
 
         TypeFactory fallbackTypeFactory = new TypeFactory(
             override(
                 context,
-                org.mapstruct.ap.langmodel.BuilderIntrospectorCapability.class,
+                org.mapstruct.ap.internal.langmodel.BuilderIntrospectorCapability.class,
                 OptionalCapability.empty()
             ),
             new NoopFormattingMessager(),
@@ -162,14 +164,14 @@ public class LangModelMinimalBackendContractProcessor extends AbstractProcessor 
     }
 
     private void verifyBuilderCapability(
-        LangModelContext<TypeMirror, TypeElement, AnnotationMirror, AnnotationValue> delegate,
+        LangModelContext delegate,
         VersionInformation versionInformation,
         List<String> errors) {
 
-        LangModelContext<TypeMirror, TypeElement, AnnotationMirror, AnnotationValue> context =
+        LangModelContext context =
             override(
                 delegate,
-                org.mapstruct.ap.langmodel.BuilderIntrospectorCapability.class,
+                org.mapstruct.ap.internal.langmodel.BuilderIntrospectorCapability.class,
                 OptionalCapability.empty()
             );
 
@@ -188,11 +190,11 @@ public class LangModelMinimalBackendContractProcessor extends AbstractProcessor 
     }
 
     private void verifyEnumMappingCapability(
-        LangModelContext<TypeMirror, TypeElement, AnnotationMirror, AnnotationValue> delegate,
+        LangModelContext delegate,
         VersionInformation versionInformation,
         List<String> errors) {
 
-        LangModelContext<TypeMirror, TypeElement, AnnotationMirror, AnnotationValue> context =
+        LangModelContext context =
             override(
                 override( delegate, EnumMappingCapability.class, OptionalCapability.empty() ),
                 MappingExclusionCapability.class,
@@ -228,13 +230,13 @@ public class LangModelMinimalBackendContractProcessor extends AbstractProcessor 
         return (VersionInformation) factory.invoke( null, processingEnv );
     }
 
-    private LangModelContext<TypeMirror, TypeElement, AnnotationMirror, AnnotationValue> override(
-        LangModelContext<TypeMirror, TypeElement, AnnotationMirror, AnnotationValue> delegate,
+    private LangModelContext override(
+        LangModelContext delegate,
         Class<?> capabilityType,
         OptionalCapability<?> capability) {
 
         Map<Class<?>, OptionalCapability<?>> overrides = new HashMap<>();
-        LangModelContext<TypeMirror, TypeElement, AnnotationMirror, AnnotationValue> base = delegate;
+        LangModelContext base = delegate;
         if ( delegate instanceof CapabilityOverridingContext ) {
             CapabilityOverridingContext existing = (CapabilityOverridingContext) delegate;
             overrides.putAll( existing.overrides );
@@ -245,26 +247,46 @@ public class LangModelMinimalBackendContractProcessor extends AbstractProcessor 
     }
 
     private static final class CapabilityOverridingContext
-        implements LangModelContext<TypeMirror, TypeElement, AnnotationMirror, AnnotationValue> {
+        implements LangModelContext {
 
-        private final LangModelContext<TypeMirror, TypeElement, AnnotationMirror, AnnotationValue> delegate;
+        private final LangModelContext delegate;
         private final Map<Class<?>, OptionalCapability<?>> overrides;
 
         private CapabilityOverridingContext(
-            LangModelContext<TypeMirror, TypeElement, AnnotationMirror, AnnotationValue> delegate,
+            LangModelContext delegate,
             Map<Class<?>, OptionalCapability<?>> overrides) {
             this.delegate = delegate;
             this.overrides = overrides;
         }
 
         @Override
-        public LangModelTypeSystem<TypeMirror, TypeElement, AnnotationMirror, AnnotationValue> typeSystem() {
-            return delegate.typeSystem();
+        public LangDescriptorFactory descriptors() {
+            return delegate.descriptors();
         }
 
         @Override
-        public LangModelElementQuery elementQuery() {
-            return delegate.elementQuery();
+        public LangTypes types() {
+            return delegate.types();
+        }
+
+        @Override
+        public TypeIntrospector typeIntrospector() {
+            return delegate.typeIntrospector();
+        }
+
+        @Override
+        public LangElements elements() {
+            return delegate.elements();
+        }
+
+        @Override
+        public MapperAnnotation mapperAnnotation(TypeElementDescriptor element) {
+            return delegate.mapperAnnotation( element );
+        }
+
+        @Override
+        public Optional<MapperConfigAnnotation> mapperConfig(TypeDescriptor configType) {
+            return delegate.mapperConfig( configType );
         }
 
         @Override
@@ -273,7 +295,7 @@ public class LangModelMinimalBackendContractProcessor extends AbstractProcessor 
         }
 
         @Override
-        public org.mapstruct.ap.langmodel.GeneratedFileAccess generatedFiles() {
+        public org.mapstruct.ap.internal.langmodel.GeneratedFileAccess generatedFiles() {
             return delegate.generatedFiles();
         }
 
@@ -295,51 +317,45 @@ public class LangModelMinimalBackendContractProcessor extends AbstractProcessor 
 
     private static final class StubProcessorContext implements ModelElementProcessor.ProcessorContext {
 
-        private final LangModelContext<?, ?, ?, ?> context;
+        private final LangModelContext context;
         private final org.mapstruct.ap.internal.option.Options options =
             new org.mapstruct.ap.internal.option.Options( Collections.emptyMap() );
         private final VersionInformation versionInformation;
         private final TypeFactory typeFactory;
         private final DescriptorUnwrapper descriptorUnwrapper = new DescriptorUnwrapper() {
             @Override
-            public <NATIVE> Optional<NATIVE> type(org.mapstruct.ap.descriptor.TypeDescriptor descriptor,
+            public <NATIVE> Optional<NATIVE> type(org.mapstruct.ap.internal.langmodel.descriptor.TypeDescriptor descriptor,
                                                   Class<NATIVE> nativeType) {
                 return Optional.empty();
             }
 
             @Override
-            public <NATIVE> Optional<NATIVE> type(org.mapstruct.ap.descriptor.TypeElementDescriptor descriptor,
+            public <NATIVE> Optional<NATIVE> type(org.mapstruct.ap.internal.langmodel.descriptor.TypeElementDescriptor descriptor,
                                                   Class<NATIVE> nativeType) {
                 return Optional.empty();
             }
 
             @Override
-            public <NATIVE> Optional<NATIVE> element(org.mapstruct.ap.descriptor.ElementDescriptor descriptor,
+            public <NATIVE> Optional<NATIVE> element(org.mapstruct.ap.internal.langmodel.descriptor.ElementDescriptor descriptor,
                                                     Class<NATIVE> nativeType) {
                 return Optional.empty();
             }
 
             @Override
-            public <NATIVE> Optional<NATIVE> executable(org.mapstruct.ap.descriptor.ExecutableDescriptor descriptor,
-                                                       Class<NATIVE> nativeType) {
-                return Optional.empty();
-            }
-
-            @Override
-            public <NATIVE> Optional<NATIVE> annotation(org.mapstruct.ap.descriptor.AnnotationDescriptor descriptor,
+            public <NATIVE> Optional<NATIVE> annotation(org.mapstruct.ap.internal.langmodel.descriptor.AnnotationDescriptor descriptor,
                                                        Class<NATIVE> nativeType) {
                 return Optional.empty();
             }
 
             @Override
             public <NATIVE> Optional<NATIVE> annotationValue(
-                org.mapstruct.ap.descriptor.AnnotationValueDescriptor descriptor,
+                org.mapstruct.ap.internal.langmodel.descriptor.AnnotationValueDescriptor descriptor,
                 Class<NATIVE> nativeType) {
                 return Optional.empty();
             }
         };
 
-        private StubProcessorContext(LangModelContext<?, ?, ?, ?> context,
+        private StubProcessorContext(LangModelContext context,
                                      VersionInformation versionInformation,
                                      TypeFactory typeFactory) {
             this.context = context;
@@ -347,7 +363,7 @@ public class LangModelMinimalBackendContractProcessor extends AbstractProcessor 
             this.typeFactory = typeFactory;
         }
 
-        private StubProcessorContext(LangModelContext<?, ?, ?, ?> context, VersionInformation versionInformation) {
+        private StubProcessorContext(LangModelContext context, VersionInformation versionInformation) {
             this( context, versionInformation, null );
         }
 
@@ -362,7 +378,7 @@ public class LangModelMinimalBackendContractProcessor extends AbstractProcessor 
         }
 
         @Override
-        public LangModelContext<?, ?, ?, ?> getLangModelContext() {
+        public LangModelContext getLangModelContext() {
             return context;
         }
 
@@ -402,7 +418,7 @@ public class LangModelMinimalBackendContractProcessor extends AbstractProcessor 
         }
 
         @Override
-        public org.mapstruct.ap.langmodel.api.DescriptorUnwrapper getDescriptorUnwrapper() {
+        public org.mapstruct.ap.internal.langmodel.api.DescriptorUnwrapper getDescriptorUnwrapper() {
             return descriptorUnwrapper;
         }
 
@@ -419,13 +435,13 @@ public class LangModelMinimalBackendContractProcessor extends AbstractProcessor 
         }
 
         @Override
-        public void printMessage(org.mapstruct.ap.descriptor.ElementDescriptor element, Message msg, Object... args) {
+        public void printMessage(org.mapstruct.ap.internal.langmodel.descriptor.ElementDescriptor element, Message msg, Object... args) {
         }
 
         @Override
-        public void printMessage(org.mapstruct.ap.descriptor.ElementDescriptor element,
-                                 org.mapstruct.ap.descriptor.AnnotationDescriptor annotation,
-                                 org.mapstruct.ap.descriptor.AnnotationValueDescriptor value,
+        public void printMessage(org.mapstruct.ap.internal.langmodel.descriptor.ElementDescriptor element,
+                                 org.mapstruct.ap.internal.langmodel.descriptor.AnnotationDescriptor annotation,
+                                 org.mapstruct.ap.internal.langmodel.descriptor.AnnotationValueDescriptor value,
                                  Message msg,
                                  Object... args) {
         }

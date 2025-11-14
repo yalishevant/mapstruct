@@ -20,7 +20,7 @@ import org.mapstruct.ap.internal.gem.ReportingPolicyGem;
 import org.mapstruct.ap.internal.gem.SubclassExhaustiveStrategyGem;
 import org.mapstruct.ap.internal.model.common.TypeFactory;
 import org.mapstruct.ap.spi.TypeHierarchyErroneousException;
-import org.mapstruct.ap.descriptor.TypeDescriptor;
+import org.mapstruct.ap.internal.langmodel.descriptor.TypeDescriptor;
 
 /**
  * Chain Of Responsibility Pattern.

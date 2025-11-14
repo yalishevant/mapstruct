@@ -5,9 +5,10 @@
  */
 package org.mapstruct.ap.internal.util;
 
-import javax.lang.model.element.AnnotationMirror;
-import javax.lang.model.element.AnnotationValue;
-import javax.lang.model.element.Element;
+import org.mapstruct.ap.internal.langmodel.descriptor.AnnotationDescriptor;
+import org.mapstruct.ap.internal.langmodel.descriptor.AnnotationValueDescriptor;
+import org.mapstruct.ap.internal.langmodel.descriptor.ElementDescriptor;
+import org.mapstruct.ap.internal.langmodel.descriptor.ExecutableDescriptor;
 
 /**
  * Prints out diagnostics raised by the annotation processor. Messages are Java format strings taking the given
@@ -27,46 +28,69 @@ public interface FormattingMessager {
     void printMessage(Message msg, Object... args);
 
     /**
-     * Prints a message of the specified kind at the location of the
-     * element.
+     * Prints a message of the specified kind at the location of the element.
      *
-     * @param e    the element to use as a position hint
+     * @param element the element to use as a position hint
      * @param msg  the message
      * @param args Arguments referenced by the format specifiers in the format string. If there are more arguments
      * than format specifiers, the extra arguments are ignored
      */
-    void printMessage(Element e, Message msg, Object... args);
+    void printMessage(ElementDescriptor element, Message msg, Object... args);
 
     /**
-     * Prints a message of the specified kind at the location of the
-     * annotation positionHint of the annotated element.
+     * Prints a message of the specified kind at the location of the annotation value inside the annotation position
+     * hint of the annotated element.
      *
-     * @param e    the annotated element
-     * @param a    the annotation to use as a position hint (can be null)
-     * @param msg  the message
-     * @param args Arguments referenced by the format specifiers in the format string. If there are more arguments
-     * than format specifiers, the extra arguments are ignored
-     *
+     * @param element the annotated element
+     * @param annotation the annotation containing the annotation value
+     * @param value the annotation value to use as a position hint
+     * @param msg the message
+     * @param args Arguments referenced by the format specifiers in the format string. If there are more arguments than
+     * format specifiers, the extra arguments are ignored
      */
-    void printMessage(Element e, AnnotationMirror a, Message msg, Object... args);
-
-    /**
-     * Prints a message of the specified kind at the location of the
-     * annotation value inside the annotation positionHint of the annotated
-     * element.
-     *
-     * @param e    the annotated element
-     * @param a    the annotation containing the annotation value
-     * @param v    the annotation value to use as a position hint
-     * @param msg  the message
-     * @param args Arguments referenced by the format specifiers in the format string. If there are more arguments
-     * than format specifiers, the extra arguments are ignored
-     */
-    void printMessage(Element e,
-                      AnnotationMirror a,
-                      AnnotationValue v,
+    void printMessage(ElementDescriptor element,
+                      AnnotationDescriptor annotation,
+                      AnnotationValueDescriptor value,
                       Message msg,
                       Object... args);
+
+    default void printMessage(ExecutableDescriptor executable, Message msg, Object... args) {
+        if ( executable == null ) {
+            printMessage( msg, args );
+            return;
+        }
+        printMessage( (ElementDescriptor) executable, msg, args );
+    }
+
+    default void printMessage(ElementDescriptor element,
+                              AnnotationDescriptor annotation,
+                              Message msg,
+                              Object... args) {
+        printMessage( element, annotation, null, msg, args );
+    }
+
+    default void printMessage(ExecutableDescriptor executable,
+                              AnnotationDescriptor annotation,
+                              Message msg,
+                              Object... args) {
+        if ( executable == null ) {
+            printMessage( msg, args );
+            return;
+        }
+        printMessage( (ElementDescriptor) executable, annotation, msg, args );
+    }
+
+    default void printMessage(ExecutableDescriptor executable,
+                              AnnotationDescriptor annotation,
+                              AnnotationValueDescriptor value,
+                              Message msg,
+                              Object... args) {
+        if ( executable == null ) {
+            printMessage( msg, args );
+            return;
+        }
+        printMessage( (ElementDescriptor) executable, annotation, value, msg, args );
+    }
 
     /**
      * Just log as plain note

@@ -7,7 +7,7 @@ package org.mapstruct.ap.test.langmodel.contract;
 
 import javax.tools.Diagnostic.Kind;
 
-import org.mapstruct.ap.langmodel.LangModelContextFactory;
+import org.mapstruct.ap.internal.langmodel.LangModelContextFactory;
 import org.mapstruct.ap.testutil.ProcessorTest;
 import org.mapstruct.ap.testutil.WithClasses;
 import org.mapstruct.ap.testutil.WithServiceImplementation;

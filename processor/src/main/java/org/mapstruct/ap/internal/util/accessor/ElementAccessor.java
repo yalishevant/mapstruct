@@ -6,70 +6,80 @@
 package org.mapstruct.ap.internal.util.accessor;
 
 import java.util.Set;
-import javax.lang.model.element.Element;
-import javax.lang.model.element.Modifier;
-import javax.lang.model.element.VariableElement;
-import javax.lang.model.type.TypeMirror;
+
+import org.mapstruct.ap.internal.langmodel.descriptor.ElementDescriptor;
+import org.mapstruct.ap.internal.langmodel.descriptor.LangModifier;
+import org.mapstruct.ap.internal.langmodel.descriptor.TypeDescriptor;
 
 /**
- * An {@link Accessor} that wraps a {@link Element}.
- * Used for getter, setter, filed, constructor, record-class, etc.
+ * {@link Accessor} implementation backed by a descriptor element (methods, fields, parameters, etc.).
+ *
  * @author Filip Hrisafov
  * @author Tang Yang
  */
 public class ElementAccessor implements Accessor {
 
-    private final Element element;
+    private final ElementDescriptor element;
     private final String name;
     private final AccessorType accessorType;
-    private final TypeMirror accessedType;
+    private final TypeDescriptor accessedType;
 
-    public ElementAccessor(VariableElement variableElement, TypeMirror accessedType) {
-        this( variableElement, accessedType, AccessorType.FIELD );
+    public ElementAccessor(ElementDescriptor element, TypeDescriptor accessedType) {
+        this( element, accessedType, AccessorType.FIELD, null );
     }
 
-    public ElementAccessor(Element element, TypeMirror accessedType, String name) {
-        this.element = element;
-        this.name = name;
-        this.accessedType = accessedType;
-        this.accessorType = AccessorType.PARAMETER;
+    public ElementAccessor(ElementDescriptor element, TypeDescriptor accessedType, String name) {
+        this( element, accessedType, AccessorType.PARAMETER, name );
     }
 
-    public ElementAccessor(Element element, TypeMirror accessedType, AccessorType accessorType) {
+    public ElementAccessor(ElementDescriptor element, TypeDescriptor accessedType, AccessorType accessorType) {
+        this( element, accessedType, accessorType, null );
+    }
+
+    private ElementAccessor(ElementDescriptor element, TypeDescriptor accessedType,
+                            AccessorType accessorType, String name) {
         this.element = element;
         this.accessedType = accessedType;
         this.accessorType = accessorType;
-        this.name = null;
+        this.name = name;
     }
 
     @Override
-    public TypeMirror getAccessedType() {
-        return accessedType != null ? accessedType : element.asType();
+    public TypeDescriptor getAccessedType() {
+        if ( accessedType != null ) {
+            return accessedType;
+        }
+        return element != null ? element.asType() : null;
     }
 
     @Override
     public String getSimpleName() {
-        return name != null ? name : element.getSimpleName().toString();
+        if ( name != null ) {
+            return name;
+        }
+        return element != null && element.simpleName() != null ? element.simpleName().content() : "";
     }
 
     @Override
-    public Set<Modifier> getModifiers() {
-        return element.getModifiers();
+    public Set<LangModifier> getModifiers() {
+        return element != null ? element.modifiers() : java.util.Collections.emptySet();
     }
 
     @Override
-    public Element getElement() {
+    public ElementDescriptor getElement() {
         return element;
     }
 
     @Override
     public String toString() {
-        return element.toString();
+        if ( element == null ) {
+            return "null";
+        }
+        return element.simpleName().content() + "(" + element.kind() + ")";
     }
 
     @Override
     public AccessorType getAccessorType() {
         return accessorType;
     }
-
 }

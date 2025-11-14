@@ -5,7 +5,9 @@
  */
 package org.mapstruct.ap.test.naming.spi;
 
-import org.mapstruct.ap.descriptor.ExecutableDescriptor;
+import javax.lang.model.element.ExecutableElement;
+import javax.lang.model.type.TypeKind;
+
 import org.mapstruct.ap.spi.AccessorNamingStrategy;
 import org.mapstruct.ap.spi.DefaultAccessorNamingStrategy;
 import org.mapstruct.ap.spi.MethodType;
@@ -20,13 +22,13 @@ import org.mapstruct.ap.spi.util.IntrospectorUtils;
 public class CustomAccessorNamingStrategy extends DefaultAccessorNamingStrategy implements AccessorNamingStrategy {
 
     @Override
-    public MethodType getMethodType(ExecutableDescriptor method) {
+    public MethodType getMethodType(ExecutableElement method) {
         if ( method == null ) {
             return MethodType.OTHER;
         }
 
-        String methodName = methodName( method );
-        if ( method.parameters().isEmpty() && !isVoid( method.returnType() ) ) {
+        String methodName = method.getSimpleName().toString();
+        if ( method.getParameters().isEmpty() && method.getReturnType().getKind() != TypeKind.VOID ) {
             return MethodType.GETTER;
         }
 
@@ -42,16 +44,16 @@ public class CustomAccessorNamingStrategy extends DefaultAccessorNamingStrategy 
     }
 
     @Override
-    public String getPropertyName(ExecutableDescriptor getterOrSetterMethod) {
-        String methodName = methodName( getterOrSetterMethod );
+    public String getPropertyName(ExecutableElement getterOrSetterMethod) {
+        String methodName = getterOrSetterMethod.getSimpleName().toString();
         return IntrospectorUtils.decapitalize(
             methodName.startsWith( "with" ) ? methodName.substring( 4 ) : methodName
         );
     }
 
     @Override
-    public String getElementName(ExecutableDescriptor adderMethod) {
-        String methodName = methodName( adderMethod );
+    public String getElementName(ExecutableElement adderMethod) {
+        String methodName = adderMethod.getSimpleName().toString();
         return IntrospectorUtils.decapitalize( methodName.substring( 3 ) );
     }
 }

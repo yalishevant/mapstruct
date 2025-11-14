@@ -8,7 +8,7 @@ package org.mapstruct.ap.test.additionalsupportedoptions;
 // tag::documentation[]
 import org.mapstruct.ap.spi.DefaultEnumMappingStrategy;
 import org.mapstruct.ap.spi.MapStructProcessingEnvironment;
-import org.mapstruct.ap.descriptor.TypeDescriptor;
+import javax.lang.model.element.TypeElement;
 
 public class UnknownEnumMappingStrategy extends DefaultEnumMappingStrategy {
 
@@ -17,11 +17,11 @@ public class UnknownEnumMappingStrategy extends DefaultEnumMappingStrategy {
     @Override
     public void init(MapStructProcessingEnvironment processingEnvironment) {
         super.init( processingEnvironment );
-        defaultNullEnumConstant = processingEnvironment.options().get( "myorg.custom.defaultNullEnumConstant" );
+        defaultNullEnumConstant = processingEnvironment.getOptions().get( "myorg.custom.defaultNullEnumConstant" );
     }
 
     @Override
-    public String getDefaultNullEnumConstant(TypeDescriptor enumType) {
+    public String getDefaultNullEnumConstant(TypeElement enumType) {
         return defaultNullEnumConstant;
     }
 }

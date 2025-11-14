@@ -5,8 +5,11 @@
  */
 package org.mapstruct.ap.internal.langmodel.javax;
 
+import java.util.List;
+
 import javax.lang.model.element.Element;
 
+import org.mapstruct.ap.internal.langmodel.descriptor.AnnotationDescriptor;
 import org.mapstruct.ap.internal.langmodel.descriptor.RecordComponentDescriptor;
 import org.mapstruct.ap.internal.langmodel.descriptor.TypeDescriptor;
 
@@ -34,5 +37,10 @@ final class JavaxRecordComponentElementDescriptor extends JavaxElementDescriptor
     @Override
     public TypeDescriptor componentType() {
         return factory.typeDescriptor( recordComponent.asType() );
+    }
+
+    @Override
+    public List<AnnotationDescriptor> annotations() {
+        return JavaxAnnotationFactory.annotations( context, factory, recordComponent );
     }
 }

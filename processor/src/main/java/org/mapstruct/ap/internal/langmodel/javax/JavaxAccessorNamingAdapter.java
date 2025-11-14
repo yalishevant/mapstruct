@@ -5,11 +5,14 @@
  */
 package org.mapstruct.ap.internal.langmodel.javax;
 
+import javax.lang.model.element.Element;
+import javax.lang.model.element.ExecutableElement;
+
+import org.mapstruct.ap.internal.langmodel.AccessorNamingAdapter;
 import org.mapstruct.ap.internal.langmodel.descriptor.ElementDescriptor;
 import org.mapstruct.ap.internal.langmodel.descriptor.ExecutableDescriptor;
 import org.mapstruct.ap.spi.AccessorNamingStrategy;
 import org.mapstruct.ap.spi.MethodType;
-import org.mapstruct.ap.internal.langmodel.AccessorNamingAdapter;
 
 /**
  * Bridges descriptor-based accessor naming calls to the provided {@link AccessorNamingStrategy}.
@@ -24,19 +27,36 @@ public final class JavaxAccessorNamingAdapter implements AccessorNamingAdapter {
 
     @Override
     public MethodType methodType(ExecutableDescriptor executable) {
-        return delegate.getMethodType( executable );
+        ExecutableElement element = unwrapExecutable( executable );
+        return element != null ? delegate.getMethodType( element ) : null;
     }
 
     @Override
     public String propertyName(ExecutableDescriptor executable) {
-        return delegate.getPropertyName( executable );
+        ExecutableElement element = unwrapExecutable( executable );
+        return element != null ? delegate.getPropertyName( element ) : null;
     }
 
     @Override
     public String elementName(ElementDescriptor element) {
+        ExecutableElement executableElement = null;
         if ( element instanceof ExecutableDescriptor ) {
-            return delegate.getElementName( (ExecutableDescriptor) element );
+            executableElement = unwrapExecutable( (ExecutableDescriptor) element );
         }
-        return null;
+        else if ( element != null ) {
+            Object unwrapped = element.unwrap();
+            if ( unwrapped instanceof ExecutableElement ) {
+                executableElement = (ExecutableElement) unwrapped;
+            }
+        }
+        return executableElement != null ? delegate.getElementName( executableElement ) : null;
+    }
+
+    private ExecutableElement unwrapExecutable(ExecutableDescriptor descriptor) {
+        if ( descriptor == null ) {
+            return null;
+        }
+        Object unwrapped = descriptor.unwrap();
+        return unwrapped instanceof ExecutableElement ? (ExecutableElement) unwrapped : null;
     }
 }

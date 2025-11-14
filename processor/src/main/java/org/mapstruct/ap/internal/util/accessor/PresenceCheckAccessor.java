@@ -5,7 +5,7 @@
  */
 package org.mapstruct.ap.internal.util.accessor;
 
-import javax.lang.model.element.ExecutableElement;
+import org.mapstruct.ap.internal.langmodel.descriptor.ElementDescriptor;
 
 /**
  * @author Filip Hrisafov
@@ -14,8 +14,11 @@ public interface PresenceCheckAccessor {
 
     String getPresenceCheckSuffix();
 
-    static PresenceCheckAccessor methodInvocation(ExecutableElement element) {
-        return suffix( "." + element.getSimpleName() + "()" );
+    static PresenceCheckAccessor methodInvocation(ElementDescriptor element) {
+        String simpleName = element != null && element.simpleName() != null
+            ? element.simpleName().content()
+            : "";
+        return suffix( "." + simpleName + "()" );
     }
 
     static PresenceCheckAccessor mapContainsKey(String propertyName) {
@@ -25,5 +28,4 @@ public interface PresenceCheckAccessor {
     static PresenceCheckAccessor suffix(String suffix) {
         return () -> suffix;
     }
-
 }

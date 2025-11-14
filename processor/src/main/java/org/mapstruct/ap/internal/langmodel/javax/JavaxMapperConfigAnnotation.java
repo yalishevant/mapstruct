@@ -10,13 +10,14 @@ import java.util.Optional;
 import javax.lang.model.element.TypeElement;
 
 import org.mapstruct.ap.internal.gem.BuilderGem;
-import org.mapstruct.ap.internal.langmodel.annotation.AnnotationAttribute;
+import org.mapstruct.ap.internal.langmodel.AnnotationAttribute;
 import org.mapstruct.ap.internal.langmodel.annotation.MapperConfigAnnotationView;
 import org.mapstruct.ap.internal.util.AnnotationDescriptorUtils;
 import org.mapstruct.ap.internal.util.AnnotationValueUtils;
 import org.mapstruct.ap.internal.langmodel.descriptor.AnnotationDescriptor;
 import org.mapstruct.ap.internal.langmodel.descriptor.AnnotationValueDescriptor;
 import org.mapstruct.ap.internal.langmodel.descriptor.TypeDescriptor;
+import org.mapstruct.ap.internal.langmodel.descriptor.TypeElementDescriptor;
 
 final class JavaxMapperConfigAnnotation {
 
@@ -186,7 +187,7 @@ final class JavaxMapperConfigAnnotation {
         if ( configType == null ) {
             return Optional.empty();
         }
-        var configElementDescriptor = configType.typeElement().orElse( null );
+        TypeElementDescriptor configElementDescriptor = configType.typeElement().orElse( null );
         if ( configElementDescriptor == null ) {
             return Optional.empty();
         }
@@ -209,67 +210,54 @@ final class JavaxMapperConfigAnnotation {
         return Optional.of( annotation.toView() );
     }
 
-    @Override
     public AnnotationAttribute<String> implementationName() {
         return implementationName;
     }
 
-    @Override
     public AnnotationAttribute<String> implementationPackage() {
         return implementationPackage;
     }
 
-    @Override
     public AnnotationAttribute<java.util.List<TypeDescriptor>> uses() {
         return uses;
     }
 
-    @Override
     public AnnotationAttribute<java.util.List<TypeDescriptor>> imports() {
         return imports;
     }
 
-    @Override
     public AnnotationAttribute<String> unmappedTargetPolicy() {
         return unmappedTargetPolicy;
     }
 
-    @Override
     public AnnotationAttribute<String> unmappedSourcePolicy() {
         return unmappedSourcePolicy;
     }
 
-    @Override
     public AnnotationAttribute<String> typeConversionPolicy() {
         return typeConversionPolicy;
     }
 
-    @Override
     public AnnotationAttribute<String> componentModel() {
         return componentModel;
     }
 
-    @Override
     public AnnotationAttribute<Boolean> suppressTimestampInGenerated() {
         return suppressTimestampInGenerated;
     }
 
-    @Override
     public AnnotationAttribute<String> mappingInheritanceStrategy() {
         return mappingInheritanceStrategy;
     }
 
-    @Override
     public AnnotationAttribute<String> injectionStrategy() {
         return injectionStrategy;
     }
 
-    @Override
     public AnnotationAttribute<Boolean> disableSubMappingMethodsGeneration() {
         return disableSubMappingMethodsGeneration;
     }
 
-    @Override
     public AnnotationAttribute<String> collectionMappingStrategy() {
         return collectionMappingStrategy;
     }

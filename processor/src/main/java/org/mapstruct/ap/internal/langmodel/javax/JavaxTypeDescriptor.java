@@ -79,6 +79,17 @@ final class JavaxTypeDescriptor implements TypeDescriptor {
     }
 
     @Override
+    public Optional<String> packageName() {
+        return qualifiedName().map( qualified -> {
+            int idx = qualified.lastIndexOf( '.' );
+            if ( idx > 0 ) {
+                return qualified.substring( 0, idx );
+            }
+            return "";
+        } );
+    }
+
+    @Override
     public Optional<TypeElementDescriptor> typeElement() {
         DeclaredType declared = asDeclaredType();
         if ( declared == null ) {
@@ -117,6 +128,24 @@ final class JavaxTypeDescriptor implements TypeDescriptor {
     @Override
     public boolean isPrimitive() {
         return underlyingMirror.getKind().isPrimitive();
+    }
+
+    @Override
+    public boolean isEnum() {
+        if ( underlyingMirror.getKind() != TypeKind.DECLARED ) {
+            return false;
+        }
+        Element element = ( (DeclaredType) underlyingMirror ).asElement();
+        return element.getKind() == ElementKind.ENUM;
+    }
+
+    @Override
+    public boolean isInterface() {
+        if ( underlyingMirror.getKind() != TypeKind.DECLARED ) {
+            return false;
+        }
+        Element element = ( (DeclaredType) underlyingMirror ).asElement();
+        return element.getKind() == ElementKind.INTERFACE;
     }
 
     @Override
@@ -195,6 +224,11 @@ final class JavaxTypeDescriptor implements TypeDescriptor {
     }
 
     @Override
+    public String displayName() {
+        return TypeDescriptorDisplay.displayName( this );
+    }
+
+    @Override
     public boolean equals(Object obj) {
         if ( this == obj ) {
             return true;
@@ -209,6 +243,21 @@ final class JavaxTypeDescriptor implements TypeDescriptor {
     @Override
     public int hashCode() {
         return id.hashCode();
+    }
+
+    @Override
+    public TypeDescriptor erasure() {
+        TypeMirror erased = factory.context().delegateTypeUtils().erasure( underlyingMirror );
+        if ( erased == null ) {
+            return this;
+        }
+        TypeDescriptor descriptor = factory.typeDescriptor( erased );
+        return descriptor != null ? descriptor : this;
+    }
+
+    @Override
+    public Object unwrap() {
+        return underlyingMirror;
     }
 
     private String computeStableId(TypeMirror type) {

@@ -3,23 +3,27 @@
  *
  * Licensed under the Apache License version 2.0, available at http://www.apache.org/licenses/LICENSE-2.0
  */
-package org.mapstruct.ap.internal.util;
+package org.mapstruct.ap.internal.processor;
 
 import java.io.PrintWriter;
 import java.io.StringWriter;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.Iterator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.ServiceLoader;
 
-import javax.annotation.processing.Messager;
-import javax.lang.model.util.Elements;
-import javax.lang.model.util.Types;
-import javax.tools.Diagnostic;
-
+import org.mapstruct.ap.internal.langmodel.MissingLangModelCapabilityException;
+import org.mapstruct.ap.internal.langmodel.AccessorNamingAdapter;
+import org.mapstruct.ap.internal.langmodel.AccessorNamingAdapterFactory;
+import org.mapstruct.ap.internal.langmodel.api.LangElements;
 import org.mapstruct.ap.internal.langmodel.LangModelContext;
+import org.mapstruct.ap.internal.langmodel.descriptor.TypeDescriptor;
+import org.mapstruct.ap.internal.langmodel.descriptor.ExecutableDescriptor;
+import org.mapstruct.ap.internal.langmodel.descriptor.LangTypeKind;
 import org.mapstruct.ap.spi.AccessorNamingStrategy;
 import org.mapstruct.ap.spi.AstModifyingAnnotationProcessor;
 import org.mapstruct.ap.spi.BuilderProvider;
@@ -33,15 +37,24 @@ import org.mapstruct.ap.spi.ImmutablesAccessorNamingStrategy;
 import org.mapstruct.ap.spi.ImmutablesBuilderProvider;
 import org.mapstruct.ap.spi.MapStructProcessingEnvironment;
 import org.mapstruct.ap.spi.NoOpBuilderProvider;
+import org.mapstruct.ap.spi.TypeHierarchyErroneousException;
+import org.mapstruct.ap.internal.util.AccessorNamingUtils;
+import org.mapstruct.ap.internal.util.AnnotationProcessorContextView;
+import org.mapstruct.ap.internal.langmodel.api.DescriptorUnwrapper;
+import org.mapstruct.ap.internal.util.Services;
+import org.mapstruct.ap.internal.util.FreeBuilderConstants;
+import org.mapstruct.ap.internal.util.ImmutablesConstants;
+import org.mapstruct.ap.internal.util.DiagnosticReporter;
+import org.mapstruct.ap.internal.langmodel.spi.SpiBridgeCapability;
 
 /**
  * Keeps contextual data in the scope of the entire annotation processor ("application scope").
  *
  * @author Gunnar Morling
  */
-public class AnnotationProcessorContext implements MapStructProcessingEnvironment {
+public class AnnotationProcessorContext implements AnnotationProcessorContextView {
 
-    private List<AstModifyingAnnotationProcessor> astModifyingAnnotationProcessors;
+    private final List<AstModifyingAnnotationProcessor> astModifyingAnnotationProcessors;
 
     private BuilderProvider builderProvider;
     private AccessorNamingStrategy accessorNamingStrategy;
@@ -50,28 +63,47 @@ public class AnnotationProcessorContext implements MapStructProcessingEnvironmen
     private Map<String, EnumTransformationStrategy> enumTransformationStrategies;
 
     private AccessorNamingUtils accessorNaming;
-    private Elements elementUtils;
-    private Types typeUtils;
-    private Messager messager;
-    private boolean disableBuilder;
-    private boolean verbose;
+    private final boolean disableBuilder;
+    private final boolean verbose;
+    private final Map<String, String> options;
+    private final DescriptorUnwrapper descriptorUnwrapper;
+    private final AccessorNamingAdapterFactory accessorNamingAdapterFactory;
+    private final DiagnosticReporter diagnosticReporter;
+    private LangModelContext pendingLangModelContext;
+    private LangModelContext currentLangModelContext;
+    private MapStructProcessingEnvironment spiEnvironment;
 
-    private Map<String, String> options;
-
-    public AnnotationProcessorContext(Elements elementUtils, Types typeUtils, Messager messager, boolean disableBuilder,
-                                      boolean verbose, Map<String, String> options) {
-        astModifyingAnnotationProcessors = java.util.Collections.unmodifiableList(
-            findAstModifyingAnnotationProcessors( messager ) );
-        this.elementUtils = elementUtils;
-        this.typeUtils = typeUtils;
-        this.messager = messager;
+    public AnnotationProcessorContext(DiagnosticReporter diagnosticReporter,
+                                      boolean disableBuilder,
+                                      boolean verbose,
+                                      Map<String, String> options,
+                                      DescriptorUnwrapper descriptorUnwrapper,
+                                      AccessorNamingAdapterFactory accessorNamingAdapterFactory) {
+        this.diagnosticReporter = Objects.requireNonNull( diagnosticReporter, "diagnosticReporter" );
         this.disableBuilder = disableBuilder;
         this.verbose = verbose;
-        this.options = java.util.Collections.unmodifiableMap( options );
+        Map<String, String> resolvedOptions = new LinkedHashMap<>();
+        if ( options != null ) {
+            resolvedOptions.putAll( options );
+        }
+        this.options = Collections.unmodifiableMap( resolvedOptions );
+        this.descriptorUnwrapper = Objects.requireNonNull( descriptorUnwrapper, "descriptorUnwrapper" );
+        this.accessorNamingAdapterFactory = Objects.requireNonNull(
+            accessorNamingAdapterFactory,
+            "accessorNamingAdapterFactory"
+        );
+        this.astModifyingAnnotationProcessors = Collections.unmodifiableList(
+            findAstModifyingAnnotationProcessors( diagnosticReporter )
+        );
     }
 
-    public void prepare(@SuppressWarnings("unused") LangModelContext langModelContext) {
-        // LangModelContext is reserved for upcoming descriptor integration (Stage 3 iterations).
+    public void prepare(LangModelContext langModelContext) {
+        Objects.requireNonNull( langModelContext, "langModelContext" );
+        this.currentLangModelContext = langModelContext;
+        if ( initialized ) {
+            return;
+        }
+        this.pendingLangModelContext = langModelContext;
     }
 
     /**
@@ -81,25 +113,44 @@ public class AnnotationProcessorContext implements MapStructProcessingEnvironmen
      * if this is lazily evaluated it won't be a problem, as in the SPI implementation module there won't be any
      * processing done.
      */
-    private void initialize() {
+    private void initializeIfNeeded() {
         if ( initialized ) {
             return;
         }
 
+        LangModelContext langModelContext = pendingLangModelContext;
+        if ( langModelContext == null ) {
+            throw new IllegalStateException(
+                "AnnotationProcessorContext.prepare must be invoked before initialization"
+            );
+        }
+        pendingLangModelContext = null;
+
+        SpiBridgeCapability bridgeCapability = langModelContext.optional( SpiBridgeCapability.class )
+            .orElseThrow( () -> MissingLangModelCapabilityException.required( SpiBridgeCapability.class ) );
+
+        MapStructProcessingEnvironment environment = Objects.requireNonNull(
+            bridgeCapability.spiEnvironment( options ),
+            "LangModelContext did not provide a MapStructProcessingEnvironment"
+        );
+
+        this.spiEnvironment = environment;
+
+        LangElements elements = langModelContext.elementQuery().elements();
         AccessorNamingStrategy defaultAccessorNamingStrategy;
         BuilderProvider defaultBuilderProvider;
-        if ( elementUtils.getTypeElement( ImmutablesConstants.IMMUTABLE_FQN ) != null ) {
+        if ( elements.typeElement( ImmutablesConstants.IMMUTABLE_FQN ) != null ) {
             defaultAccessorNamingStrategy = new ImmutablesAccessorNamingStrategy();
             defaultBuilderProvider = new ImmutablesBuilderProvider();
             if ( verbose ) {
-                messager.printMessage( Diagnostic.Kind.NOTE, "MapStruct: Immutables found on classpath" );
+                diagnosticReporter.note( "MapStruct: Immutables found on classpath" );
             }
         }
-        else if ( elementUtils.getTypeElement( FreeBuilderConstants.FREE_BUILDER_FQN ) != null ) {
+        else if ( elements.typeElement( FreeBuilderConstants.FREE_BUILDER_FQN ) != null ) {
             defaultAccessorNamingStrategy = new FreeBuilderAccessorNamingStrategy();
             defaultBuilderProvider = new DefaultBuilderProvider();
             if ( verbose ) {
-                messager.printMessage( Diagnostic.Kind.NOTE, "MapStruct: Freebuilder found on classpath" );
+                diagnosticReporter.note( "MapStruct: Freebuilder found on classpath" );
             }
         }
         else {
@@ -107,33 +158,35 @@ public class AnnotationProcessorContext implements MapStructProcessingEnvironmen
             defaultBuilderProvider = new DefaultBuilderProvider();
         }
         this.accessorNamingStrategy = Services.get( AccessorNamingStrategy.class, defaultAccessorNamingStrategy );
-        this.accessorNamingStrategy.init( this );
+        this.accessorNamingStrategy.init( spiEnvironment );
         if ( verbose ) {
-            messager.printMessage(
-                Diagnostic.Kind.NOTE,
+            diagnosticReporter.note(
                 "MapStruct: Using accessor naming strategy: "
-                    + this.accessorNamingStrategy.getClass().getCanonicalName()
+                    + accessorNamingStrategy.getClass().getCanonicalName()
             );
         }
         this.builderProvider = this.disableBuilder ?
             new NoOpBuilderProvider() :
             Services.get( BuilderProvider.class, defaultBuilderProvider );
-        this.builderProvider.init( this );
+        this.builderProvider.init( spiEnvironment );
         if ( verbose ) {
-            messager.printMessage(
-                Diagnostic.Kind.NOTE,
-                "MapStruct: Using builder provider: " + this.builderProvider.getClass().getCanonicalName()
+            diagnosticReporter.note(
+                "MapStruct: Using builder provider: " + builderProvider.getClass().getCanonicalName()
             );
         }
-        this.accessorNaming = new AccessorNamingUtils( this.accessorNamingStrategy );
+        AccessorNamingAdapter accessorNamingAdapter = accessorNamingAdapterFactory.create(
+            this.accessorNamingStrategy,
+            descriptorUnwrapper,
+            langModelContext
+        );
+        this.accessorNaming = new AccessorNamingUtils( accessorNamingAdapter );
 
         this.enumMappingStrategy = Services.get( EnumMappingStrategy.class, new DefaultEnumMappingStrategy() );
-        this.enumMappingStrategy.init( this );
+        this.enumMappingStrategy.init( spiEnvironment );
         if ( verbose ) {
-            messager.printMessage(
-                Diagnostic.Kind.NOTE,
+            diagnosticReporter.note(
                 "MapStruct: Using enum naming strategy: "
-                    + this.enumMappingStrategy.getClass().getCanonicalName()
+                    + enumMappingStrategy.getClass().getCanonicalName()
             );
         }
 
@@ -152,7 +205,7 @@ public class AnnotationProcessorContext implements MapStructProcessingEnvironmen
                         transformationStrategy + " for name " + transformationStrategyName );
             }
 
-            transformationStrategy.init( this );
+            transformationStrategy.init( spiEnvironment );
             enumTransformationStrategies.put( transformationStrategyName, transformationStrategy );
         }
 
@@ -160,7 +213,8 @@ public class AnnotationProcessorContext implements MapStructProcessingEnvironmen
         this.initialized = true;
     }
 
-    private static List<AstModifyingAnnotationProcessor> findAstModifyingAnnotationProcessors(Messager messager) {
+    private List<AstModifyingAnnotationProcessor> findAstModifyingAnnotationProcessors(
+        DiagnosticReporter diagnosticReporter) {
         List<AstModifyingAnnotationProcessor> processors = new ArrayList<>();
 
         ServiceLoader<AstModifyingAnnotationProcessor> loader = ServiceLoader.load(
@@ -172,7 +226,7 @@ public class AnnotationProcessorContext implements MapStructProcessingEnvironmen
         // Therefore we are wrapping this into an iterator that can handle exceptions by ignoring
         // the faulty processor
         Iterator<AstModifyingAnnotationProcessor> loaderIterator = new FaultyDelegatingIterator(
-            messager,
+            diagnosticReporter,
             loader.iterator()
         );
 
@@ -188,12 +242,12 @@ public class AnnotationProcessorContext implements MapStructProcessingEnvironmen
 
     private static class FaultyDelegatingIterator implements Iterator<AstModifyingAnnotationProcessor> {
 
-        private final Messager messager;
+        private final DiagnosticReporter diagnosticReporter;
         private final Iterator<AstModifyingAnnotationProcessor> delegate;
 
-        private FaultyDelegatingIterator(Messager messager,
+        private FaultyDelegatingIterator(DiagnosticReporter diagnosticReporter,
             Iterator<AstModifyingAnnotationProcessor> delegate) {
-            this.messager = messager;
+            this.diagnosticReporter = diagnosticReporter;
             this.delegate = delegate;
         }
 
@@ -232,50 +286,57 @@ public class AnnotationProcessorContext implements MapStructProcessingEnvironmen
 
             String reportableStacktrace = sw.toString().replace( System.lineSeparator(), "  " );
 
-            messager.printMessage(
-                Diagnostic.Kind.WARNING,
-                "Failed to read AstModifyingAnnotationProcessor. Reading next processor. Reason: " +
-                    reportableStacktrace
+            diagnosticReporter.warning(
+                "Failed to read AstModifyingAnnotationProcessor. Reading next processor. Reason: "
+                    + reportableStacktrace
             );
         }
-    }
-
-    @Override
-    public Elements getElementUtils() {
-        return elementUtils;
-    }
-
-    @Override
-    public Types getTypeUtils() {
-        return typeUtils;
     }
 
     public List<AstModifyingAnnotationProcessor> getAstModifyingAnnotationProcessors() {
         return astModifyingAnnotationProcessors;
     }
 
+    public boolean isTypeComplete(TypeDescriptor descriptor) {
+        initializeIfNeeded();
+        LangModelContext langModelContext = currentLangModelContext;
+        if ( langModelContext == null ) {
+            return true;
+        }
+        return langModelContext.diagnostics().isTypeComplete( descriptor, astModifyingAnnotationProcessors );
+    }
+
+    public TypeHierarchyErroneousException typeHierarchyErroneousException(TypeDescriptor descriptor) {
+        initializeIfNeeded();
+        LangModelContext langModelContext = currentLangModelContext;
+        if ( langModelContext == null ) {
+            return new TypeHierarchyErroneousException();
+        }
+        return langModelContext.diagnostics().typeHierarchyErroneousException( descriptor );
+    }
+
     public AccessorNamingUtils getAccessorNaming() {
-        initialize();
+        initializeIfNeeded();
         return accessorNaming;
     }
 
     public AccessorNamingStrategy getAccessorNamingStrategy() {
-        initialize();
+        initializeIfNeeded();
         return accessorNamingStrategy;
     }
 
     public EnumMappingStrategy getEnumMappingStrategy() {
-        initialize();
+        initializeIfNeeded();
         return enumMappingStrategy;
     }
 
     public BuilderProvider getBuilderProvider() {
-        initialize();
+        initializeIfNeeded();
         return builderProvider;
     }
 
     public Map<String, EnumTransformationStrategy> getEnumTransformationStrategies() {
-        initialize();
+        initializeIfNeeded();
         return enumTransformationStrategies;
     }
 

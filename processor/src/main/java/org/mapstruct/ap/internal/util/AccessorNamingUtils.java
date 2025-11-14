@@ -5,108 +5,92 @@
  */
 package org.mapstruct.ap.internal.util;
 
-import javax.lang.model.element.ExecutableElement;
-import javax.lang.model.element.TypeElement;
-import javax.lang.model.type.DeclaredType;
-import javax.lang.model.type.TypeKind;
-import javax.lang.model.type.TypeMirror;
-import javax.lang.model.util.SimpleElementVisitor6;
-import javax.lang.model.util.SimpleTypeVisitor6;
-
+import org.mapstruct.ap.internal.langmodel.AccessorNamingAdapter;
+import org.mapstruct.ap.internal.langmodel.descriptor.ElementDescriptor;
+import org.mapstruct.ap.internal.langmodel.descriptor.ExecutableDescriptor;
+import org.mapstruct.ap.internal.langmodel.descriptor.LangModifier;
+import org.mapstruct.ap.internal.langmodel.descriptor.TypeDescriptor;
 import org.mapstruct.ap.internal.util.accessor.Accessor;
 import org.mapstruct.ap.internal.util.accessor.AccessorType;
-import org.mapstruct.ap.spi.AccessorNamingStrategy;
 import org.mapstruct.ap.spi.MethodType;
 
-import static org.mapstruct.ap.internal.util.Executables.isPublicNotStatic;
-
 /**
- * Utils for working with the {@link AccessorNamingStrategy}.
+ * Descriptor-based utilities for working with accessor naming strategies.
+ *
+ * <p>The interaction with {@link org.mapstruct.ap.spi.AccessorNamingStrategy} is delegated to backend-specific
+ * {@link AccessorNamingAdapter} implementations, keeping this helper free from direct compiler dependencies.</p>
  *
  * @author Filip Hrisafov
  */
 public final class AccessorNamingUtils {
 
-    private final AccessorNamingStrategy accessorNamingStrategy;
+    private final AccessorNamingAdapter adapter;
 
-    public AccessorNamingUtils(AccessorNamingStrategy accessorNamingStrategy) {
-        this.accessorNamingStrategy = accessorNamingStrategy;
+    public AccessorNamingUtils(AccessorNamingAdapter adapter) {
+        this.adapter = adapter;
     }
 
-    public boolean isGetterMethod(ExecutableElement executable) {
-        return executable != null && isPublicNotStatic( executable ) &&
-            executable.getParameters().isEmpty() &&
-            accessorNamingStrategy.getMethodType( executable ) == MethodType.GETTER;
-    }
-
-    public boolean isPresenceCheckMethod(ExecutableElement executable) {
-
+    public boolean isGetterMethod(ExecutableDescriptor executable) {
         return executable != null
             && isPublicNotStatic( executable )
-            && executable.getParameters().isEmpty()
-            && ( executable.getReturnType().getKind() == TypeKind.BOOLEAN ||
-            "java.lang.Boolean".equals( getQualifiedName( executable.getReturnType() ) ) )
-            && accessorNamingStrategy.getMethodType( executable ) == MethodType.PRESENCE_CHECKER;
+            && executable.parameters().isEmpty()
+            && adapter.methodType( executable ) == MethodType.GETTER;
     }
 
-    public boolean isSetterMethod(ExecutableElement executable) {
+    public boolean isPresenceCheckMethod(ExecutableDescriptor executable) {
         return executable != null
             && isPublicNotStatic( executable )
-            && executable.getParameters().size() == 1
-            && accessorNamingStrategy.getMethodType( executable ) == MethodType.SETTER;
+            && executable.parameters().isEmpty()
+            && isBooleanType( executable.returnType() )
+            && adapter.methodType( executable ) == MethodType.PRESENCE_CHECKER;
     }
 
-    public boolean isAdderMethod(ExecutableElement executable) {
+    public boolean isSetterMethod(ExecutableDescriptor executable) {
         return executable != null
             && isPublicNotStatic( executable )
-            && executable.getParameters().size() == 1
-            && accessorNamingStrategy.getMethodType( executable ) == MethodType.ADDER;
+            && executable.parameters().size() == 1
+            && adapter.methodType( executable ) == MethodType.SETTER;
     }
 
-    public String getPropertyName(ExecutableElement executable) {
-        return accessorNamingStrategy.getPropertyName( executable );
+    public boolean isAdderMethod(ExecutableDescriptor executable) {
+        return executable != null
+            && isPublicNotStatic( executable )
+            && executable.parameters().size() == 1
+            && adapter.methodType( executable ) == MethodType.ADDER;
+    }
+
+    public String getPropertyName(ExecutableDescriptor executable) {
+        return adapter.propertyName( executable );
     }
 
     /**
      * @param adderMethod the adder method
      *
-     * @return the 'element name' to which an adder method applies. If. e.g. an adder method is named
-     * {@code addChild(Child v)}, the element name would be 'Child'.
+     * @return the element name to which an adder method applies.
      */
     public String getElementNameForAdder(Accessor adderMethod) {
         if ( adderMethod.getAccessorType() == AccessorType.ADDER ) {
-            return accessorNamingStrategy.getElementName( (ExecutableElement) adderMethod.getElement() );
+            ElementDescriptor element = adderMethod.getElement();
+            if ( element != null ) {
+                return adapter.elementName( element );
+            }
         }
-        else {
-            return null;
-        }
+        return null;
     }
 
-    private static String getQualifiedName(TypeMirror type) {
-        DeclaredType declaredType = type.accept(
-            new SimpleTypeVisitor6<DeclaredType, Void>() {
-                @Override
-                public DeclaredType visitDeclared(DeclaredType t, Void p) {
-                    return t;
-                }
-            },
-            null
-        );
+    private boolean isPublicNotStatic(ExecutableDescriptor executable) {
+        return executable != null
+            && executable.modifiers().contains( LangModifier.PUBLIC )
+            && !executable.modifiers().contains( LangModifier.STATIC );
+    }
 
-        if ( declaredType == null ) {
-            return null;
+    private static boolean isBooleanType(TypeDescriptor type) {
+        if ( type == null ) {
+            return false;
         }
-
-        TypeElement typeElement = declaredType.asElement().accept(
-            new SimpleElementVisitor6<TypeElement, Void>() {
-                @Override
-                public TypeElement visitType(TypeElement e, Void p) {
-                    return e;
-                }
-            },
-            null
-        );
-
-        return typeElement != null ? typeElement.getQualifiedName().toString() : null;
+        if ( type.isPrimitive() ) {
+            return "boolean".equals( type.displayName() );
+        }
+        return type.qualifiedName().map( "java.lang.Boolean"::equals ).orElse( false );
     }
 }

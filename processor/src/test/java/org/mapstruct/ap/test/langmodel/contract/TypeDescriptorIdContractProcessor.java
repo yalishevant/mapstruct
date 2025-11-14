@@ -19,20 +19,20 @@ import javax.lang.model.SourceVersion;
 import javax.lang.model.element.TypeElement;
 import javax.tools.Diagnostic;
 
-import org.mapstruct.ap.langmodel.javax.DefaultVersionInformation;
+import org.mapstruct.ap.internal.langmodel.javax.DefaultVersionInformation;
 import org.mapstruct.ap.internal.version.VersionInformation;
-import org.mapstruct.ap.descriptor.ExecutableDescriptor;
-import org.mapstruct.ap.descriptor.FieldDescriptor;
-import org.mapstruct.ap.langmodel.api.LangElements;
-import org.mapstruct.ap.langmodel.LangModelContext;
-import org.mapstruct.ap.langmodel.LangModelContextFactory;
-import org.mapstruct.ap.langmodel.LangModelElementQuery;
-import org.mapstruct.ap.langmodel.LangModelTypeSystem;
-import org.mapstruct.ap.langmodel.api.LangTypes;
-import org.mapstruct.ap.langmodel.MapperEntryPoint;
-import org.mapstruct.ap.descriptor.TypeDescriptor;
-import org.mapstruct.ap.descriptor.TypeElementDescriptor;
-import org.mapstruct.ap.langmodel.javax.JavaxLangModelContextFactory;
+import org.mapstruct.ap.internal.langmodel.descriptor.ExecutableDescriptor;
+import org.mapstruct.ap.internal.langmodel.descriptor.FieldDescriptor;
+import org.mapstruct.ap.internal.langmodel.api.LangElements;
+import org.mapstruct.ap.internal.langmodel.LangModelContext;
+import org.mapstruct.ap.internal.langmodel.LangModelContextFactory;
+import org.mapstruct.ap.internal.langmodel.LangModelElementQuery;
+import org.mapstruct.ap.internal.langmodel.LangModelTypeSystem;
+import org.mapstruct.ap.internal.langmodel.api.LangTypes;
+import org.mapstruct.ap.internal.langmodel.MapperEntryPoint;
+import org.mapstruct.ap.internal.langmodel.descriptor.TypeDescriptor;
+import org.mapstruct.ap.internal.langmodel.descriptor.TypeElementDescriptor;
+import org.mapstruct.ap.internal.langmodel.javax.JavaxLangModelContextFactory;
 
 @SupportedAnnotationTypes("*")
 @SupportedSourceVersion(SourceVersion.RELEASE_17)
@@ -65,7 +65,7 @@ public class TypeDescriptorIdContractProcessor extends AbstractProcessor {
                     processingEnv,
                     mapperElement
                 );
-                try ( LangModelContext<?, ?, ?, ?> context = factory.create( entryPoint ) ) {
+                try ( LangModelContext context = factory.create( entryPoint ) ) {
                     verifyTypeDescriptorIds( context, errors );
                 }
             }
@@ -84,7 +84,7 @@ public class TypeDescriptorIdContractProcessor extends AbstractProcessor {
         return false;
     }
 
-    private void verifyTypeDescriptorIds(LangModelContext<?, ?, ?, ?> context, List<String> errors) {
+    private void verifyTypeDescriptorIds(LangModelContext context, List<String> errors) {
         LangModelTypeSystem<?, ?, ?, ?> typeSystem = context.typeSystem();
         LangModelElementQuery elementQuery = context.elementQuery();
         LangElements elements = elementQuery.elements();

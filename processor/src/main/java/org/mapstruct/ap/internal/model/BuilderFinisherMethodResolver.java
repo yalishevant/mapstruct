@@ -13,10 +13,10 @@ import org.mapstruct.ap.internal.gem.BuilderGem;
 import org.mapstruct.ap.internal.util.Extractor;
 import org.mapstruct.ap.internal.util.Message;
 import org.mapstruct.ap.internal.util.Strings;
-import org.mapstruct.ap.descriptor.AnnotationDescriptor;
-import org.mapstruct.ap.descriptor.ExecutableDescriptor;
-import org.mapstruct.ap.descriptor.ParameterDescriptor;
-import org.mapstruct.ap.descriptor.TypeDescriptor;
+import org.mapstruct.ap.internal.langmodel.descriptor.AnnotationDescriptor;
+import org.mapstruct.ap.internal.langmodel.descriptor.ExecutableDescriptor;
+import org.mapstruct.ap.internal.langmodel.descriptor.ParameterDescriptor;
+import org.mapstruct.ap.internal.langmodel.descriptor.TypeDescriptor;
 
 import static org.mapstruct.ap.internal.util.Collections.first;
 

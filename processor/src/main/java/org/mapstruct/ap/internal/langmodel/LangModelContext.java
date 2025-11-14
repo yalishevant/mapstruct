@@ -6,10 +6,7 @@
 package org.mapstruct.ap.internal.langmodel;
 
 import java.util.Optional;
-
-import org.mapstruct.ap.internal.langmodel.annotation.MapperAnnotationView;
-import org.mapstruct.ap.internal.langmodel.annotation.MapperConfigAnnotationView;
-import org.mapstruct.ap.internal.langmodel.codegen.GeneratedFileAccess;
+import org.mapstruct.ap.internal.langmodel.GeneratedFileAccess;
 import org.mapstruct.ap.internal.langmodel.api.LangElements;
 import org.mapstruct.ap.internal.langmodel.api.LangTypes;
 import org.mapstruct.ap.internal.langmodel.descriptor.TypeDescriptor;
@@ -51,7 +48,7 @@ public interface LangModelContext extends AutoCloseable {
      *
      * @return mapper annotation view or {@code null} when unavailable
      */
-    MapperAnnotationView mapperAnnotation(TypeElementDescriptor element);
+    MapperAnnotation mapperAnnotation(TypeElementDescriptor element);
 
     /**
      * Resolves the mapper configuration descriptor represented by the supplied type descriptor.
@@ -60,7 +57,7 @@ public interface LangModelContext extends AutoCloseable {
      *
      * @return mapper configuration annotation descriptor when available
      */
-    Optional<MapperConfigAnnotationView> mapperConfig(TypeDescriptor configType);
+    Optional<MapperConfigAnnotation> mapperConfig(TypeDescriptor configType);
 
     /**
      * @return mandatory diagnostics facade.
@@ -81,6 +78,55 @@ public interface LangModelContext extends AutoCloseable {
      * @return optional capability wrapper
      */
     <T> OptionalCapability<T> optional(Class<T> capabilityType);
+
+    /**
+     * Legacy helper providing access to descriptor facilities grouped under a single facade.
+     *
+     * @return descriptor-oriented type system view
+     */
+    default LangModelTypeSystem<?, ?, ?, ?> typeSystem() {
+        return new LangModelTypeSystem<Object, Object, Object, Object>() {
+            @Override
+            public LangDescriptorFactory descriptors() {
+                return LangModelContext.this.descriptors();
+            }
+
+            @Override
+            public LangTypes types() {
+                return LangModelContext.this.types();
+            }
+
+            @Override
+            public TypeIntrospector typeIntrospector() {
+                return LangModelContext.this.typeIntrospector();
+            }
+        };
+    }
+
+    /**
+     * Legacy helper providing element queries through a dedicated facade.
+     *
+     * @return element query view backed by {@link #elements()}, {@link #mapperAnnotation(TypeElementDescriptor)} and
+     * {@link #mapperConfig(TypeDescriptor)}
+     */
+    default LangModelElementQuery elementQuery() {
+        return new LangModelElementQuery() {
+            @Override
+            public LangElements elements() {
+                return LangModelContext.this.elements();
+            }
+
+            @Override
+            public MapperAnnotation mapperAnnotation(TypeElementDescriptor element) {
+                return LangModelContext.this.mapperAnnotation( element );
+            }
+
+            @Override
+            public Optional<MapperConfigAnnotation> mapperConfig(TypeDescriptor configType) {
+                return LangModelContext.this.mapperConfig( configType );
+            }
+        };
+    }
 
     @Override
     default void close() {

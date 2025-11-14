@@ -31,41 +31,41 @@ import java.util.Objects;
 import java.util.stream.Collectors;
 
 import org.junit.jupiter.api.Test;
-import org.mapstruct.ap.descriptor.AnnotationDescriptor;
-import org.mapstruct.ap.descriptor.AnnotationValueDescriptor;
-import org.mapstruct.ap.descriptor.BuilderDescriptor;
-import org.mapstruct.ap.descriptor.ElementDescriptor;
-import org.mapstruct.ap.descriptor.ExecutableDescriptor;
-import org.mapstruct.ap.descriptor.FieldDescriptor;
-import org.mapstruct.ap.descriptor.LangElementKind;
-import org.mapstruct.ap.descriptor.LangModifier;
-import org.mapstruct.ap.descriptor.LangTypeKind;
-import org.mapstruct.ap.descriptor.NameDescriptor;
-import org.mapstruct.ap.descriptor.ParameterDescriptor;
-import org.mapstruct.ap.descriptor.RecordComponentDescriptor;
-import org.mapstruct.ap.descriptor.TypeDescriptor;
-import org.mapstruct.ap.descriptor.TypeElementDescriptor;
-import org.mapstruct.ap.langmodel.AnnotationAttribute;
-import org.mapstruct.ap.langmodel.ExecutableSignature;
-import org.mapstruct.ap.langmodel.GeneratedFileAccess;
-import org.mapstruct.ap.langmodel.LangDescriptorFactory;
-import org.mapstruct.ap.langmodel.LangModelContext;
-import org.mapstruct.ap.langmodel.LangModelContextFactory;
-import org.mapstruct.ap.langmodel.LangModelElementQuery;
-import org.mapstruct.ap.langmodel.LangModelTypeSystem;
-import org.mapstruct.ap.langmodel.MapperAnnotation;
-import org.mapstruct.ap.langmodel.MapperConfigAnnotation;
-import org.mapstruct.ap.langmodel.MapperEntryPoint;
-import org.mapstruct.ap.langmodel.OptionalCapability;
-import org.mapstruct.ap.langmodel.TypeIntrospector;
-import org.mapstruct.ap.langmodel.api.BuilderIntrospectorContext;
-import org.mapstruct.ap.langmodel.api.DescriptorUnwrapper;
-import org.mapstruct.ap.langmodel.api.EnumMappingSupport;
-import org.mapstruct.ap.langmodel.api.LangElements;
-import org.mapstruct.ap.langmodel.api.LangTypes;
-import org.mapstruct.ap.langmodel.api.MappingExclusionSupport;
-import org.mapstruct.ap.langmodel.api.PackageDescriptor;
-import org.mapstruct.ap.langmodel.codegen.GeneratedFileSink;
+import org.mapstruct.ap.internal.langmodel.descriptor.AnnotationDescriptor;
+import org.mapstruct.ap.internal.langmodel.descriptor.AnnotationValueDescriptor;
+import org.mapstruct.ap.internal.langmodel.descriptor.BuilderDescriptor;
+import org.mapstruct.ap.internal.langmodel.descriptor.ElementDescriptor;
+import org.mapstruct.ap.internal.langmodel.descriptor.ExecutableDescriptor;
+import org.mapstruct.ap.internal.langmodel.descriptor.FieldDescriptor;
+import org.mapstruct.ap.internal.langmodel.descriptor.LangElementKind;
+import org.mapstruct.ap.internal.langmodel.descriptor.LangModifier;
+import org.mapstruct.ap.internal.langmodel.descriptor.LangTypeKind;
+import org.mapstruct.ap.internal.langmodel.descriptor.NameDescriptor;
+import org.mapstruct.ap.internal.langmodel.descriptor.ParameterDescriptor;
+import org.mapstruct.ap.internal.langmodel.descriptor.RecordComponentDescriptor;
+import org.mapstruct.ap.internal.langmodel.descriptor.TypeDescriptor;
+import org.mapstruct.ap.internal.langmodel.descriptor.TypeElementDescriptor;
+import org.mapstruct.ap.internal.langmodel.AnnotationAttribute;
+import org.mapstruct.ap.internal.langmodel.ExecutableSignature;
+import org.mapstruct.ap.internal.langmodel.GeneratedFileAccess;
+import org.mapstruct.ap.internal.langmodel.LangDescriptorFactory;
+import org.mapstruct.ap.internal.langmodel.LangModelContext;
+import org.mapstruct.ap.internal.langmodel.LangModelContextFactory;
+import org.mapstruct.ap.internal.langmodel.LangModelElementQuery;
+import org.mapstruct.ap.internal.langmodel.LangModelTypeSystem;
+import org.mapstruct.ap.internal.langmodel.MapperAnnotation;
+import org.mapstruct.ap.internal.langmodel.MapperConfigAnnotation;
+import org.mapstruct.ap.internal.langmodel.MapperEntryPoint;
+import org.mapstruct.ap.internal.langmodel.OptionalCapability;
+import org.mapstruct.ap.internal.langmodel.TypeIntrospector;
+import org.mapstruct.ap.internal.langmodel.api.BuilderIntrospectorContext;
+import org.mapstruct.ap.internal.langmodel.api.DescriptorUnwrapper;
+import org.mapstruct.ap.internal.langmodel.api.EnumMappingSupport;
+import org.mapstruct.ap.internal.langmodel.api.LangElements;
+import org.mapstruct.ap.internal.langmodel.api.LangTypes;
+import org.mapstruct.ap.internal.langmodel.api.MappingExclusionSupport;
+import org.mapstruct.ap.internal.langmodel.api.PackageDescriptor;
+import org.mapstruct.ap.internal.langmodel.codegen.GeneratedFileSink;
 
 /**
  * Guards the public surface of the thin language model API.
@@ -86,7 +86,6 @@ class ThinApiSurfaceTest {
         MapperAnnotation.class,
         MapperConfigAnnotation.class,
         MapperEntryPoint.class,
-        MapperEntryPoint.DefaultMapperEntryPoint.class,
         OptionalCapability.class,
         TypeIntrospector.class,
         TypeIntrospector.Metadata.class,

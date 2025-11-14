@@ -1,5 +1,5 @@
 {
-  "org.mapstruct.ap.langmodel.AnnotationAttribute": {
+  "org.mapstruct.ap.internal.langmodel.AnnotationAttribute": {
     "kind": "class",
     "typeParameters": [
       "T"
@@ -10,218 +10,193 @@
       "T valueOrDefault()",
       "boolean hasValue()",
       "java.util.Optional<T> value()",
-      "static <T> org.mapstruct.ap.langmodel.AnnotationAttribute<T> absent(T)",
-      "static <T> org.mapstruct.ap.langmodel.AnnotationAttribute<T> present(T, T)"
+      "static <T> org.mapstruct.ap.internal.langmodel.AnnotationAttribute<T> absent(T)",
+      "static <T> org.mapstruct.ap.internal.langmodel.AnnotationAttribute<T> present(T, T)"
     ]
   },
-  "org.mapstruct.ap.langmodel.ExecutableSignature": {
+  "org.mapstruct.ap.internal.langmodel.ExecutableSignature": {
     "kind": "interface",
     "interfaces": [],
     "methods": [
-      "java.util.List<org.mapstruct.ap.descriptor.TypeDescriptor> parameterTypes()",
-      "java.util.List<org.mapstruct.ap.descriptor.TypeDescriptor> thrownTypes()",
-      "org.mapstruct.ap.descriptor.TypeDescriptor returnType()"
+      "java.util.List<org.mapstruct.ap.internal.langmodel.descriptor.TypeDescriptor> parameterTypes()",
+      "java.util.List<org.mapstruct.ap.internal.langmodel.descriptor.TypeDescriptor> thrownTypes()",
+      "org.mapstruct.ap.internal.langmodel.descriptor.TypeDescriptor returnType()"
     ]
   },
-  "org.mapstruct.ap.langmodel.GeneratedFileAccess": {
+  "org.mapstruct.ap.internal.langmodel.GeneratedFileAccess": {
     "kind": "interface",
     "interfaces": [],
     "methods": [
-      "org.mapstruct.ap.langmodel.codegen.GeneratedFileSink generatedFileSink()"
+      "org.mapstruct.ap.internal.langmodel.codegen.GeneratedFileSink generatedFileSink()"
     ]
   },
-  "org.mapstruct.ap.langmodel.LangDescriptorFactory": {
+  "org.mapstruct.ap.internal.langmodel.LangDescriptorFactory": {
     "kind": "interface",
-    "typeParameters": [
-      "NATIVE_TYPE",
-      "NATIVE_ELEMENT",
-      "NATIVE_ANNOTATION",
-      "NATIVE_ANNOTATION_VALUE"
-    ],
     "interfaces": [],
     "methods": [
-      "org.mapstruct.ap.descriptor.AnnotationDescriptor annotationDescriptor(NATIVE_ANNOTATION)",
-      "org.mapstruct.ap.descriptor.AnnotationValueDescriptor annotationValueDescriptor(NATIVE_ANNOTATION_VALUE)",
-      "org.mapstruct.ap.descriptor.ElementDescriptor elementDescriptor(NATIVE_ELEMENT)",
-      "org.mapstruct.ap.descriptor.TypeDescriptor typeDescriptor(NATIVE_TYPE)",
-      "org.mapstruct.ap.descriptor.TypeElementDescriptor typeElementDescriptor(NATIVE_ELEMENT)"
+      "org.mapstruct.ap.internal.langmodel.descriptor.AnnotationDescriptor annotationDescriptor(java.lang.Object)",
+      "org.mapstruct.ap.internal.langmodel.descriptor.AnnotationValueDescriptor annotationValueDescriptor(java.lang.Object)",
+      "org.mapstruct.ap.internal.langmodel.descriptor.ElementDescriptor elementDescriptor(java.lang.Object)",
+      "org.mapstruct.ap.internal.langmodel.descriptor.TypeDescriptor typeDescriptor(java.lang.Object)",
+      "org.mapstruct.ap.internal.langmodel.descriptor.TypeElementDescriptor typeElementDescriptor(java.lang.Object)"
     ]
   },
-  "org.mapstruct.ap.langmodel.LangModelContext": {
+  "org.mapstruct.ap.internal.langmodel.LangModelContext": {
     "kind": "interface",
-    "typeParameters": [
-      "NATIVE_TYPE",
-      "NATIVE_ELEMENT",
-      "NATIVE_ANNOTATION",
-      "NATIVE_ANNOTATION_VALUE"
-    ],
     "interfaces": [
       "java.lang.AutoCloseable"
     ],
     "methods": [
-      "<T> org.mapstruct.ap.langmodel.OptionalCapability<T> optional(java.lang.Class<T>)",
+      "<T> org.mapstruct.ap.internal.langmodel.OptionalCapability<T> optional(java.lang.Class<T>)",
+      "default org.mapstruct.ap.internal.langmodel.LangModelElementQuery elementQuery()",
+      "default org.mapstruct.ap.internal.langmodel.LangModelTypeSystem<?, ?, ?, ?> typeSystem()",
       "default void close()",
-      "org.mapstruct.ap.langmodel.GeneratedFileAccess generatedFiles()",
-      "org.mapstruct.ap.langmodel.LangModelElementQuery elementQuery()",
-      "org.mapstruct.ap.langmodel.LangModelTypeSystem<NATIVE_TYPE, NATIVE_ELEMENT, NATIVE_ANNOTATION, NATIVE_ANNOTATION_VALUE> typeSystem()",
-      "org.mapstruct.ap.spi.lang.LangDiagnostics diagnostics()"
+      "java.util.Optional<org.mapstruct.ap.internal.langmodel.MapperConfigAnnotation> mapperConfig(org.mapstruct.ap.internal.langmodel.descriptor.TypeDescriptor)",
+      "org.mapstruct.ap.internal.langmodel.GeneratedFileAccess generatedFiles()",
+      "org.mapstruct.ap.internal.langmodel.LangDescriptorFactory descriptors()",
+      "org.mapstruct.ap.internal.langmodel.MapperAnnotation mapperAnnotation(org.mapstruct.ap.internal.langmodel.descriptor.TypeElementDescriptor)",
+      "org.mapstruct.ap.internal.langmodel.TypeIntrospector typeIntrospector()",
+      "org.mapstruct.ap.internal.langmodel.api.LangElements elements()",
+      "org.mapstruct.ap.internal.langmodel.api.LangTypes types()",
+      "org.mapstruct.ap.internal.langmodel.spi.LangDiagnostics diagnostics()"
     ]
   },
-  "org.mapstruct.ap.langmodel.LangModelContextFactory": {
+  "org.mapstruct.ap.internal.langmodel.LangModelContextFactory": {
     "kind": "interface",
     "interfaces": [],
     "methods": [
-      "default java.lang.String backendId()",
-      "default org.mapstruct.ap.langmodel.codegen.GeneratedFileSink generatedFileSink(org.mapstruct.ap.langmodel.MapperEntryPoint)",
-      "org.mapstruct.ap.langmodel.AccessorNamingAdapterFactory accessorNamingAdapterFactory()",
-      "org.mapstruct.ap.langmodel.LangModelContext<?, ?, ?, ?> create(org.mapstruct.ap.langmodel.MapperEntryPoint)",
-      "org.mapstruct.ap.langmodel.api.DescriptorUnwrapper descriptorUnwrapper()"
+      "java.lang.String backendId()",
+      "org.mapstruct.ap.internal.langmodel.AccessorNamingAdapterFactory accessorNamingAdapterFactory()",
+      "org.mapstruct.ap.internal.langmodel.LangModelContext create(org.mapstruct.ap.internal.langmodel.MapperEntryPoint)",
+      "org.mapstruct.ap.internal.langmodel.api.DescriptorUnwrapper descriptorUnwrapper()"
     ]
   },
-  "org.mapstruct.ap.langmodel.LangModelElementQuery": {
+  "org.mapstruct.ap.internal.langmodel.LangModelElementQuery": {
     "kind": "interface",
     "interfaces": [],
     "methods": [
-      "java.util.Optional<org.mapstruct.ap.langmodel.MapperConfigAnnotation> mapperConfig(org.mapstruct.ap.descriptor.TypeDescriptor)",
-      "org.mapstruct.ap.langmodel.MapperAnnotation mapperAnnotation(org.mapstruct.ap.descriptor.TypeElementDescriptor)",
-      "org.mapstruct.ap.langmodel.api.LangElements elements()"
+      "java.util.Optional<org.mapstruct.ap.internal.langmodel.MapperConfigAnnotation> mapperConfig(org.mapstruct.ap.internal.langmodel.descriptor.TypeDescriptor)",
+      "org.mapstruct.ap.internal.langmodel.MapperAnnotation mapperAnnotation(org.mapstruct.ap.internal.langmodel.descriptor.TypeElementDescriptor)",
+      "org.mapstruct.ap.internal.langmodel.api.LangElements elements()"
     ]
   },
-  "org.mapstruct.ap.langmodel.LangModelTypeSystem": {
+  "org.mapstruct.ap.internal.langmodel.LangModelTypeSystem": {
     "kind": "interface",
     "typeParameters": [
-      "NATIVE_TYPE",
-      "NATIVE_ELEMENT",
-      "NATIVE_ANNOTATION",
-      "NATIVE_ANNOTATION_VALUE"
+      "T",
+      "E",
+      "A",
+      "V"
     ],
     "interfaces": [],
     "methods": [
-      "org.mapstruct.ap.langmodel.LangDescriptorFactory<NATIVE_TYPE, NATIVE_ELEMENT, NATIVE_ANNOTATION, NATIVE_ANNOTATION_VALUE> descriptors()",
-      "org.mapstruct.ap.langmodel.TypeIntrospector typeIntrospector()",
-      "org.mapstruct.ap.langmodel.api.LangTypes types()"
+      "org.mapstruct.ap.internal.langmodel.LangDescriptorFactory descriptors()",
+      "org.mapstruct.ap.internal.langmodel.TypeIntrospector typeIntrospector()",
+      "org.mapstruct.ap.internal.langmodel.api.LangTypes types()"
     ]
   },
-  "org.mapstruct.ap.langmodel.MapperAnnotation": {
+  "org.mapstruct.ap.internal.langmodel.MapperAnnotation": {
     "kind": "interface",
     "interfaces": [],
     "methods": [
       "boolean isValid()",
-      "java.util.Optional<org.mapstruct.ap.langmodel.MapperConfigAnnotation> mapperConfig()",
-      "org.mapstruct.ap.descriptor.AnnotationDescriptor descriptor()",
-      "org.mapstruct.ap.langmodel.AnnotationAttribute<java.lang.Boolean> disableSubMappingMethodsGeneration()",
-      "org.mapstruct.ap.langmodel.AnnotationAttribute<java.lang.Boolean> suppressTimestampInGenerated()",
-      "org.mapstruct.ap.langmodel.AnnotationAttribute<java.lang.String> collectionMappingStrategy()",
-      "org.mapstruct.ap.langmodel.AnnotationAttribute<java.lang.String> componentModel()",
-      "org.mapstruct.ap.langmodel.AnnotationAttribute<java.lang.String> implementationName()",
-      "org.mapstruct.ap.langmodel.AnnotationAttribute<java.lang.String> implementationPackage()",
-      "org.mapstruct.ap.langmodel.AnnotationAttribute<java.lang.String> injectionStrategy()",
-      "org.mapstruct.ap.langmodel.AnnotationAttribute<java.lang.String> mappingInheritanceStrategy()",
-      "org.mapstruct.ap.langmodel.AnnotationAttribute<java.lang.String> nullValueCheckStrategy()",
-      "org.mapstruct.ap.langmodel.AnnotationAttribute<java.lang.String> nullValueIterableMappingStrategy()",
-      "org.mapstruct.ap.langmodel.AnnotationAttribute<java.lang.String> nullValueMapMappingStrategy()",
-      "org.mapstruct.ap.langmodel.AnnotationAttribute<java.lang.String> nullValueMappingStrategy()",
-      "org.mapstruct.ap.langmodel.AnnotationAttribute<java.lang.String> nullValuePropertyMappingStrategy()",
-      "org.mapstruct.ap.langmodel.AnnotationAttribute<java.lang.String> subclassExhaustiveStrategy()",
-      "org.mapstruct.ap.langmodel.AnnotationAttribute<java.lang.String> typeConversionPolicy()",
-      "org.mapstruct.ap.langmodel.AnnotationAttribute<java.lang.String> unmappedSourcePolicy()",
-      "org.mapstruct.ap.langmodel.AnnotationAttribute<java.lang.String> unmappedTargetPolicy()",
-      "org.mapstruct.ap.langmodel.AnnotationAttribute<java.util.List<org.mapstruct.ap.descriptor.TypeDescriptor>> imports()",
-      "org.mapstruct.ap.langmodel.AnnotationAttribute<java.util.List<org.mapstruct.ap.descriptor.TypeDescriptor>> uses()",
-      "org.mapstruct.ap.langmodel.AnnotationAttribute<org.mapstruct.ap.descriptor.TypeDescriptor> config()",
-      "org.mapstruct.ap.langmodel.AnnotationAttribute<org.mapstruct.ap.descriptor.TypeDescriptor> mappingControl()",
-      "org.mapstruct.ap.langmodel.AnnotationAttribute<org.mapstruct.ap.descriptor.TypeDescriptor> subclassExhaustiveException()",
-      "org.mapstruct.ap.langmodel.AnnotationAttribute<org.mapstruct.ap.descriptor.TypeDescriptor> unexpectedValueMappingException()",
-      "org.mapstruct.ap.langmodel.AnnotationAttribute<org.mapstruct.ap.internal.gem.BuilderGem> builder()"
+      "java.util.Optional<org.mapstruct.ap.internal.langmodel.MapperConfigAnnotation> mapperConfig()",
+      "org.mapstruct.ap.internal.langmodel.AnnotationAttribute<java.lang.Boolean> disableSubMappingMethodsGeneration()",
+      "org.mapstruct.ap.internal.langmodel.AnnotationAttribute<java.lang.Boolean> suppressTimestampInGenerated()",
+      "org.mapstruct.ap.internal.langmodel.AnnotationAttribute<java.lang.String> collectionMappingStrategy()",
+      "org.mapstruct.ap.internal.langmodel.AnnotationAttribute<java.lang.String> componentModel()",
+      "org.mapstruct.ap.internal.langmodel.AnnotationAttribute<java.lang.String> implementationName()",
+      "org.mapstruct.ap.internal.langmodel.AnnotationAttribute<java.lang.String> implementationPackage()",
+      "org.mapstruct.ap.internal.langmodel.AnnotationAttribute<java.lang.String> injectionStrategy()",
+      "org.mapstruct.ap.internal.langmodel.AnnotationAttribute<java.lang.String> mappingInheritanceStrategy()",
+      "org.mapstruct.ap.internal.langmodel.AnnotationAttribute<java.lang.String> nullValueCheckStrategy()",
+      "org.mapstruct.ap.internal.langmodel.AnnotationAttribute<java.lang.String> nullValueIterableMappingStrategy()",
+      "org.mapstruct.ap.internal.langmodel.AnnotationAttribute<java.lang.String> nullValueMapMappingStrategy()",
+      "org.mapstruct.ap.internal.langmodel.AnnotationAttribute<java.lang.String> nullValueMappingStrategy()",
+      "org.mapstruct.ap.internal.langmodel.AnnotationAttribute<java.lang.String> nullValuePropertyMappingStrategy()",
+      "org.mapstruct.ap.internal.langmodel.AnnotationAttribute<java.lang.String> subclassExhaustiveStrategy()",
+      "org.mapstruct.ap.internal.langmodel.AnnotationAttribute<java.lang.String> typeConversionPolicy()",
+      "org.mapstruct.ap.internal.langmodel.AnnotationAttribute<java.lang.String> unmappedSourcePolicy()",
+      "org.mapstruct.ap.internal.langmodel.AnnotationAttribute<java.lang.String> unmappedTargetPolicy()",
+      "org.mapstruct.ap.internal.langmodel.AnnotationAttribute<java.util.List<org.mapstruct.ap.internal.langmodel.descriptor.TypeDescriptor>> imports()",
+      "org.mapstruct.ap.internal.langmodel.AnnotationAttribute<java.util.List<org.mapstruct.ap.internal.langmodel.descriptor.TypeDescriptor>> uses()",
+      "org.mapstruct.ap.internal.langmodel.AnnotationAttribute<org.mapstruct.ap.internal.gem.BuilderGem> builder()",
+      "org.mapstruct.ap.internal.langmodel.AnnotationAttribute<org.mapstruct.ap.internal.langmodel.descriptor.TypeDescriptor> config()",
+      "org.mapstruct.ap.internal.langmodel.AnnotationAttribute<org.mapstruct.ap.internal.langmodel.descriptor.TypeDescriptor> mappingControl()",
+      "org.mapstruct.ap.internal.langmodel.AnnotationAttribute<org.mapstruct.ap.internal.langmodel.descriptor.TypeDescriptor> subclassExhaustiveException()",
+      "org.mapstruct.ap.internal.langmodel.AnnotationAttribute<org.mapstruct.ap.internal.langmodel.descriptor.TypeDescriptor> unexpectedValueMappingException()",
+      "org.mapstruct.ap.internal.langmodel.descriptor.AnnotationDescriptor descriptor()"
     ]
   },
-  "org.mapstruct.ap.langmodel.MapperConfigAnnotation": {
+  "org.mapstruct.ap.internal.langmodel.MapperConfigAnnotation": {
     "kind": "interface",
     "interfaces": [],
     "methods": [
-      "org.mapstruct.ap.descriptor.AnnotationDescriptor descriptor()",
-      "org.mapstruct.ap.langmodel.AnnotationAttribute<java.lang.Boolean> disableSubMappingMethodsGeneration()",
-      "org.mapstruct.ap.langmodel.AnnotationAttribute<java.lang.Boolean> suppressTimestampInGenerated()",
-      "org.mapstruct.ap.langmodel.AnnotationAttribute<java.lang.String> collectionMappingStrategy()",
-      "org.mapstruct.ap.langmodel.AnnotationAttribute<java.lang.String> componentModel()",
-      "org.mapstruct.ap.langmodel.AnnotationAttribute<java.lang.String> implementationName()",
-      "org.mapstruct.ap.langmodel.AnnotationAttribute<java.lang.String> implementationPackage()",
-      "org.mapstruct.ap.langmodel.AnnotationAttribute<java.lang.String> injectionStrategy()",
-      "org.mapstruct.ap.langmodel.AnnotationAttribute<java.lang.String> mappingInheritanceStrategy()",
-      "org.mapstruct.ap.langmodel.AnnotationAttribute<java.lang.String> nullValueCheckStrategy()",
-      "org.mapstruct.ap.langmodel.AnnotationAttribute<java.lang.String> nullValueIterableMappingStrategy()",
-      "org.mapstruct.ap.langmodel.AnnotationAttribute<java.lang.String> nullValueMapMappingStrategy()",
-      "org.mapstruct.ap.langmodel.AnnotationAttribute<java.lang.String> nullValueMappingStrategy()",
-      "org.mapstruct.ap.langmodel.AnnotationAttribute<java.lang.String> nullValuePropertyMappingStrategy()",
-      "org.mapstruct.ap.langmodel.AnnotationAttribute<java.lang.String> subclassExhaustiveStrategy()",
-      "org.mapstruct.ap.langmodel.AnnotationAttribute<java.lang.String> typeConversionPolicy()",
-      "org.mapstruct.ap.langmodel.AnnotationAttribute<java.lang.String> unmappedSourcePolicy()",
-      "org.mapstruct.ap.langmodel.AnnotationAttribute<java.lang.String> unmappedTargetPolicy()",
-      "org.mapstruct.ap.langmodel.AnnotationAttribute<java.util.List<org.mapstruct.ap.descriptor.TypeDescriptor>> imports()",
-      "org.mapstruct.ap.langmodel.AnnotationAttribute<java.util.List<org.mapstruct.ap.descriptor.TypeDescriptor>> uses()",
-      "org.mapstruct.ap.langmodel.AnnotationAttribute<org.mapstruct.ap.descriptor.TypeDescriptor> mappingControl()",
-      "org.mapstruct.ap.langmodel.AnnotationAttribute<org.mapstruct.ap.descriptor.TypeDescriptor> subclassExhaustiveException()",
-      "org.mapstruct.ap.langmodel.AnnotationAttribute<org.mapstruct.ap.descriptor.TypeDescriptor> unexpectedValueMappingException()",
-      "org.mapstruct.ap.langmodel.AnnotationAttribute<org.mapstruct.ap.internal.gem.BuilderGem> builder()"
+      "org.mapstruct.ap.internal.langmodel.AnnotationAttribute<java.lang.Boolean> disableSubMappingMethodsGeneration()",
+      "org.mapstruct.ap.internal.langmodel.AnnotationAttribute<java.lang.Boolean> suppressTimestampInGenerated()",
+      "org.mapstruct.ap.internal.langmodel.AnnotationAttribute<java.lang.String> collectionMappingStrategy()",
+      "org.mapstruct.ap.internal.langmodel.AnnotationAttribute<java.lang.String> componentModel()",
+      "org.mapstruct.ap.internal.langmodel.AnnotationAttribute<java.lang.String> implementationName()",
+      "org.mapstruct.ap.internal.langmodel.AnnotationAttribute<java.lang.String> implementationPackage()",
+      "org.mapstruct.ap.internal.langmodel.AnnotationAttribute<java.lang.String> injectionStrategy()",
+      "org.mapstruct.ap.internal.langmodel.AnnotationAttribute<java.lang.String> mappingInheritanceStrategy()",
+      "org.mapstruct.ap.internal.langmodel.AnnotationAttribute<java.lang.String> nullValueCheckStrategy()",
+      "org.mapstruct.ap.internal.langmodel.AnnotationAttribute<java.lang.String> nullValueIterableMappingStrategy()",
+      "org.mapstruct.ap.internal.langmodel.AnnotationAttribute<java.lang.String> nullValueMapMappingStrategy()",
+      "org.mapstruct.ap.internal.langmodel.AnnotationAttribute<java.lang.String> nullValueMappingStrategy()",
+      "org.mapstruct.ap.internal.langmodel.AnnotationAttribute<java.lang.String> nullValuePropertyMappingStrategy()",
+      "org.mapstruct.ap.internal.langmodel.AnnotationAttribute<java.lang.String> subclassExhaustiveStrategy()",
+      "org.mapstruct.ap.internal.langmodel.AnnotationAttribute<java.lang.String> typeConversionPolicy()",
+      "org.mapstruct.ap.internal.langmodel.AnnotationAttribute<java.lang.String> unmappedSourcePolicy()",
+      "org.mapstruct.ap.internal.langmodel.AnnotationAttribute<java.lang.String> unmappedTargetPolicy()",
+      "org.mapstruct.ap.internal.langmodel.AnnotationAttribute<java.util.List<org.mapstruct.ap.internal.langmodel.descriptor.TypeDescriptor>> imports()",
+      "org.mapstruct.ap.internal.langmodel.AnnotationAttribute<java.util.List<org.mapstruct.ap.internal.langmodel.descriptor.TypeDescriptor>> uses()",
+      "org.mapstruct.ap.internal.langmodel.AnnotationAttribute<org.mapstruct.ap.internal.gem.BuilderGem> builder()",
+      "org.mapstruct.ap.internal.langmodel.AnnotationAttribute<org.mapstruct.ap.internal.langmodel.descriptor.TypeDescriptor> mappingControl()",
+      "org.mapstruct.ap.internal.langmodel.AnnotationAttribute<org.mapstruct.ap.internal.langmodel.descriptor.TypeDescriptor> subclassExhaustiveException()",
+      "org.mapstruct.ap.internal.langmodel.AnnotationAttribute<org.mapstruct.ap.internal.langmodel.descriptor.TypeDescriptor> unexpectedValueMappingException()",
+      "org.mapstruct.ap.internal.langmodel.descriptor.AnnotationDescriptor descriptor()"
     ]
   },
-  "org.mapstruct.ap.langmodel.MapperEntryPoint": {
+  "org.mapstruct.ap.internal.langmodel.MapperEntryPoint": {
     "kind": "interface",
     "interfaces": [],
     "methods": [
       "<T> java.util.Optional<T> unwrap(java.lang.Class<T>)",
       "org.mapstruct.ap.internal.version.VersionInformation versionInformation()",
-      "static org.mapstruct.ap.langmodel.MapperEntryPoint of(org.mapstruct.ap.internal.version.VersionInformation, java.lang.Object...)"
+      "static org.mapstruct.ap.internal.langmodel.MapperEntryPoint of(org.mapstruct.ap.internal.version.VersionInformation, java.lang.Object...)"
     ]
   },
-  "org.mapstruct.ap.langmodel.MapperEntryPoint$DefaultMapperEntryPoint": {
-    "kind": "class",
-    "interfaces": [
-      "org.mapstruct.ap.langmodel.MapperEntryPoint"
-    ],
-    "methods": [
-      "<T> java.util.Optional<T> unwrap(java.lang.Class<T>)",
-      "org.mapstruct.ap.internal.version.VersionInformation versionInformation()"
-    ]
-  },
-  "org.mapstruct.ap.langmodel.OptionalCapability": {
+  "org.mapstruct.ap.internal.langmodel.OptionalCapability": {
     "kind": "class",
     "typeParameters": [
       "T"
     ],
     "interfaces": [],
     "methods": [
-      "<U> org.mapstruct.ap.langmodel.OptionalCapability<U> flatMap(java.util.function.Function<? super T, org.mapstruct.ap.langmodel.OptionalCapability<U>>)",
-      "<U> org.mapstruct.ap.langmodel.OptionalCapability<U> map(java.util.function.Function<? super T, ? extends U>)",
       "<X extends java.lang.Throwable> T orElseThrow(java.util.function.Supplier<? extends X>) throws X",
       "T orElse(T)",
-      "T orElseGet(java.util.function.Supplier<? extends T>)",
-      "boolean isPresent()",
-      "java.lang.String toString()",
-      "java.util.Optional<T> toOptional()",
-      "org.mapstruct.ap.langmodel.OptionalCapability<T> filter(java.util.function.Predicate<? super T>)",
-      "static <T> org.mapstruct.ap.langmodel.OptionalCapability<T> empty()",
-      "static <T> org.mapstruct.ap.langmodel.OptionalCapability<T> of(T)",
-      "static <T> org.mapstruct.ap.langmodel.OptionalCapability<T> ofNullable(T)",
+      "static <T> org.mapstruct.ap.internal.langmodel.OptionalCapability<T> empty()",
+      "static <T> org.mapstruct.ap.internal.langmodel.OptionalCapability<T> of(T)",
       "void ifPresent(java.util.function.Consumer<? super T>)"
     ]
   },
-  "org.mapstruct.ap.langmodel.TypeIntrospector": {
+  "org.mapstruct.ap.internal.langmodel.TypeIntrospector": {
     "kind": "interface",
     "interfaces": [],
     "methods": [
-      "boolean overrides(org.mapstruct.ap.descriptor.ExecutableDescriptor, org.mapstruct.ap.descriptor.ExecutableDescriptor, org.mapstruct.ap.descriptor.TypeDescriptor)",
-      "java.util.List<org.mapstruct.ap.descriptor.ExecutableDescriptor> constructors(org.mapstruct.ap.descriptor.TypeDescriptor)",
-      "java.util.List<org.mapstruct.ap.descriptor.ExecutableDescriptor> enclosedExecutables(org.mapstruct.ap.descriptor.TypeDescriptor)",
-      "java.util.List<org.mapstruct.ap.descriptor.FieldDescriptor> enclosedFields(org.mapstruct.ap.descriptor.TypeDescriptor)",
-      "java.util.List<org.mapstruct.ap.descriptor.RecordComponentDescriptor> recordComponents(org.mapstruct.ap.descriptor.TypeDescriptor)",
-      "org.mapstruct.ap.descriptor.TypeDescriptor asMemberOf(org.mapstruct.ap.descriptor.TypeDescriptor, org.mapstruct.ap.descriptor.ElementDescriptor)",
-      "org.mapstruct.ap.langmodel.ExecutableSignature executable(org.mapstruct.ap.descriptor.ExecutableDescriptor)",
-      "org.mapstruct.ap.langmodel.ExecutableSignature resolveExecutable(org.mapstruct.ap.descriptor.TypeDescriptor, org.mapstruct.ap.descriptor.ExecutableDescriptor)",
-      "org.mapstruct.ap.langmodel.TypeIntrospector$Metadata describe(org.mapstruct.ap.descriptor.TypeDescriptor)"
+      "boolean overrides(org.mapstruct.ap.internal.langmodel.descriptor.ExecutableDescriptor, org.mapstruct.ap.internal.langmodel.descriptor.ExecutableDescriptor, org.mapstruct.ap.internal.langmodel.descriptor.TypeDescriptor)",
+      "java.util.List<org.mapstruct.ap.internal.langmodel.descriptor.ExecutableDescriptor> constructors(org.mapstruct.ap.internal.langmodel.descriptor.TypeDescriptor)",
+      "java.util.List<org.mapstruct.ap.internal.langmodel.descriptor.ExecutableDescriptor> enclosedExecutables(org.mapstruct.ap.internal.langmodel.descriptor.TypeDescriptor)",
+      "java.util.List<org.mapstruct.ap.internal.langmodel.descriptor.FieldDescriptor> enclosedFields(org.mapstruct.ap.internal.langmodel.descriptor.TypeDescriptor)",
+      "java.util.List<org.mapstruct.ap.internal.langmodel.descriptor.RecordComponentDescriptor> recordComponents(org.mapstruct.ap.internal.langmodel.descriptor.TypeDescriptor)",
+      "org.mapstruct.ap.internal.langmodel.ExecutableSignature executable(org.mapstruct.ap.internal.langmodel.descriptor.ExecutableDescriptor)",
+      "org.mapstruct.ap.internal.langmodel.ExecutableSignature resolveExecutable(org.mapstruct.ap.internal.langmodel.descriptor.TypeDescriptor, org.mapstruct.ap.internal.langmodel.descriptor.ExecutableDescriptor)",
+      "org.mapstruct.ap.internal.langmodel.TypeIntrospector$Metadata describe(org.mapstruct.ap.internal.langmodel.descriptor.TypeDescriptor)",
+      "org.mapstruct.ap.internal.langmodel.descriptor.TypeDescriptor asMemberOf(org.mapstruct.ap.internal.langmodel.descriptor.TypeDescriptor, org.mapstruct.ap.internal.langmodel.descriptor.ElementDescriptor)"
     ]
   },
-  "org.mapstruct.ap.langmodel.TypeIntrospector$Metadata": {
+  "org.mapstruct.ap.internal.langmodel.TypeIntrospector$Metadata": {
     "kind": "class",
     "interfaces": [],
     "methods": [
@@ -230,111 +205,110 @@
       "boolean isRecordType()",
       "boolean isSealedType()",
       "java.util.List<java.lang.String> enumConstants()",
-      "java.util.List<org.mapstruct.ap.descriptor.TypeDescriptor> permittedSubclasses()",
+      "java.util.List<org.mapstruct.ap.internal.langmodel.descriptor.TypeDescriptor> permittedSubclasses()",
       "java.util.Optional<java.lang.String> packageName()",
       "java.util.Optional<java.lang.String> qualifiedName()",
       "java.util.Optional<java.lang.String> simpleName()",
-      "java.util.Optional<org.mapstruct.ap.descriptor.TypeDescriptor> baseComponentType()",
-      "java.util.Optional<org.mapstruct.ap.descriptor.TypeDescriptor> componentType()",
-      "java.util.Optional<org.mapstruct.ap.descriptor.TypeDescriptor> topLevelType()",
-      "java.util.Optional<org.mapstruct.ap.descriptor.TypeElementDescriptor> typeElement()",
-      "org.mapstruct.ap.descriptor.TypeDescriptor descriptor()"
+      "java.util.Optional<org.mapstruct.ap.internal.langmodel.descriptor.TypeDescriptor> baseComponentType()",
+      "java.util.Optional<org.mapstruct.ap.internal.langmodel.descriptor.TypeDescriptor> componentType()",
+      "java.util.Optional<org.mapstruct.ap.internal.langmodel.descriptor.TypeDescriptor> topLevelType()",
+      "java.util.Optional<org.mapstruct.ap.internal.langmodel.descriptor.TypeElementDescriptor> typeElement()",
+      "org.mapstruct.ap.internal.langmodel.descriptor.TypeDescriptor descriptor()"
     ],
     "constructors": [
-      "Metadata(org.mapstruct.ap.descriptor.TypeDescriptor, org.mapstruct.ap.descriptor.TypeElementDescriptor, org.mapstruct.ap.descriptor.TypeDescriptor, org.mapstruct.ap.descriptor.TypeDescriptor, org.mapstruct.ap.langmodel.TypeIntrospector$Metadata$Names, org.mapstruct.ap.langmodel.TypeIntrospector$Metadata$TypeFlags, java.util.List<org.mapstruct.ap.descriptor.TypeDescriptor>, java.util.List<java.lang.String>, org.mapstruct.ap.descriptor.TypeDescriptor)"
+      "Metadata(org.mapstruct.ap.internal.langmodel.descriptor.TypeDescriptor, org.mapstruct.ap.internal.langmodel.descriptor.TypeElementDescriptor, org.mapstruct.ap.internal.langmodel.descriptor.TypeDescriptor, org.mapstruct.ap.internal.langmodel.descriptor.TypeDescriptor, org.mapstruct.ap.internal.langmodel.TypeIntrospector$Metadata$Names, org.mapstruct.ap.internal.langmodel.TypeIntrospector$Metadata$TypeFlags, java.util.List<org.mapstruct.ap.internal.langmodel.descriptor.TypeDescriptor>, java.util.List<java.lang.String>, org.mapstruct.ap.internal.langmodel.descriptor.TypeDescriptor)"
     ]
   },
-  "org.mapstruct.ap.langmodel.TypeIntrospector$Metadata$Names": {
+  "org.mapstruct.ap.internal.langmodel.TypeIntrospector$Metadata$Names": {
     "kind": "class",
     "interfaces": [],
     "methods": [
-      "static org.mapstruct.ap.langmodel.TypeIntrospector$Metadata$Names of(java.lang.String, java.lang.String, java.lang.String)"
+      "static org.mapstruct.ap.internal.langmodel.TypeIntrospector$Metadata$Names of(java.lang.String, java.lang.String, java.lang.String)"
     ]
   },
-  "org.mapstruct.ap.langmodel.TypeIntrospector$Metadata$TypeFlags": {
+  "org.mapstruct.ap.internal.langmodel.TypeIntrospector$Metadata$TypeFlags": {
     "kind": "class",
     "interfaces": [],
     "methods": [
-      "static org.mapstruct.ap.langmodel.TypeIntrospector$Metadata$TypeFlags of(boolean, boolean, boolean, boolean)"
+      "static org.mapstruct.ap.internal.langmodel.TypeIntrospector$Metadata$TypeFlags of(boolean, boolean, boolean, boolean)"
     ]
   },
-  "org.mapstruct.ap.langmodel.api.BuilderIntrospectorContext": {
+  "org.mapstruct.ap.internal.langmodel.api.BuilderIntrospectorContext": {
     "kind": "interface",
     "interfaces": [],
     "methods": []
   },
-  "org.mapstruct.ap.langmodel.api.DescriptorUnwrapper": {
+  "org.mapstruct.ap.internal.langmodel.api.DescriptorUnwrapper": {
     "kind": "interface",
     "interfaces": [],
     "methods": [
-      "<NATIVE> java.util.Optional<NATIVE> annotation(org.mapstruct.ap.descriptor.AnnotationDescriptor, java.lang.Class<NATIVE>)",
-      "<NATIVE> java.util.Optional<NATIVE> annotationValue(org.mapstruct.ap.descriptor.AnnotationValueDescriptor, java.lang.Class<NATIVE>)",
-      "<NATIVE> java.util.Optional<NATIVE> element(org.mapstruct.ap.descriptor.ElementDescriptor, java.lang.Class<NATIVE>)",
-      "<NATIVE> java.util.Optional<NATIVE> executable(org.mapstruct.ap.descriptor.ExecutableDescriptor, java.lang.Class<NATIVE>)",
-      "<NATIVE> java.util.Optional<NATIVE> type(org.mapstruct.ap.descriptor.TypeDescriptor, java.lang.Class<NATIVE>)",
-      "<NATIVE> java.util.Optional<NATIVE> type(org.mapstruct.ap.descriptor.TypeElementDescriptor, java.lang.Class<NATIVE>)"
+      "<NATIVE> java.util.Optional<NATIVE> annotation(org.mapstruct.ap.internal.langmodel.descriptor.AnnotationDescriptor, java.lang.Class<NATIVE>)",
+      "<NATIVE> java.util.Optional<NATIVE> annotationValue(org.mapstruct.ap.internal.langmodel.descriptor.AnnotationValueDescriptor, java.lang.Class<NATIVE>)",
+      "<NATIVE> java.util.Optional<NATIVE> element(org.mapstruct.ap.internal.langmodel.descriptor.ElementDescriptor, java.lang.Class<NATIVE>)",
+      "<NATIVE> java.util.Optional<NATIVE> type(org.mapstruct.ap.internal.langmodel.descriptor.TypeDescriptor, java.lang.Class<NATIVE>)",
+      "<NATIVE> java.util.Optional<NATIVE> type(org.mapstruct.ap.internal.langmodel.descriptor.TypeElementDescriptor, java.lang.Class<NATIVE>)"
     ]
   },
-  "org.mapstruct.ap.langmodel.api.EnumMappingSupport": {
+  "org.mapstruct.ap.internal.langmodel.api.EnumMappingSupport": {
     "kind": "interface",
     "interfaces": [],
     "methods": [
-      "java.lang.String defaultNullEnumConstant(org.mapstruct.ap.descriptor.TypeDescriptor)",
-      "java.lang.String enumConstant(org.mapstruct.ap.descriptor.TypeDescriptor, java.lang.String)",
-      "org.mapstruct.ap.descriptor.TypeDescriptor unexpectedValueMappingExceptionType()"
+      "java.lang.String defaultNullEnumConstant(org.mapstruct.ap.internal.langmodel.descriptor.TypeDescriptor)",
+      "java.lang.String enumConstant(org.mapstruct.ap.internal.langmodel.descriptor.TypeDescriptor, java.lang.String)",
+      "org.mapstruct.ap.internal.langmodel.descriptor.TypeDescriptor unexpectedValueMappingExceptionType()"
     ]
   },
-  "org.mapstruct.ap.langmodel.api.LangElements": {
+  "org.mapstruct.ap.internal.langmodel.api.LangElements": {
     "kind": "interface",
     "interfaces": [],
     "methods": [
-      "boolean overrides(org.mapstruct.ap.descriptor.ExecutableDescriptor, org.mapstruct.ap.descriptor.ExecutableDescriptor, org.mapstruct.ap.descriptor.TypeElementDescriptor)",
-      "java.util.List<org.mapstruct.ap.descriptor.AnnotationDescriptor> annotationMirrors(org.mapstruct.ap.descriptor.ElementDescriptor)",
-      "java.util.List<org.mapstruct.ap.descriptor.ExecutableDescriptor> constructors(org.mapstruct.ap.descriptor.TypeElementDescriptor)",
-      "java.util.List<org.mapstruct.ap.descriptor.ExecutableDescriptor> enclosedExecutables(org.mapstruct.ap.descriptor.TypeElementDescriptor)",
-      "java.util.List<org.mapstruct.ap.descriptor.FieldDescriptor> enclosedFields(org.mapstruct.ap.descriptor.TypeElementDescriptor)",
-      "java.util.List<org.mapstruct.ap.descriptor.RecordComponentDescriptor> recordComponents(org.mapstruct.ap.descriptor.TypeElementDescriptor)",
-      "org.mapstruct.ap.descriptor.TypeElementDescriptor typeElement(java.lang.String)",
-      "org.mapstruct.ap.langmodel.api.PackageDescriptor packageOf(org.mapstruct.ap.descriptor.ElementDescriptor)"
+      "boolean overrides(org.mapstruct.ap.internal.langmodel.descriptor.ExecutableDescriptor, org.mapstruct.ap.internal.langmodel.descriptor.ExecutableDescriptor, org.mapstruct.ap.internal.langmodel.descriptor.TypeElementDescriptor)",
+      "java.util.List<org.mapstruct.ap.internal.langmodel.descriptor.AnnotationDescriptor> annotationMirrors(org.mapstruct.ap.internal.langmodel.descriptor.ElementDescriptor)",
+      "java.util.List<org.mapstruct.ap.internal.langmodel.descriptor.ExecutableDescriptor> constructors(org.mapstruct.ap.internal.langmodel.descriptor.TypeElementDescriptor)",
+      "java.util.List<org.mapstruct.ap.internal.langmodel.descriptor.ExecutableDescriptor> enclosedExecutables(org.mapstruct.ap.internal.langmodel.descriptor.TypeElementDescriptor)",
+      "java.util.List<org.mapstruct.ap.internal.langmodel.descriptor.FieldDescriptor> enclosedFields(org.mapstruct.ap.internal.langmodel.descriptor.TypeElementDescriptor)",
+      "java.util.List<org.mapstruct.ap.internal.langmodel.descriptor.RecordComponentDescriptor> recordComponents(org.mapstruct.ap.internal.langmodel.descriptor.TypeElementDescriptor)",
+      "org.mapstruct.ap.internal.langmodel.api.PackageDescriptor packageOf(org.mapstruct.ap.internal.langmodel.descriptor.ElementDescriptor)",
+      "org.mapstruct.ap.internal.langmodel.descriptor.TypeElementDescriptor typeElement(java.lang.String)"
     ]
   },
-  "org.mapstruct.ap.langmodel.api.LangTypes": {
+  "org.mapstruct.ap.internal.langmodel.api.LangTypes": {
     "kind": "interface",
     "interfaces": [],
     "methods": [
-      "boolean contains(org.mapstruct.ap.descriptor.TypeDescriptor, org.mapstruct.ap.descriptor.TypeDescriptor)",
-      "boolean isAssignable(org.mapstruct.ap.descriptor.TypeDescriptor, org.mapstruct.ap.descriptor.TypeDescriptor)",
-      "boolean isSameType(org.mapstruct.ap.descriptor.TypeDescriptor, org.mapstruct.ap.descriptor.TypeDescriptor)",
-      "boolean isSubtype(org.mapstruct.ap.descriptor.TypeDescriptor, org.mapstruct.ap.descriptor.TypeDescriptor)",
-      "boolean isSubtypeErased(org.mapstruct.ap.descriptor.TypeDescriptor, org.mapstruct.ap.descriptor.TypeDescriptor)",
-      "java.util.List<org.mapstruct.ap.descriptor.TypeDescriptor> directSupertypes(org.mapstruct.ap.descriptor.TypeDescriptor)",
-      "org.mapstruct.ap.descriptor.TypeDescriptor asMemberOf(org.mapstruct.ap.descriptor.TypeDescriptor, org.mapstruct.ap.descriptor.ElementDescriptor)",
-      "org.mapstruct.ap.descriptor.TypeDescriptor boxed(org.mapstruct.ap.descriptor.TypeDescriptor)",
-      "org.mapstruct.ap.descriptor.TypeDescriptor declaredType(org.mapstruct.ap.descriptor.TypeElementDescriptor, java.util.List<org.mapstruct.ap.descriptor.TypeDescriptor>)",
-      "org.mapstruct.ap.descriptor.TypeDescriptor erasure(org.mapstruct.ap.descriptor.TypeDescriptor)",
-      "org.mapstruct.ap.descriptor.TypeDescriptor primitive(java.lang.String)",
-      "org.mapstruct.ap.descriptor.TypeDescriptor unboxed(org.mapstruct.ap.descriptor.TypeDescriptor)",
-      "org.mapstruct.ap.descriptor.TypeDescriptor voidType()",
-      "org.mapstruct.ap.descriptor.TypeElementDescriptor asElement(org.mapstruct.ap.descriptor.TypeDescriptor)"
+      "boolean contains(org.mapstruct.ap.internal.langmodel.descriptor.TypeDescriptor, org.mapstruct.ap.internal.langmodel.descriptor.TypeDescriptor)",
+      "boolean isAssignable(org.mapstruct.ap.internal.langmodel.descriptor.TypeDescriptor, org.mapstruct.ap.internal.langmodel.descriptor.TypeDescriptor)",
+      "boolean isSameType(org.mapstruct.ap.internal.langmodel.descriptor.TypeDescriptor, org.mapstruct.ap.internal.langmodel.descriptor.TypeDescriptor)",
+      "boolean isSubtype(org.mapstruct.ap.internal.langmodel.descriptor.TypeDescriptor, org.mapstruct.ap.internal.langmodel.descriptor.TypeDescriptor)",
+      "boolean isSubtypeErased(org.mapstruct.ap.internal.langmodel.descriptor.TypeDescriptor, org.mapstruct.ap.internal.langmodel.descriptor.TypeDescriptor)",
+      "java.util.List<org.mapstruct.ap.internal.langmodel.descriptor.TypeDescriptor> directSupertypes(org.mapstruct.ap.internal.langmodel.descriptor.TypeDescriptor)",
+      "org.mapstruct.ap.internal.langmodel.descriptor.TypeDescriptor asMemberOf(org.mapstruct.ap.internal.langmodel.descriptor.TypeDescriptor, org.mapstruct.ap.internal.langmodel.descriptor.ElementDescriptor)",
+      "org.mapstruct.ap.internal.langmodel.descriptor.TypeDescriptor boxed(org.mapstruct.ap.internal.langmodel.descriptor.TypeDescriptor)",
+      "org.mapstruct.ap.internal.langmodel.descriptor.TypeDescriptor declaredType(org.mapstruct.ap.internal.langmodel.descriptor.TypeElementDescriptor, java.util.List<org.mapstruct.ap.internal.langmodel.descriptor.TypeDescriptor>)",
+      "org.mapstruct.ap.internal.langmodel.descriptor.TypeDescriptor erasure(org.mapstruct.ap.internal.langmodel.descriptor.TypeDescriptor)",
+      "org.mapstruct.ap.internal.langmodel.descriptor.TypeDescriptor primitive(java.lang.String)",
+      "org.mapstruct.ap.internal.langmodel.descriptor.TypeDescriptor unboxed(org.mapstruct.ap.internal.langmodel.descriptor.TypeDescriptor)",
+      "org.mapstruct.ap.internal.langmodel.descriptor.TypeDescriptor voidType()",
+      "org.mapstruct.ap.internal.langmodel.descriptor.TypeElementDescriptor asElement(org.mapstruct.ap.internal.langmodel.descriptor.TypeDescriptor)"
     ]
   },
-  "org.mapstruct.ap.langmodel.api.MappingExclusionSupport": {
+  "org.mapstruct.ap.internal.langmodel.api.MappingExclusionSupport": {
     "kind": "interface",
     "interfaces": [],
     "methods": [
-      "boolean isExcluded(org.mapstruct.ap.descriptor.TypeDescriptor)"
+      "boolean isExcluded(org.mapstruct.ap.internal.langmodel.descriptor.TypeDescriptor)"
     ]
   },
-  "org.mapstruct.ap.langmodel.api.PackageDescriptor": {
+  "org.mapstruct.ap.internal.langmodel.api.PackageDescriptor": {
     "kind": "interface",
     "interfaces": [
-      "org.mapstruct.ap.descriptor.ElementDescriptor"
+      "org.mapstruct.ap.internal.langmodel.descriptor.ElementDescriptor"
     ],
     "methods": [
       "java.lang.String qualifiedName()"
     ]
   },
-  "org.mapstruct.ap.langmodel.codegen.GeneratedFileSink": {
+  "org.mapstruct.ap.internal.langmodel.codegen.GeneratedFileSink": {
     "kind": "interface",
     "interfaces": [],
     "methods": [
@@ -342,87 +316,87 @@
       "java.io.Writer createResourceWriter(java.lang.String, java.util.List<java.lang.Object>) throws java.io.IOException"
     ]
   },
-  "org.mapstruct.ap.descriptor.AnnotationDescriptor": {
+  "org.mapstruct.ap.internal.langmodel.descriptor.AnnotationDescriptor": {
     "kind": "interface",
     "interfaces": [],
     "methods": [
       "default boolean hasValue(java.lang.String)",
       "java.lang.Object unwrap()",
-      "java.util.Map<java.lang.String, org.mapstruct.ap.descriptor.AnnotationValueDescriptor> elementValues()",
-      "org.mapstruct.ap.descriptor.TypeElementDescriptor annotationType()"
+      "java.util.Map<java.lang.String, org.mapstruct.ap.internal.langmodel.descriptor.AnnotationValueDescriptor> elementValues()",
+      "org.mapstruct.ap.internal.langmodel.descriptor.TypeElementDescriptor annotationType()"
     ]
   },
-  "org.mapstruct.ap.descriptor.AnnotationValueDescriptor": {
+  "org.mapstruct.ap.internal.langmodel.descriptor.AnnotationValueDescriptor": {
     "kind": "interface",
     "interfaces": [],
     "methods": [
-      "default java.util.List<org.mapstruct.ap.descriptor.AnnotationValueDescriptor> asList()",
-      "default org.mapstruct.ap.descriptor.AnnotationDescriptor asAnnotation()",
-      "default org.mapstruct.ap.descriptor.TypeDescriptor asType()",
+      "default java.util.List<org.mapstruct.ap.internal.langmodel.descriptor.AnnotationValueDescriptor> asList()",
+      "default org.mapstruct.ap.internal.langmodel.descriptor.AnnotationDescriptor asAnnotation()",
+      "default org.mapstruct.ap.internal.langmodel.descriptor.TypeDescriptor asType()",
       "java.lang.Object unwrap()",
       "java.lang.Object value()"
     ]
   },
-  "org.mapstruct.ap.descriptor.BuilderDescriptor": {
+  "org.mapstruct.ap.internal.langmodel.descriptor.BuilderDescriptor": {
     "kind": "class",
     "interfaces": [],
     "methods": [
-      "java.util.Collection<org.mapstruct.ap.descriptor.ExecutableDescriptor> buildMethods()",
-      "org.mapstruct.ap.descriptor.ExecutableDescriptor creationMethod()"
+      "java.util.Collection<org.mapstruct.ap.internal.langmodel.descriptor.ExecutableDescriptor> buildMethods()",
+      "org.mapstruct.ap.internal.langmodel.descriptor.ExecutableDescriptor creationMethod()"
     ],
     "constructors": [
-      "BuilderDescriptor(org.mapstruct.ap.descriptor.ExecutableDescriptor, java.util.Collection<org.mapstruct.ap.descriptor.ExecutableDescriptor>)"
+      "BuilderDescriptor(org.mapstruct.ap.internal.langmodel.descriptor.ExecutableDescriptor, java.util.Collection<org.mapstruct.ap.internal.langmodel.descriptor.ExecutableDescriptor>)"
     ]
   },
-  "org.mapstruct.ap.descriptor.ElementDescriptor": {
+  "org.mapstruct.ap.internal.langmodel.descriptor.ElementDescriptor": {
     "kind": "interface",
     "interfaces": [
-      "java.lang.Comparable<org.mapstruct.ap.descriptor.ElementDescriptor>"
+      "java.lang.Comparable<org.mapstruct.ap.internal.langmodel.descriptor.ElementDescriptor>"
     ],
     "methods": [
-      "default int compareTo(org.mapstruct.ap.descriptor.ElementDescriptor)",
+      "default int compareTo(org.mapstruct.ap.internal.langmodel.descriptor.ElementDescriptor)",
       "java.lang.Object unwrap()",
       "java.lang.String id()",
-      "java.util.Optional<org.mapstruct.ap.descriptor.ElementDescriptor> enclosingElement()",
-      "java.util.Set<org.mapstruct.ap.descriptor.LangModifier> modifiers()",
-      "org.mapstruct.ap.descriptor.LangElementKind kind()",
-      "org.mapstruct.ap.descriptor.NameDescriptor simpleName()",
-      "org.mapstruct.ap.descriptor.TypeDescriptor asType()"
+      "java.util.Optional<org.mapstruct.ap.internal.langmodel.descriptor.ElementDescriptor> enclosingElement()",
+      "java.util.Set<org.mapstruct.ap.internal.langmodel.descriptor.LangModifier> modifiers()",
+      "org.mapstruct.ap.internal.langmodel.descriptor.LangElementKind kind()",
+      "org.mapstruct.ap.internal.langmodel.descriptor.NameDescriptor simpleName()",
+      "org.mapstruct.ap.internal.langmodel.descriptor.TypeDescriptor asType()"
     ]
   },
-  "org.mapstruct.ap.descriptor.ExecutableDescriptor": {
+  "org.mapstruct.ap.internal.langmodel.descriptor.ExecutableDescriptor": {
     "kind": "interface",
     "interfaces": [
-      "org.mapstruct.ap.descriptor.ElementDescriptor"
+      "org.mapstruct.ap.internal.langmodel.descriptor.ElementDescriptor"
     ],
     "methods": [
       "boolean isDefault()",
       "boolean isVarArgs()",
-      "java.util.List<org.mapstruct.ap.descriptor.ParameterDescriptor> parameters()",
-      "java.util.List<org.mapstruct.ap.descriptor.TypeDescriptor> thrownTypes()",
-      "java.util.List<org.mapstruct.ap.descriptor.TypeDescriptor> typeParameters()",
-      "org.mapstruct.ap.descriptor.AnnotationValueDescriptor defaultValue()",
-      "org.mapstruct.ap.descriptor.TypeDescriptor returnType()"
+      "java.util.List<org.mapstruct.ap.internal.langmodel.descriptor.ParameterDescriptor> parameters()",
+      "java.util.List<org.mapstruct.ap.internal.langmodel.descriptor.TypeDescriptor> thrownTypes()",
+      "java.util.List<org.mapstruct.ap.internal.langmodel.descriptor.TypeDescriptor> typeParameters()",
+      "org.mapstruct.ap.internal.langmodel.descriptor.AnnotationValueDescriptor defaultValue()",
+      "org.mapstruct.ap.internal.langmodel.descriptor.TypeDescriptor returnType()"
     ]
   },
-  "org.mapstruct.ap.descriptor.FieldDescriptor": {
+  "org.mapstruct.ap.internal.langmodel.descriptor.FieldDescriptor": {
     "kind": "interface",
     "interfaces": [
-      "org.mapstruct.ap.descriptor.ElementDescriptor"
+      "org.mapstruct.ap.internal.langmodel.descriptor.ElementDescriptor"
     ],
     "methods": [
       "boolean isFinal()",
       "boolean isStatic()",
-      "java.util.List<org.mapstruct.ap.descriptor.AnnotationDescriptor> annotations()",
-      "org.mapstruct.ap.descriptor.TypeDescriptor fieldType()"
+      "java.util.List<org.mapstruct.ap.internal.langmodel.descriptor.AnnotationDescriptor> annotations()",
+      "org.mapstruct.ap.internal.langmodel.descriptor.TypeDescriptor fieldType()"
     ]
   },
-  "org.mapstruct.ap.descriptor.LangElementKind": {
+  "org.mapstruct.ap.internal.langmodel.descriptor.LangElementKind": {
     "kind": "enum",
     "interfaces": [],
     "methods": [
-      "static org.mapstruct.ap.descriptor.LangElementKind valueOf(java.lang.String)",
-      "static org.mapstruct.ap.descriptor.LangElementKind[] values()"
+      "static org.mapstruct.ap.internal.langmodel.descriptor.LangElementKind valueOf(java.lang.String)",
+      "static org.mapstruct.ap.internal.langmodel.descriptor.LangElementKind[] values()"
     ],
     "enumConstants": [
       "ANNOTATION_TYPE",
@@ -439,12 +413,12 @@
       "RECORD_COMPONENT"
     ]
   },
-  "org.mapstruct.ap.descriptor.LangModifier": {
+  "org.mapstruct.ap.internal.langmodel.descriptor.LangModifier": {
     "kind": "enum",
     "interfaces": [],
     "methods": [
-      "static org.mapstruct.ap.descriptor.LangModifier valueOf(java.lang.String)",
-      "static org.mapstruct.ap.descriptor.LangModifier[] values()"
+      "static org.mapstruct.ap.internal.langmodel.descriptor.LangModifier valueOf(java.lang.String)",
+      "static org.mapstruct.ap.internal.langmodel.descriptor.LangModifier[] values()"
     ],
     "enumConstants": [
       "ABSTRACT",
@@ -456,12 +430,12 @@
       "STATIC"
     ]
   },
-  "org.mapstruct.ap.descriptor.LangTypeKind": {
+  "org.mapstruct.ap.internal.langmodel.descriptor.LangTypeKind": {
     "kind": "enum",
     "interfaces": [],
     "methods": [
-      "static org.mapstruct.ap.descriptor.LangTypeKind valueOf(java.lang.String)",
-      "static org.mapstruct.ap.descriptor.LangTypeKind[] values()"
+      "static org.mapstruct.ap.internal.langmodel.descriptor.LangTypeKind valueOf(java.lang.String)",
+      "static org.mapstruct.ap.internal.langmodel.descriptor.LangTypeKind[] values()"
     ],
     "enumConstants": [
       "ARRAY",
@@ -474,7 +448,7 @@
       "WILDCARD"
     ]
   },
-  "org.mapstruct.ap.descriptor.NameDescriptor": {
+  "org.mapstruct.ap.internal.langmodel.descriptor.NameDescriptor": {
     "kind": "interface",
     "interfaces": [],
     "methods": [
@@ -482,67 +456,67 @@
       "java.lang.String content()"
     ]
   },
-  "org.mapstruct.ap.descriptor.ParameterDescriptor": {
+  "org.mapstruct.ap.internal.langmodel.descriptor.ParameterDescriptor": {
     "kind": "interface",
     "interfaces": [
-      "org.mapstruct.ap.descriptor.ElementDescriptor"
+      "org.mapstruct.ap.internal.langmodel.descriptor.ElementDescriptor"
     ],
     "methods": [
       "boolean isVarArgs()",
       "default java.lang.String name()",
-      "default org.mapstruct.ap.descriptor.TypeDescriptor type()",
-      "java.util.List<org.mapstruct.ap.descriptor.AnnotationDescriptor> annotations()"
+      "default org.mapstruct.ap.internal.langmodel.descriptor.TypeDescriptor type()",
+      "java.util.List<org.mapstruct.ap.internal.langmodel.descriptor.AnnotationDescriptor> annotations()"
     ]
   },
-  "org.mapstruct.ap.descriptor.RecordComponentDescriptor": {
+  "org.mapstruct.ap.internal.langmodel.descriptor.RecordComponentDescriptor": {
     "kind": "interface",
     "interfaces": [
-      "org.mapstruct.ap.descriptor.ElementDescriptor"
+      "org.mapstruct.ap.internal.langmodel.descriptor.ElementDescriptor"
     ],
     "methods": [
-      "java.util.List<org.mapstruct.ap.descriptor.AnnotationDescriptor> annotations()",
-      "org.mapstruct.ap.descriptor.TypeDescriptor componentType()"
+      "java.util.List<org.mapstruct.ap.internal.langmodel.descriptor.AnnotationDescriptor> annotations()",
+      "org.mapstruct.ap.internal.langmodel.descriptor.TypeDescriptor componentType()"
     ]
   },
-  "org.mapstruct.ap.descriptor.TypeDescriptor": {
+  "org.mapstruct.ap.internal.langmodel.descriptor.TypeDescriptor": {
     "kind": "interface",
     "interfaces": [
-      "java.lang.Comparable<org.mapstruct.ap.descriptor.TypeDescriptor>"
+      "java.lang.Comparable<org.mapstruct.ap.internal.langmodel.descriptor.TypeDescriptor>"
     ],
     "methods": [
       "boolean isEnum()",
       "boolean isInterface()",
       "boolean isPrimitive()",
       "boolean isVoid()",
-      "default java.util.Optional<org.mapstruct.ap.descriptor.TypeDescriptor> typeVariableLowerBound()",
-      "default java.util.Optional<org.mapstruct.ap.descriptor.TypeDescriptor> typeVariableUpperBound()",
+      "default java.util.Optional<org.mapstruct.ap.internal.langmodel.descriptor.TypeDescriptor> typeVariableLowerBound()",
+      "default java.util.Optional<org.mapstruct.ap.internal.langmodel.descriptor.TypeDescriptor> typeVariableUpperBound()",
       "java.lang.Object unwrap()",
       "java.lang.String displayName()",
       "java.lang.String id()",
-      "java.util.List<org.mapstruct.ap.descriptor.TypeDescriptor> typeArguments()",
-      "java.util.List<org.mapstruct.ap.descriptor.TypeDescriptor> typeVariableBounds()",
+      "java.util.List<org.mapstruct.ap.internal.langmodel.descriptor.TypeDescriptor> typeArguments()",
+      "java.util.List<org.mapstruct.ap.internal.langmodel.descriptor.TypeDescriptor> typeVariableBounds()",
       "java.util.Optional<java.lang.String> packageName()",
       "java.util.Optional<java.lang.String> qualifiedName()",
       "java.util.Optional<java.lang.String> typeVariableName()",
-      "java.util.Optional<org.mapstruct.ap.descriptor.TypeDescriptor> componentType()",
-      "java.util.Optional<org.mapstruct.ap.descriptor.TypeDescriptor> wildcardExtendsBound()",
-      "java.util.Optional<org.mapstruct.ap.descriptor.TypeDescriptor> wildcardSuperBound()",
-      "java.util.Optional<org.mapstruct.ap.descriptor.TypeElementDescriptor> typeElement()",
-      "org.mapstruct.ap.descriptor.LangTypeKind kind()",
-      "org.mapstruct.ap.descriptor.TypeDescriptor erasure()"
+      "java.util.Optional<org.mapstruct.ap.internal.langmodel.descriptor.TypeDescriptor> componentType()",
+      "java.util.Optional<org.mapstruct.ap.internal.langmodel.descriptor.TypeDescriptor> wildcardExtendsBound()",
+      "java.util.Optional<org.mapstruct.ap.internal.langmodel.descriptor.TypeDescriptor> wildcardSuperBound()",
+      "java.util.Optional<org.mapstruct.ap.internal.langmodel.descriptor.TypeElementDescriptor> typeElement()",
+      "org.mapstruct.ap.internal.langmodel.descriptor.LangTypeKind kind()",
+      "org.mapstruct.ap.internal.langmodel.descriptor.TypeDescriptor erasure()"
     ]
   },
-  "org.mapstruct.ap.descriptor.TypeElementDescriptor": {
+  "org.mapstruct.ap.internal.langmodel.descriptor.TypeElementDescriptor": {
     "kind": "interface",
     "interfaces": [
-      "org.mapstruct.ap.descriptor.ElementDescriptor"
+      "org.mapstruct.ap.internal.langmodel.descriptor.ElementDescriptor"
     ],
     "methods": [
       "boolean isRecord()",
       "boolean isSealed()",
-      "default java.util.List<org.mapstruct.ap.descriptor.TypeDescriptor> permittedSubclasses()",
+      "default java.util.List<org.mapstruct.ap.internal.langmodel.descriptor.TypeDescriptor> permittedSubclasses()",
       "java.lang.String qualifiedName()",
-      "org.mapstruct.ap.descriptor.TypeDescriptor asType()"
+      "org.mapstruct.ap.internal.langmodel.descriptor.TypeDescriptor asType()"
     ]
   }
 }

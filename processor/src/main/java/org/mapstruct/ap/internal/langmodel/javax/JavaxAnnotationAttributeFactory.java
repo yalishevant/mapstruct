@@ -15,7 +15,7 @@ import javax.lang.model.element.Element;
 import javax.lang.model.element.TypeElement;
 
 import org.mapstruct.ap.internal.gem.BuilderGem;
-import org.mapstruct.ap.internal.langmodel.annotation.AnnotationAttribute;
+import org.mapstruct.ap.internal.langmodel.AnnotationAttribute;
 import org.mapstruct.ap.internal.util.AnnotationValueUtils;
 import org.mapstruct.ap.internal.util.IgnoreJRERequirement;
 import org.mapstruct.ap.internal.langmodel.descriptor.AnnotationDescriptor;

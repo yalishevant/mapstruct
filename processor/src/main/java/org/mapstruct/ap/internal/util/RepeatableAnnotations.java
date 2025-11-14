@@ -8,113 +8,125 @@ package org.mapstruct.ap.internal.util;
 import java.util.HashSet;
 import java.util.LinkedHashSet;
 import java.util.Set;
-import javax.lang.model.element.AnnotationMirror;
-import javax.lang.model.element.Element;
-import javax.lang.model.element.ElementKind;
-import javax.lang.model.element.TypeElement;
 
+import org.mapstruct.ap.internal.langmodel.api.LangElements;
+import org.mapstruct.ap.internal.langmodel.api.PackageDescriptor;
+import org.mapstruct.ap.internal.langmodel.descriptor.AnnotationDescriptor;
+import org.mapstruct.ap.internal.langmodel.descriptor.ElementDescriptor;
+import org.mapstruct.ap.internal.langmodel.descriptor.LangElementKind;
+import org.mapstruct.ap.internal.langmodel.descriptor.TypeElementDescriptor;
 import org.mapstruct.tools.gem.Gem;
 
 /**
+ * Descriptor-first helper for collecting repeatable annotation gems.
+ *
  * @author Ben Zegveld
  */
 public abstract class RepeatableAnnotations<SINGULAR extends Gem, MULTIPLE extends Gem, OPTIONS> {
     private static final String JAVA_LANG_ANNOTATION_PGK = "java.lang.annotation";
     private static final String ORG_MAPSTRUCT_PKG = "org.mapstruct";
 
-    private ElementUtils elementUtils;
+    private final LangElements langElements;
     private final String singularFqn;
     private final String multipleFqn;
 
-    protected RepeatableAnnotations(ElementUtils elementUtils, String singularFqn, String multipleFqn) {
-        this.elementUtils = elementUtils;
+    protected RepeatableAnnotations(LangElements langElements, String singularFqn, String multipleFqn) {
+        this.langElements = langElements;
         this.singularFqn = singularFqn;
         this.multipleFqn = multipleFqn;
     }
 
     /**
-     * @param element the element on which the Gem needs to be found
-     * @return the Gem found on the element.
-     */
-    protected abstract SINGULAR singularInstanceOn(Element element);
-
-    /**
-     * @param element the element on which the Gems needs to be found
-     * @return the Gems found on the element.
-     */
-    protected abstract MULTIPLE multipleInstanceOn(Element element);
-
-    /**
-     * @param gem the annotation gem to be processed
-     * @param source the source element where the request originated from
-     * @param mappings the collection of completed processing
-     */
-    protected abstract void addInstance(SINGULAR gem, Element source, Set<OPTIONS> mappings);
-
-    /**
-     * @param gems the annotation gems to be processed
-     * @param source the source element where the request originated from
-     * @param mappings the collection of completed processing
-     */
-    protected abstract void addInstances(MULTIPLE gems, Element source, Set<OPTIONS> mappings);
-
-    /**
-     * Retrieves the processed annotations.
+     * Creates a gem instance for the repeatable annotation found on the given element.
      *
-     * @param source The source element of interest
-     * @return The processed annotations for the given element
+     * @param element element hosting the annotation
+     * @param annotation descriptor of the annotation
+     * @return gem backing the single annotation
      */
-    public Set<OPTIONS> getProcessedAnnotations(Element source) {
+    protected abstract SINGULAR singularInstanceOn(ElementDescriptor element, AnnotationDescriptor annotation);
+
+    /**
+     * Creates a container gem instance for the repeatable annotation found on the given element.
+     *
+     * @param element element hosting the annotation
+     * @param annotation descriptor backing the container
+     * @return gem for the container annotation
+     */
+    protected abstract MULTIPLE multipleInstanceOn(ElementDescriptor element, AnnotationDescriptor annotation);
+
+    /**
+     * @param gem single annotation gem being processed
+     * @param annotation descriptor backing the gem
+     * @param source originating element
+     * @param mappings accumulator of processed options
+     */
+    protected abstract void addInstance(SINGULAR gem,
+                                        AnnotationDescriptor annotation,
+                                        ElementDescriptor source,
+                                        Set<OPTIONS> mappings);
+
+    /**
+     * @param gems container gem being processed
+     * @param annotation descriptor backing the container
+     * @param source originating element
+     * @param mappings accumulator of processed options
+     */
+    protected abstract void addInstances(MULTIPLE gems,
+                                         AnnotationDescriptor annotation,
+                                         ElementDescriptor source,
+                                         Set<OPTIONS> mappings);
+
+    /**
+     * Retrieves the processed annotations for the supplied element.
+     */
+    public Set<OPTIONS> getProcessedAnnotations(ElementDescriptor source) {
         return getMappings( source, source, new LinkedHashSet<>(), new HashSet<>() );
     }
 
-    /**
-     * Retrieves the processed annotations.
-     *
-     * @param source The source element of interest
-     * @param element Element of interest: method, or (meta) annotation
-     * @param mappingOptions LinkedSet of mappings found so far
-     * @param handledElements The collection of already handled elements to handle recursion correctly.
-     * @return The processed annotations for the given element
-     */
-    private Set<OPTIONS> getMappings(Element source, Element element,
+    private Set<OPTIONS> getMappings(ElementDescriptor source,
+                                     ElementDescriptor element,
                                      LinkedHashSet<OPTIONS> mappingOptions,
-                                              Set<Element> handledElements) {
+                                     Set<String> handledElements) {
 
-        for ( AnnotationMirror annotationMirror : element.getAnnotationMirrors() ) {
-            Element lElement = annotationMirror.getAnnotationType().asElement();
-            if ( isAnnotation( lElement, singularFqn ) ) {
-                // although getInstanceOn does a search on annotation mirrors, the order is preserved
-                SINGULAR mapping = singularInstanceOn( element );
-                addInstance( mapping, source, mappingOptions );
+        for ( AnnotationDescriptor annotation : langElements.annotationMirrors( element ) ) {
+            TypeElementDescriptor annotationType = annotation.annotationType();
+            if ( annotationType == null ) {
+                continue;
             }
-            else if ( isAnnotation( lElement, multipleFqn ) ) {
-                // although getInstanceOn does a search on annotation mirrors, the order is preserved
-                MULTIPLE mappings = multipleInstanceOn( element );
-                addInstances( mappings, source, mappingOptions );
+
+            if ( isAnnotation( annotationType, singularFqn ) ) {
+                SINGULAR mapping = singularInstanceOn( element, annotation );
+                addInstance( mapping, annotation, source, mappingOptions );
             }
-            else if ( !isAnnotationInPackage( lElement, JAVA_LANG_ANNOTATION_PGK )
-                && !isAnnotationInPackage( lElement, ORG_MAPSTRUCT_PKG )
-                && !handledElements.contains( lElement ) ) {
-                // recur over annotation mirrors
-                handledElements.add( lElement );
-                getMappings( source, lElement, mappingOptions, handledElements );
+            else if ( isAnnotation( annotationType, multipleFqn ) ) {
+                MULTIPLE mappings = multipleInstanceOn( element, annotation );
+                addInstances( mappings, annotation, source, mappingOptions );
+            }
+            else if ( shouldRecurseInto( annotationType, handledElements ) ) {
+                handledElements.add( annotationType.id() );
+                getMappings( source, annotationType, mappingOptions, handledElements );
             }
         }
+
         return mappingOptions;
     }
 
-    private boolean isAnnotationInPackage(Element element, String packageFQN) {
-        if ( ElementKind.ANNOTATION_TYPE == element.getKind() ) {
-            return packageFQN.equals( elementUtils.getPackageOf( element ).getQualifiedName().toString() );
+    private boolean shouldRecurseInto(TypeElementDescriptor annotationType, Set<String> handledElements) {
+        if ( annotationType.kind() != LangElementKind.ANNOTATION_TYPE ) {
+            return false;
         }
-        return false;
+        if ( handledElements.contains( annotationType.id() ) ) {
+            return false;
+        }
+
+        PackageDescriptor descriptor = langElements.packageOf( annotationType );
+        String packageName = descriptor != null ? descriptor.qualifiedName() : null;
+        return packageName != null
+            && !JAVA_LANG_ANNOTATION_PGK.equals( packageName )
+            && !ORG_MAPSTRUCT_PKG.equals( packageName );
     }
 
-    private boolean isAnnotation(Element element, String annotationFQN) {
-        if ( ElementKind.ANNOTATION_TYPE == element.getKind() ) {
-            return annotationFQN.equals( ( (TypeElement) element ).getQualifiedName().toString() );
-        }
-        return false;
+    private boolean isAnnotation(TypeElementDescriptor element, String annotationFqn) {
+        return annotationFqn.equals( element.qualifiedName() );
     }
 }

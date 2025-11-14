@@ -7,7 +7,7 @@ package org.mapstruct.ap.internal.model.common;
 
 import java.util.Set;
 
-import org.mapstruct.ap.descriptor.LangModifier;
+import org.mapstruct.ap.internal.langmodel.descriptor.LangModifier;
 
 /**
  * Accessibility of an element

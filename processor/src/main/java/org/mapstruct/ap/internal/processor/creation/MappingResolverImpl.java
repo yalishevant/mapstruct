@@ -55,15 +55,15 @@ import org.mapstruct.ap.internal.util.MessageConstants;
 import org.mapstruct.ap.internal.util.NativeTypes;
 import org.mapstruct.ap.internal.util.Strings;
 import org.mapstruct.ap.internal.option.Options;
-import org.mapstruct.ap.descriptor.ExecutableDescriptor;
-import org.mapstruct.ap.descriptor.LangElementKind;
-import org.mapstruct.ap.langmodel.api.LangElements;
-import org.mapstruct.ap.langmodel.LangModelContext;
-import org.mapstruct.ap.langmodel.LangModelTypeSystem;
-import org.mapstruct.ap.langmodel.api.LangTypes;
-import org.mapstruct.ap.descriptor.AnnotationDescriptor;
-import org.mapstruct.ap.descriptor.NameDescriptor;
-import org.mapstruct.ap.descriptor.TypeElementDescriptor;
+import org.mapstruct.ap.internal.langmodel.descriptor.ExecutableDescriptor;
+import org.mapstruct.ap.internal.langmodel.descriptor.LangElementKind;
+import org.mapstruct.ap.internal.langmodel.api.LangElements;
+import org.mapstruct.ap.internal.langmodel.LangModelContext;
+import org.mapstruct.ap.internal.langmodel.LangModelTypeSystem;
+import org.mapstruct.ap.internal.langmodel.api.LangTypes;
+import org.mapstruct.ap.internal.langmodel.descriptor.AnnotationDescriptor;
+import org.mapstruct.ap.internal.langmodel.descriptor.NameDescriptor;
+import org.mapstruct.ap.internal.langmodel.descriptor.TypeElementDescriptor;
 
 /**
  * The one and only implementation of {@link MappingResolver}. The class has been split into an interface an
@@ -78,7 +78,7 @@ public class MappingResolverImpl implements MappingResolver {
 
     private final FormattingMessager messager;
     private final TypeFactory typeFactory;
-    private final LangModelContext<?, ?, ?, ?> langModelContext;
+    private final LangModelContext langModelContext;
     private final LangTypes langTypes;
     private final LangElements langElements;
 

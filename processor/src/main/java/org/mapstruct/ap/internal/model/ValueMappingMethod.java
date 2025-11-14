@@ -27,8 +27,8 @@ import org.mapstruct.ap.internal.model.source.ValueMappingOptions;
 import org.mapstruct.ap.internal.util.AnnotationDescriptorUtils;
 import org.mapstruct.ap.internal.util.Message;
 import org.mapstruct.ap.internal.util.Strings;
-import org.mapstruct.ap.descriptor.AnnotationDescriptor;
-import org.mapstruct.ap.descriptor.TypeDescriptor;
+import org.mapstruct.ap.internal.langmodel.descriptor.AnnotationDescriptor;
+import org.mapstruct.ap.internal.langmodel.descriptor.TypeDescriptor;
 import org.mapstruct.ap.spi.EnumTransformationStrategy;
 
 import static org.mapstruct.ap.internal.gem.MappingConstantsGem.ANY_REMAINING;

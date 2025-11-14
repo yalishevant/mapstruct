@@ -20,7 +20,7 @@ import org.mapstruct.ap.internal.model.common.TypeFactory;
 import org.mapstruct.ap.internal.util.FormattingMessager;
 import org.mapstruct.ap.internal.util.Message;
 import org.mapstruct.ap.internal.util.accessor.Accessor;
-import org.mapstruct.ap.descriptor.AnnotationDescriptor;
+import org.mapstruct.ap.internal.langmodel.descriptor.AnnotationDescriptor;
 
 /**
  * Encapsulates all options specifiable on a mapping method

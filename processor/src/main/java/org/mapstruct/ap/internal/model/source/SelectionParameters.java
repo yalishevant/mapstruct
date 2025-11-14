@@ -10,7 +10,7 @@ import java.util.List;
 import java.util.Objects;
 
 import org.mapstruct.ap.internal.model.common.SourceRHS;
-import org.mapstruct.ap.descriptor.TypeDescriptor;
+import org.mapstruct.ap.internal.langmodel.descriptor.TypeDescriptor;
 
 /**
  * Holding parameters common to the selection process, common to IterableMapping, BeanMapping, PropertyMapping and

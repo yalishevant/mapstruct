@@ -8,8 +8,9 @@ package org.mapstruct.ap.test.nestedbeans.exclusions.custom;
 // tag::documentation[]
 
 import java.util.regex.Pattern;
+import javax.lang.model.element.Name;
+import javax.lang.model.element.TypeElement;
 
-import org.mapstruct.ap.descriptor.TypeDescriptor;
 import org.mapstruct.ap.spi.MappingExclusionProvider;
 
 // end::documentation[]
@@ -21,19 +22,13 @@ public class CustomMappingExclusionProvider implements MappingExclusionProvider 
     private static final Pattern JAVA_JAVAX_PACKAGE = Pattern.compile( "^javax?\\..*" );
 
     @Override
-    public boolean isExcluded(TypeDescriptor type) {
+    public boolean isExcluded(TypeElement typeElement) {
         // end::documentation[]
         //For some reason the eclipse compiler does not work when you try to do NestedTarget.class
         // tag::documentation[]
-        if ( type == null ) {
-            return false;
-        }
-        String name = type.qualifiedName().orElse( null );
-        if ( name == null ) {
-            name = type.displayName();
-        }
-        return name != null && !name.isEmpty() && ( JAVA_JAVAX_PACKAGE.matcher( name ).matches() ||
-            "org.mapstruct.ap.test.nestedbeans.exclusions.custom.Target.NestedTarget".equals( name ) );
+        Name name = typeElement.getQualifiedName();
+        return name.length() != 0 && ( JAVA_JAVAX_PACKAGE.matcher( name ).matches()
+            || "org.mapstruct.ap.test.nestedbeans.exclusions.custom.Target.NestedTarget".equals( name.toString() ) );
     }
 }
 // end::documentation[]

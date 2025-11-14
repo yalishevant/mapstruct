@@ -5,10 +5,8 @@
  */
 package org.mapstruct.ap.internal.util.accessor;
 
-import javax.lang.model.element.Element;
-import javax.lang.model.element.ExecutableElement;
-import javax.lang.model.element.VariableElement;
-import javax.lang.model.type.TypeMirror;
+import org.mapstruct.ap.internal.langmodel.descriptor.ElementDescriptor;
+import org.mapstruct.ap.internal.langmodel.descriptor.TypeDescriptor;
 
 /**
  * @author Filip Hrisafov
@@ -17,8 +15,8 @@ public interface ReadAccessor extends Accessor {
 
     String getReadValueSource();
 
-    static ReadAccessor fromField(VariableElement variableElement, TypeMirror accessedType) {
-        return new ReadDelegateAccessor( new ElementAccessor( variableElement, accessedType ) ) {
+    static ReadAccessor fromField(ElementDescriptor element, TypeDescriptor accessedType) {
+        return new ReadDelegateAccessor( new ElementAccessor( element, accessedType ) ) {
             @Override
             public String getReadValueSource() {
                 return getSimpleName();
@@ -26,7 +24,7 @@ public interface ReadAccessor extends Accessor {
         };
     }
 
-    static ReadAccessor fromRecordComponent(Element element, TypeMirror accessedType) {
+    static ReadAccessor fromRecordComponent(ElementDescriptor element, TypeDescriptor accessedType) {
         return new ReadDelegateAccessor( new ElementAccessor( element, accessedType, AccessorType.GETTER ) ) {
             @Override
             public String getReadValueSource() {
@@ -35,7 +33,7 @@ public interface ReadAccessor extends Accessor {
         };
     }
 
-    static ReadAccessor fromGetter(ExecutableElement element, TypeMirror accessedType) {
+    static ReadAccessor fromGetter(ElementDescriptor element, TypeDescriptor accessedType) {
         return new ReadDelegateAccessor( new ElementAccessor( element, accessedType, AccessorType.GETTER ) ) {
             @Override
             public String getReadValueSource() {

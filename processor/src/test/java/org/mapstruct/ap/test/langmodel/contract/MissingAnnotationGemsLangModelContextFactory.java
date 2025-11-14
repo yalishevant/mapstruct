@@ -8,7 +8,7 @@ package org.mapstruct.ap.test.langmodel.contract;
 import java.util.Collections;
 import java.util.Set;
 
-import org.mapstruct.ap.langmodel.AnnotationGemsCapability;
+import org.mapstruct.ap.internal.langmodel.AnnotationGemsCapability;
 
 public final class MissingAnnotationGemsLangModelContextFactory
     extends AbstractMissingCapabilityLangModelContextFactory {

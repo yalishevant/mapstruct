@@ -21,29 +21,31 @@ import javax.annotation.processing.RoundEnvironment;
 import javax.annotation.processing.SupportedAnnotationTypes;
 import javax.annotation.processing.SupportedSourceVersion;
 import javax.lang.model.SourceVersion;
-import javax.lang.model.element.AnnotationMirror;
-import javax.lang.model.element.AnnotationValue;
 import javax.lang.model.element.TypeElement;
-import javax.lang.model.type.TypeMirror;
 import javax.tools.Diagnostic;
 
-import org.mapstruct.ap.langmodel.javax.DefaultVersionInformation;
+import org.mapstruct.ap.internal.langmodel.javax.DefaultVersionInformation;
 import org.mapstruct.ap.internal.processor.AnnotationProcessorContext;
 import org.mapstruct.ap.internal.util.DiagnosticReporter;
 import org.mapstruct.ap.internal.util.Message;
 import org.mapstruct.ap.internal.version.VersionInformation;
-import org.mapstruct.ap.descriptor.TypeDescriptor;
-import org.mapstruct.ap.langmodel.GeneratedFileAccess;
-import org.mapstruct.ap.langmodel.LangModelContext;
-import org.mapstruct.ap.langmodel.LangModelContextFactory;
-import org.mapstruct.ap.langmodel.LangModelElementQuery;
-import org.mapstruct.ap.langmodel.LangModelTypeSystem;
-import org.mapstruct.ap.langmodel.MapperEntryPoint;
-import org.mapstruct.ap.langmodel.OptionalCapability;
-import org.mapstruct.ap.langmodel.javax.JavaxLangModelContextFactory;
+import org.mapstruct.ap.internal.langmodel.descriptor.TypeDescriptor;
+import org.mapstruct.ap.internal.langmodel.descriptor.TypeElementDescriptor;
+import org.mapstruct.ap.internal.langmodel.GeneratedFileAccess;
+import org.mapstruct.ap.internal.langmodel.LangDescriptorFactory;
+import org.mapstruct.ap.internal.langmodel.LangModelContext;
+import org.mapstruct.ap.internal.langmodel.LangModelContextFactory;
+import org.mapstruct.ap.internal.langmodel.MapperAnnotation;
+import org.mapstruct.ap.internal.langmodel.MapperConfigAnnotation;
+import org.mapstruct.ap.internal.langmodel.MapperEntryPoint;
+import org.mapstruct.ap.internal.langmodel.OptionalCapability;
+import org.mapstruct.ap.internal.langmodel.javax.JavaxLangModelContextFactory;
+import org.mapstruct.ap.internal.langmodel.api.LangElements;
+import org.mapstruct.ap.internal.langmodel.api.LangTypes;
+import org.mapstruct.ap.internal.langmodel.TypeIntrospector;
 import org.mapstruct.ap.spi.AstModifyingAnnotationProcessor;
-import org.mapstruct.ap.spi.lang.LangDiagnostics;
-import org.mapstruct.ap.spi.lang.SpiBridgeCapability;
+import org.mapstruct.ap.internal.langmodel.spi.LangDiagnostics;
+import org.mapstruct.ap.internal.langmodel.spi.SpiBridgeCapability;
 
 /**
  * Annotation processor that verifies SPI fallbacks log diagnostics via {@link LangDiagnostics} when the bridge
@@ -85,13 +87,13 @@ public class LangModelSpiFallbackDiagnosticsProcessor extends AbstractProcessor 
                     processingEnv,
                     mapperElement
                 );
-                try ( LangModelContext<TypeMirror, TypeElement, AnnotationMirror, AnnotationValue> delegate =
+                try ( LangModelContext delegate =
                     cast( factory.create( entryPoint ) ) ) {
 
                     RecordingLangDiagnostics diagnostics = new RecordingLangDiagnostics( delegate.diagnostics() );
-                    LangModelContext<TypeMirror, TypeElement, AnnotationMirror, AnnotationValue> capabilityOverride =
+                    LangModelContext capabilityOverride =
                         override( delegate, SpiBridgeCapability.class, OptionalCapability.empty() );
-                    LangModelContext<TypeMirror, TypeElement, AnnotationMirror, AnnotationValue> decorated =
+                    LangModelContext decorated =
                         new DiagnosticsDecoratingContext( capabilityOverride, diagnostics );
 
                     AnnotationProcessorContext annotationContext = new AnnotationProcessorContext(
@@ -138,18 +140,18 @@ public class LangModelSpiFallbackDiagnosticsProcessor extends AbstractProcessor 
     }
 
     @SuppressWarnings("unchecked")
-    private LangModelContext<TypeMirror, TypeElement, AnnotationMirror, AnnotationValue> cast(
-        LangModelContext<?, ?, ?, ?> context) {
-        return (LangModelContext<TypeMirror, TypeElement, AnnotationMirror, AnnotationValue>) context;
+    private LangModelContext cast(
+        LangModelContext context) {
+        return (LangModelContext) context;
     }
 
-    private LangModelContext<TypeMirror, TypeElement, AnnotationMirror, AnnotationValue> override(
-        LangModelContext<TypeMirror, TypeElement, AnnotationMirror, AnnotationValue> delegate,
+    private LangModelContext override(
+        LangModelContext delegate,
         Class<?> capabilityType,
         OptionalCapability<?> capability) {
 
         Map<Class<?>, OptionalCapability<?>> overrides = new HashMap<>();
-        LangModelContext<TypeMirror, TypeElement, AnnotationMirror, AnnotationValue> base = delegate;
+        LangModelContext base = delegate;
         if ( delegate instanceof CapabilityOverridingContext ) {
             CapabilityOverridingContext existing = (CapabilityOverridingContext) delegate;
             overrides.putAll( existing.overrides );
@@ -197,26 +199,46 @@ public class LangModelSpiFallbackDiagnosticsProcessor extends AbstractProcessor 
     }
 
     private static final class DiagnosticsDecoratingContext
-        implements LangModelContext<TypeMirror, TypeElement, AnnotationMirror, AnnotationValue> {
+        implements LangModelContext {
 
-        private final LangModelContext<TypeMirror, TypeElement, AnnotationMirror, AnnotationValue> delegate;
+        private final LangModelContext delegate;
         private final LangDiagnostics diagnostics;
 
         private DiagnosticsDecoratingContext(
-            LangModelContext<TypeMirror, TypeElement, AnnotationMirror, AnnotationValue> delegate,
+            LangModelContext delegate,
             LangDiagnostics diagnostics) {
             this.delegate = Objects.requireNonNull( delegate, "delegate" );
             this.diagnostics = Objects.requireNonNull( diagnostics, "diagnostics" );
         }
 
         @Override
-        public LangModelTypeSystem<TypeMirror, TypeElement, AnnotationMirror, AnnotationValue> typeSystem() {
-            return delegate.typeSystem();
+        public LangDescriptorFactory descriptors() {
+            return delegate.descriptors();
         }
 
         @Override
-        public LangModelElementQuery elementQuery() {
-            return delegate.elementQuery();
+        public LangTypes types() {
+            return delegate.types();
+        }
+
+        @Override
+        public TypeIntrospector typeIntrospector() {
+            return delegate.typeIntrospector();
+        }
+
+        @Override
+        public LangElements elements() {
+            return delegate.elements();
+        }
+
+        @Override
+        public MapperAnnotation mapperAnnotation(TypeElementDescriptor element) {
+            return delegate.mapperAnnotation( element );
+        }
+
+        @Override
+        public Optional<MapperConfigAnnotation> mapperConfig(TypeDescriptor configType) {
+            return delegate.mapperConfig( configType );
         }
 
         @Override
@@ -241,26 +263,46 @@ public class LangModelSpiFallbackDiagnosticsProcessor extends AbstractProcessor 
     }
 
     private static final class CapabilityOverridingContext
-        implements LangModelContext<TypeMirror, TypeElement, AnnotationMirror, AnnotationValue> {
+        implements LangModelContext {
 
-        private final LangModelContext<TypeMirror, TypeElement, AnnotationMirror, AnnotationValue> delegate;
+        private final LangModelContext delegate;
         private final Map<Class<?>, OptionalCapability<?>> overrides;
 
         private CapabilityOverridingContext(
-            LangModelContext<TypeMirror, TypeElement, AnnotationMirror, AnnotationValue> delegate,
+            LangModelContext delegate,
             Map<Class<?>, OptionalCapability<?>> overrides) {
             this.delegate = Objects.requireNonNull( delegate, "delegate" );
             this.overrides = new HashMap<>( overrides );
         }
 
         @Override
-        public LangModelTypeSystem<TypeMirror, TypeElement, AnnotationMirror, AnnotationValue> typeSystem() {
-            return delegate.typeSystem();
+        public LangDescriptorFactory descriptors() {
+            return delegate.descriptors();
         }
 
         @Override
-        public LangModelElementQuery elementQuery() {
-            return delegate.elementQuery();
+        public LangTypes types() {
+            return delegate.types();
+        }
+
+        @Override
+        public TypeIntrospector typeIntrospector() {
+            return delegate.typeIntrospector();
+        }
+
+        @Override
+        public LangElements elements() {
+            return delegate.elements();
+        }
+
+        @Override
+        public MapperAnnotation mapperAnnotation(TypeElementDescriptor element) {
+            return delegate.mapperAnnotation( element );
+        }
+
+        @Override
+        public Optional<MapperConfigAnnotation> mapperConfig(TypeDescriptor configType) {
+            return delegate.mapperConfig( configType );
         }
 
         @Override

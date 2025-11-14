@@ -22,9 +22,9 @@ import org.mapstruct.ap.internal.util.Message;
 import org.mapstruct.ap.internal.util.Strings;
 import org.mapstruct.ap.internal.util.accessor.PresenceCheckAccessor;
 import org.mapstruct.ap.internal.util.accessor.ReadAccessor;
-import org.mapstruct.ap.descriptor.AnnotationDescriptor;
-import org.mapstruct.ap.descriptor.AnnotationValueDescriptor;
-import org.mapstruct.ap.descriptor.ElementDescriptor;
+import org.mapstruct.ap.internal.langmodel.descriptor.AnnotationDescriptor;
+import org.mapstruct.ap.internal.langmodel.descriptor.AnnotationValueDescriptor;
+import org.mapstruct.ap.internal.langmodel.descriptor.ElementDescriptor;
 
 import static org.mapstruct.ap.internal.model.beanmapping.PropertyEntry.forSourceReference;
 import static org.mapstruct.ap.internal.util.Collections.last;
@@ -329,9 +329,9 @@ public class SourceReference extends AbstractReference {
                 if ( readAccessor != null ) {
                     PresenceCheckAccessor presenceChecker = noBoundsType.getPresenceChecker( entryNames[i] );
                     ElementDescriptor element = readAccessor.getElement();
-                    if ( element instanceof org.mapstruct.ap.descriptor.ExecutableDescriptor ) {
+                    if ( element instanceof org.mapstruct.ap.internal.langmodel.descriptor.ExecutableDescriptor ) {
                         newType = typeFactory.getReturnType( noBoundsType,
-                            (org.mapstruct.ap.descriptor.ExecutableDescriptor) element );
+                            (org.mapstruct.ap.internal.langmodel.descriptor.ExecutableDescriptor) element );
                     }
                     else {
                         newType = typeFactory.getType( readAccessor.getAccessedType() );

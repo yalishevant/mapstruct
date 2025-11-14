@@ -5,8 +5,8 @@
  */
 package org.mapstruct.ap.internal.model.source.selector;
 
-import org.mapstruct.ap.langmodel.api.LangElements;
-import org.mapstruct.ap.langmodel.api.LangTypes;
+import org.mapstruct.ap.internal.langmodel.api.LangElements;
+import org.mapstruct.ap.internal.langmodel.api.LangTypes;
 
 /**
  * {@link XmlElementDeclSelector} variant for {@code javax.xml.bind.annotation} annotations.

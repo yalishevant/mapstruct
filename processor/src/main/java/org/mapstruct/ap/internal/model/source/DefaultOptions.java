@@ -19,9 +19,9 @@ import org.mapstruct.ap.internal.gem.ReportingPolicyGem;
 import org.mapstruct.ap.internal.gem.SubclassExhaustiveStrategyGem;
 import org.mapstruct.ap.internal.model.common.TypeFactory;
 import org.mapstruct.ap.internal.option.Options;
-import org.mapstruct.ap.langmodel.AnnotationAttribute;
-import org.mapstruct.ap.langmodel.MapperAnnotation;
-import org.mapstruct.ap.descriptor.TypeDescriptor;
+import org.mapstruct.ap.internal.langmodel.AnnotationAttribute;
+import org.mapstruct.ap.internal.langmodel.MapperAnnotation;
+import org.mapstruct.ap.internal.langmodel.descriptor.TypeDescriptor;
 
 public class DefaultOptions extends DelegatingOptions {
 

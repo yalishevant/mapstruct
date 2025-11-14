@@ -6,7 +6,7 @@
 package org.mapstruct.ap.internal.model;
 
 import java.util.function.Supplier;
-import org.mapstruct.ap.descriptor.AnnotationDescriptor;
+import org.mapstruct.ap.internal.langmodel.descriptor.AnnotationDescriptor;
 
 import org.mapstruct.ap.internal.model.common.Assignment;
 import org.mapstruct.ap.internal.model.common.BuilderType;

@@ -50,4 +50,9 @@ final class JavaxAnnotationDescriptor implements AnnotationDescriptor {
     AnnotationMirror mirror() {
         return mirror;
     }
+
+    @Override
+    public Object unwrap() {
+        return mirror;
+    }
 }

@@ -7,9 +7,10 @@ package org.mapstruct.ap.internal.util.accessor;
 
 import java.util.Collections;
 import java.util.Set;
-import javax.lang.model.element.Element;
-import javax.lang.model.element.Modifier;
-import javax.lang.model.type.TypeMirror;
+
+import org.mapstruct.ap.internal.langmodel.descriptor.ElementDescriptor;
+import org.mapstruct.ap.internal.langmodel.descriptor.LangModifier;
+import org.mapstruct.ap.internal.langmodel.descriptor.TypeDescriptor;
 
 /**
  * An {@link Accessor} that wraps a Map value.
@@ -18,19 +19,19 @@ import javax.lang.model.type.TypeMirror;
  */
 public class MapValueAccessor implements ReadAccessor {
 
-    private final TypeMirror valueTypeMirror;
+    private final TypeDescriptor valueType;
     private final String simpleName;
-    private final Element element;
+    private final ElementDescriptor element;
 
-    public MapValueAccessor(Element element, TypeMirror valueTypeMirror, String simpleName) {
+    public MapValueAccessor(ElementDescriptor element, TypeDescriptor valueType, String simpleName) {
         this.element = element;
-        this.valueTypeMirror = valueTypeMirror;
+        this.valueType = valueType;
         this.simpleName = simpleName;
     }
 
     @Override
-    public TypeMirror getAccessedType() {
-        return valueTypeMirror;
+    public TypeDescriptor getAccessedType() {
+        return valueType;
     }
 
     @Override
@@ -39,12 +40,12 @@ public class MapValueAccessor implements ReadAccessor {
     }
 
     @Override
-    public Set<Modifier> getModifiers() {
+    public Set<LangModifier> getModifiers() {
         return Collections.emptySet();
     }
 
     @Override
-    public Element getElement() {
+    public ElementDescriptor getElement() {
         return this.element;
     }
 

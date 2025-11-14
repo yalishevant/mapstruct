@@ -7,7 +7,7 @@ package org.mapstruct.ap.internal.model.source;
 
 import java.util.List;
 
-import org.mapstruct.ap.descriptor.ExecutableDescriptor;
+import org.mapstruct.ap.internal.langmodel.descriptor.ExecutableDescriptor;
 
 import org.mapstruct.ap.internal.model.common.Accessibility;
 import org.mapstruct.ap.internal.model.common.Parameter;

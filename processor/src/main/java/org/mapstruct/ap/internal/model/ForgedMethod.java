@@ -19,7 +19,7 @@ import org.mapstruct.ap.internal.model.source.MappingMethodOptions;
 import org.mapstruct.ap.internal.model.source.Method;
 import org.mapstruct.ap.internal.model.source.ParameterProvidedMethods;
 import org.mapstruct.ap.internal.util.Strings;
-import org.mapstruct.ap.descriptor.ExecutableDescriptor;
+import org.mapstruct.ap.internal.langmodel.descriptor.ExecutableDescriptor;
 
 /**
  * This method will be generated in absence of a suitable abstract method to implement.

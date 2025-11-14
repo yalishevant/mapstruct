@@ -31,21 +31,21 @@ import org.mapstruct.ap.internal.util.AnnotationDescriptorUtils;
 import org.mapstruct.ap.internal.util.FormattingMessager;
 import org.mapstruct.ap.internal.util.Message;
 import org.mapstruct.ap.spi.EnumTransformationStrategy;
-import org.mapstruct.ap.descriptor.ElementDescriptor;
-import org.mapstruct.ap.descriptor.ExecutableDescriptor;
-import org.mapstruct.ap.descriptor.AnnotationDescriptor;
-import org.mapstruct.ap.langmodel.AnnotationGemFactory;
-import org.mapstruct.ap.langmodel.AnnotationGemsCapability;
+import org.mapstruct.ap.internal.langmodel.descriptor.ElementDescriptor;
+import org.mapstruct.ap.internal.langmodel.descriptor.ExecutableDescriptor;
+import org.mapstruct.ap.internal.langmodel.descriptor.AnnotationDescriptor;
+import org.mapstruct.ap.internal.langmodel.AnnotationGemFactory;
+import org.mapstruct.ap.internal.langmodel.AnnotationGemsCapability;
 import org.mapstruct.ap.internal.langmodel.MissingLangModelCapabilityException;
-import org.mapstruct.ap.langmodel.api.LangElements;
-import org.mapstruct.ap.descriptor.LangModifier;
-import org.mapstruct.ap.langmodel.LangModelContext;
-import org.mapstruct.ap.langmodel.LangModelElementQuery;
-import org.mapstruct.ap.langmodel.api.LangTypes;
-import org.mapstruct.ap.langmodel.MapperAnnotation;
-import org.mapstruct.ap.descriptor.ParameterDescriptor;
-import org.mapstruct.ap.descriptor.TypeDescriptor;
-import org.mapstruct.ap.descriptor.TypeElementDescriptor;
+import org.mapstruct.ap.internal.langmodel.api.LangElements;
+import org.mapstruct.ap.internal.langmodel.descriptor.LangModifier;
+import org.mapstruct.ap.internal.langmodel.LangModelContext;
+import org.mapstruct.ap.internal.langmodel.LangModelElementQuery;
+import org.mapstruct.ap.internal.langmodel.api.LangTypes;
+import org.mapstruct.ap.internal.langmodel.MapperAnnotation;
+import org.mapstruct.ap.internal.langmodel.descriptor.ParameterDescriptor;
+import org.mapstruct.ap.internal.langmodel.descriptor.TypeDescriptor;
+import org.mapstruct.ap.internal.langmodel.descriptor.TypeElementDescriptor;
 
 /**
  * A {@link ModelElementProcessor} which retrieves a list of {@link SourceMethod}s
@@ -61,7 +61,7 @@ public class MethodRetrievalProcessor implements ModelElementProcessor<Void, Lis
     private TypeFactory typeFactory;
     private AccessorNamingUtils accessorNaming;
     private Map<String, EnumTransformationStrategy> enumTransformationStrategies;
-    private LangModelContext<?, ?, ?, ?> langModelContext;
+    private LangModelContext langModelContext;
     private LangModelElementQuery langElementQuery;
     private LangElements langElements;
     private LangTypes langTypes;

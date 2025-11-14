@@ -69,6 +69,11 @@ final class JavaxAnnotationValueDescriptor implements AnnotationValueDescriptor 
         return value;
     }
 
+    @Override
+    public Object unwrap() {
+        return value;
+    }
+
     private TypeMirror resolveTypeMirror() {
         Object raw = value.getValue();
         if ( raw instanceof TypeMirror ) {

@@ -5,9 +5,9 @@
  */
 package org.mapstruct.ap.internal.util;
 
-import javax.lang.model.element.AnnotationMirror;
-import javax.lang.model.element.AnnotationValue;
-import javax.lang.model.element.Element;
+import org.mapstruct.ap.internal.langmodel.descriptor.AnnotationDescriptor;
+import org.mapstruct.ap.internal.langmodel.descriptor.AnnotationValueDescriptor;
+import org.mapstruct.ap.internal.langmodel.descriptor.ElementDescriptor;
 
 /**
  * Indicates an error during annotation processing. Should only be thrown in non-recoverable situations such as errors
@@ -19,39 +19,43 @@ import javax.lang.model.element.Element;
 @SuppressWarnings("serial")
 public class AnnotationProcessingException extends RuntimeException {
 
-    private final Element element;
-    private final AnnotationMirror annotationMirror;
-    private final AnnotationValue annotationValue;
+    private final ElementDescriptor element;
+    private final AnnotationDescriptor annotation;
+    private final AnnotationValueDescriptor annotationValue;
 
     public AnnotationProcessingException(String message) {
         this( message, null, null, null );
     }
 
-    public AnnotationProcessingException(String message, Element element) {
+    public AnnotationProcessingException(String message, ElementDescriptor element) {
         this( message, element, null, null );
     }
 
-    public AnnotationProcessingException(String message, Element element, AnnotationMirror annotationMirror) {
-        this( message, element, annotationMirror, null );
+    public AnnotationProcessingException(String message,
+                                         ElementDescriptor element,
+                                         AnnotationDescriptor annotation) {
+        this( message, element, annotation, null );
     }
 
-    public AnnotationProcessingException(String message, Element element, AnnotationMirror annotationMirror,
-                                         AnnotationValue annotationValue) {
+    public AnnotationProcessingException(String message,
+                                         ElementDescriptor element,
+                                         AnnotationDescriptor annotation,
+                                         AnnotationValueDescriptor annotationValue) {
         super( message );
         this.element = element;
-        this.annotationMirror = annotationMirror;
+        this.annotation = annotation;
         this.annotationValue = annotationValue;
     }
 
-    public Element getElement() {
+    public ElementDescriptor getElement() {
         return element;
     }
 
-    public AnnotationMirror getAnnotationMirror() {
-        return annotationMirror;
+    public AnnotationDescriptor getAnnotation() {
+        return annotation;
     }
 
-    public AnnotationValue getAnnotationValue() {
+    public AnnotationValueDescriptor getAnnotationValue() {
         return annotationValue;
     }
 }

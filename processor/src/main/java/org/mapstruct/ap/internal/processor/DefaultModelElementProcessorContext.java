@@ -38,7 +38,7 @@ public class DefaultModelElementProcessorContext implements ProcessorContext {
     private final Options options;
     private final TypeFactory typeFactory;
     private final VersionInformation versionInformation;
-    private final LangModelContext<?, ?, ?, ?> langModelContext;
+    private final LangModelContext langModelContext;
     private final DescriptorUnwrapper descriptorUnwrapper;
     private final AccessorNamingUtils accessorNaming;
     private final RoundContext roundContext;
@@ -48,7 +48,7 @@ public class DefaultModelElementProcessorContext implements ProcessorContext {
     public DefaultModelElementProcessorContext(Options options,
             RoundContext roundContext,
             Map<String, String> notToBeImported,
-            LangModelContext<?, ?, ?, ?> langModelContext,
+            LangModelContext langModelContext,
             DescriptorUnwrapper descriptorUnwrapper,
             FormattingMessager messager,
             GeneratedFileSink generatedFileSink,

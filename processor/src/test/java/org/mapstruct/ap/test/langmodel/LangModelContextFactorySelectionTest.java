@@ -29,8 +29,8 @@ import org.junit.jupiter.api.Test;
 import org.mapstruct.ap.MappingProcessor;
 import org.mapstruct.ap.internal.option.MappingOption;
 import org.mapstruct.ap.internal.option.Options;
-import org.mapstruct.ap.langmodel.LangModelContextFactory;
-import org.mapstruct.ap.langmodel.javax.JavaxLangModelContextFactory;
+import org.mapstruct.ap.internal.langmodel.LangModelContextFactory;
+import org.mapstruct.ap.internal.langmodel.javax.JavaxLangModelContextFactory;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;

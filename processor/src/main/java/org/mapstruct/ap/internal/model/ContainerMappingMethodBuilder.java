@@ -22,7 +22,7 @@ import org.mapstruct.ap.internal.util.Strings;
 
 import static org.mapstruct.ap.internal.util.Collections.first;
 
-import org.mapstruct.ap.descriptor.AnnotationDescriptor;
+import org.mapstruct.ap.internal.langmodel.descriptor.AnnotationDescriptor;
 
 /**
  * Builder that can be used to build {@link ContainerMappingMethod}(s).

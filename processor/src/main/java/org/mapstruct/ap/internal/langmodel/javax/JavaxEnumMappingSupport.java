@@ -5,34 +5,45 @@
  */
 package org.mapstruct.ap.internal.langmodel.javax;
 
-import org.mapstruct.ap.internal.langmodel.descriptor.TypeDescriptor;
+import javax.lang.model.element.TypeElement;
+
 import org.mapstruct.ap.internal.langmodel.api.EnumMappingSupport;
+import org.mapstruct.ap.internal.langmodel.descriptor.TypeDescriptor;
+import org.mapstruct.ap.internal.langmodel.descriptor.TypeElementDescriptor;
+import org.mapstruct.ap.internal.langmodel.spi.SpiBridgeCapability;
 import org.mapstruct.ap.spi.EnumMappingStrategy;
 import org.mapstruct.ap.spi.MapStructProcessingEnvironment;
-import org.mapstruct.ap.internal.langmodel.spi.SpiBridgeCapability;
 
 final class JavaxEnumMappingSupport implements EnumMappingSupport {
 
+    private final JavaxLangModelContext context;
     private final EnumMappingStrategy strategy;
 
     JavaxEnumMappingSupport(JavaxLangModelContext context, EnumMappingStrategy strategy) {
+        this.context = context;
         this.strategy = strategy;
         initializeStrategy( context, strategy );
     }
 
     @Override
     public String defaultNullEnumConstant(TypeDescriptor enumType) {
-        return strategy.getDefaultNullEnumConstant( enumType );
+        TypeElement typeElement = toTypeElement( enumType );
+        return typeElement != null ? strategy.getDefaultNullEnumConstant( typeElement ) : null;
     }
 
     @Override
     public String enumConstant(TypeDescriptor enumType, String enumConstant) {
-        return strategy.getEnumConstant( enumType, enumConstant );
+        TypeElement typeElement = toTypeElement( enumType );
+        return typeElement != null ? strategy.getEnumConstant( typeElement, enumConstant ) : null;
     }
 
     @Override
     public TypeDescriptor unexpectedValueMappingExceptionType() {
-        return strategy.getUnexpectedValueMappingExceptionType();
+        TypeElement typeElement = strategy.getUnexpectedValueMappingExceptionType();
+        if ( typeElement == null ) {
+            return null;
+        }
+        return context.descriptorFactory().typeDescriptor( typeElement.asType() );
     }
 
     private static void initializeStrategy(JavaxLangModelContext context, EnumMappingStrategy strategy) {
@@ -41,5 +52,20 @@ final class JavaxEnumMappingSupport implements EnumMappingSupport {
                 bridge.spiEnvironment( context.processingEnvironment().getOptions() );
             strategy.init( environment );
         } );
+    }
+
+    private static TypeElement toTypeElement(TypeDescriptor descriptor) {
+        if ( descriptor == null ) {
+            return null;
+        }
+        TypeElementDescriptor descriptorElement = descriptor.typeElement().orElse( null );
+        if ( descriptorElement == null ) {
+            return null;
+        }
+        Object unwrapped = descriptorElement.unwrap();
+        if ( unwrapped instanceof TypeElement ) {
+            return (TypeElement) unwrapped;
+        }
+        return null;
     }
 }

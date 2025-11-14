@@ -21,10 +21,10 @@ import org.mapstruct.ap.internal.model.Mapper;
 import org.mapstruct.ap.internal.model.common.Type;
 import org.mapstruct.ap.internal.model.annotation.AnnotationElement;
 import org.mapstruct.ap.internal.model.annotation.AnnotationElement.AnnotationElementType;
-import org.mapstruct.ap.descriptor.AnnotationDescriptor;
-import org.mapstruct.ap.langmodel.api.LangElements;
-import org.mapstruct.ap.langmodel.api.PackageDescriptor;
-import org.mapstruct.ap.descriptor.TypeElementDescriptor;
+import org.mapstruct.ap.internal.langmodel.descriptor.AnnotationDescriptor;
+import org.mapstruct.ap.internal.langmodel.api.LangElements;
+import org.mapstruct.ap.internal.langmodel.api.PackageDescriptor;
+import org.mapstruct.ap.internal.langmodel.descriptor.TypeElementDescriptor;
 
 /**
  * A {@link ModelElementProcessor} which converts the given {@link Mapper}

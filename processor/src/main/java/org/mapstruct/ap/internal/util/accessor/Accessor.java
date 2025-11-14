@@ -6,28 +6,22 @@
 package org.mapstruct.ap.internal.util.accessor;
 
 import java.util.Set;
-import javax.lang.model.element.Element;
-import javax.lang.model.element.ExecutableElement;
-import javax.lang.model.element.Modifier;
-import javax.lang.model.element.VariableElement;
-import javax.lang.model.type.TypeMirror;
+
+import org.mapstruct.ap.internal.langmodel.descriptor.ElementDescriptor;
+import org.mapstruct.ap.internal.langmodel.descriptor.LangModifier;
+import org.mapstruct.ap.internal.langmodel.descriptor.TypeDescriptor;
 
 /**
- * This represents an Accessor that can be used for writing/reading a property to/from a bean.
+ * Descriptor-based accessor abstraction used for reading/writing bean properties.
  *
  * @author Filip Hrisafov
  */
 public interface Accessor {
 
     /**
-     * This returns the type that this accessor gives as a return.
-     *
-     * e.g. The {@link ExecutableElement#getReturnType()} if this is a method accessor,
-     * or {@link VariableElement#asType()} for field accessors.
-     *
-     * @return the type that the accessor gives as a return
+     * @return the descriptor of the accessed type (return type for methods, declared type for fields)
      */
-    TypeMirror getAccessedType();
+    TypeDescriptor getAccessedType();
 
     /**
      * @return the simple name of the accessor
@@ -37,12 +31,12 @@ public interface Accessor {
     /**
      * @return the set of modifiers that the accessor has
      */
-    Set<Modifier> getModifiers();
+    Set<LangModifier> getModifiers();
 
     /**
-     * @return the underlying {@link Element}, {@link VariableElement} or {@link ExecutableElement}
+     * @return the underlying descriptor of the accessor element
      */
-    Element getElement();
+    ElementDescriptor getElement();
 
     /**
      * @return type of the accessor

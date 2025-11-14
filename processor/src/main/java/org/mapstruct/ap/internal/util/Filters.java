@@ -5,94 +5,80 @@
  */
 package org.mapstruct.ap.internal.util;
 
-import java.lang.reflect.InvocationTargetException;
-import java.lang.reflect.Method;
 import java.util.Collection;
+import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
 import java.util.function.BiFunction;
+import java.util.function.Function;
 import java.util.stream.Collectors;
-import javax.lang.model.element.Element;
-import javax.lang.model.element.ExecutableElement;
-import javax.lang.model.element.TypeElement;
-import javax.lang.model.element.VariableElement;
-import javax.lang.model.type.DeclaredType;
-import javax.lang.model.type.ExecutableType;
-import javax.lang.model.type.TypeMirror;
 
+import org.mapstruct.ap.internal.langmodel.descriptor.ElementDescriptor;
+import org.mapstruct.ap.internal.langmodel.descriptor.ExecutableDescriptor;
+import org.mapstruct.ap.internal.langmodel.descriptor.FieldDescriptor;
+import org.mapstruct.ap.internal.langmodel.descriptor.LangModifier;
+import org.mapstruct.ap.internal.langmodel.descriptor.RecordComponentDescriptor;
+import org.mapstruct.ap.internal.langmodel.descriptor.TypeDescriptor;
 import org.mapstruct.ap.internal.util.accessor.Accessor;
 import org.mapstruct.ap.internal.util.accessor.ElementAccessor;
 import org.mapstruct.ap.internal.util.accessor.ReadAccessor;
 
-import static org.mapstruct.ap.internal.util.Collections.first;
 import static org.mapstruct.ap.internal.util.accessor.AccessorType.ADDER;
 import static org.mapstruct.ap.internal.util.accessor.AccessorType.SETTER;
 
 /**
- * Filter methods for working with {@link Element} collections.
+ * Filter helpers operating on descriptor collections.
  *
  * @author Gunnar Morling
  * @author Filip Hrisafov
+ * @author Anton Yalyshev
  */
 public class Filters {
 
-    private static final Method RECORD_COMPONENTS_METHOD;
-
-    static {
-        Method recordComponentsMethod;
-        try {
-            recordComponentsMethod = TypeElement.class.getMethod( "getRecordComponents" );
-        }
-        catch ( NoSuchMethodException e ) {
-            recordComponentsMethod = null;
-        }
-        RECORD_COMPONENTS_METHOD = recordComponentsMethod;
-    }
-
     private final AccessorNamingUtils accessorNaming;
-    private final TypeUtils typeUtils;
-    private final TypeMirror typeMirror;
+    private final Function<ExecutableDescriptor, TypeDescriptor> returnTypeResolver;
+    private final Function<FieldDescriptor, TypeDescriptor> fieldTypeResolver;
+    private final Function<RecordComponentDescriptor, TypeDescriptor> recordComponentTypeResolver;
+    private final Function<ExecutableDescriptor, TypeDescriptor> singleParameterResolver;
 
-    public Filters(AccessorNamingUtils accessorNaming, TypeUtils typeUtils, TypeMirror typeMirror) {
+    public Filters(AccessorNamingUtils accessorNaming,
+                   Function<ExecutableDescriptor, TypeDescriptor> returnTypeResolver,
+                   Function<FieldDescriptor, TypeDescriptor> fieldTypeResolver,
+                   Function<RecordComponentDescriptor, TypeDescriptor> recordComponentTypeResolver,
+                   Function<ExecutableDescriptor, TypeDescriptor> singleParameterResolver) {
         this.accessorNaming = accessorNaming;
-        this.typeUtils = typeUtils;
-        this.typeMirror = typeMirror;
+        this.returnTypeResolver = returnTypeResolver;
+        this.fieldTypeResolver = fieldTypeResolver;
+        this.recordComponentTypeResolver = recordComponentTypeResolver;
+        this.singleParameterResolver = singleParameterResolver;
     }
 
-    public List<ReadAccessor> getterMethodsIn(List<ExecutableElement> elements) {
+    public List<ReadAccessor> getterMethodsIn(List<ExecutableDescriptor> elements) {
+        if ( elements.isEmpty() ) {
+            return Collections.emptyList();
+        }
         return elements.stream()
             .filter( accessorNaming::isGetterMethod )
-            .map( method -> ReadAccessor.fromGetter( method, getReturnType( method ) ) )
+            .map( method -> ReadAccessor.fromGetter(
+                method,
+                resolveReturnType( method )
+            ) )
             .collect( Collectors.toCollection( LinkedList::new ) );
     }
 
-    @SuppressWarnings("unchecked")
-    public List<Element> recordComponentsIn(TypeElement typeElement) {
-        if ( RECORD_COMPONENTS_METHOD == null ) {
-            return java.util.Collections.emptyList();
-        }
-
-        try {
-            return (List<Element>) RECORD_COMPONENTS_METHOD.invoke( typeElement );
-        }
-        catch ( IllegalAccessException | InvocationTargetException e ) {
-            return java.util.Collections.emptyList();
-        }
-    }
-
-    public Map<String, ReadAccessor> recordAccessorsIn(Collection<Element> recordComponents) {
+    public Map<String, ReadAccessor> recordAccessorsIn(Collection<RecordComponentDescriptor> recordComponents) {
         if ( recordComponents.isEmpty() ) {
-            return java.util.Collections.emptyMap();
+            return Collections.emptyMap();
         }
         Map<String, ReadAccessor> recordAccessors = new LinkedHashMap<>();
-        for ( Element recordComponent : recordComponents ) {
+        for ( RecordComponentDescriptor recordComponent : recordComponents ) {
             recordAccessors.put(
-                recordComponent.getSimpleName().toString(),
+                recordComponent.simpleName().content(),
                 ReadAccessor.fromRecordComponent(
                     recordComponent,
-                    typeUtils.asMemberOf( (DeclaredType) typeMirror, recordComponent )
+                    resolveRecordComponentType( recordComponent )
                 )
             );
         }
@@ -100,46 +86,100 @@ public class Filters {
         return recordAccessors;
     }
 
-    private TypeMirror getReturnType(ExecutableElement executableElement) {
-        return getWithinContext( executableElement ).getReturnType();
-    }
-
-    public <T> List<T> fieldsIn(List<VariableElement> accessors, BiFunction<VariableElement, TypeMirror, T> creator) {
+    public <T> List<T> fieldsIn(List<FieldDescriptor> accessors,
+                                BiFunction<ElementDescriptor, TypeDescriptor, T> creator) {
+        if ( accessors.isEmpty() ) {
+            return Collections.emptyList();
+        }
         return accessors.stream()
-            .filter( Fields::isFieldAccessor )
-            .map( variableElement -> creator.apply( variableElement, getWithinContext( variableElement ) ) )
+            .filter( Filters::isFieldAccessor )
+            .map( field -> creator.apply( field, resolveFieldType( field ) ) )
             .collect( Collectors.toCollection( LinkedList::new ) );
     }
 
-    public List<ExecutableElement> presenceCheckMethodsIn(List<ExecutableElement> elements) {
+    public List<ExecutableDescriptor> presenceCheckMethodsIn(List<ExecutableDescriptor> elements) {
+        if ( elements.isEmpty() ) {
+            return Collections.emptyList();
+        }
         return elements.stream()
             .filter( accessorNaming::isPresenceCheckMethod )
             .collect( Collectors.toCollection( LinkedList::new ) );
     }
 
-    public List<Accessor> setterMethodsIn(List<ExecutableElement> elements) {
+    public List<Accessor> setterMethodsIn(List<ExecutableDescriptor> elements) {
+        if ( elements.isEmpty() ) {
+            return Collections.emptyList();
+        }
         return elements.stream()
             .filter( accessorNaming::isSetterMethod )
-            .map( method -> new ElementAccessor( method, getFirstParameter( method ), SETTER ) )
+            .map( method -> new ElementAccessor(
+                method,
+                resolveSingleParameterType( method ),
+                SETTER
+            ) )
             .collect( Collectors.toCollection( LinkedList::new ) );
     }
 
-    private TypeMirror getFirstParameter(ExecutableElement executableElement) {
-        return first( getWithinContext( executableElement ).getParameterTypes() );
-    }
-
-    private ExecutableType getWithinContext( ExecutableElement executableElement ) {
-        return (ExecutableType) typeUtils.asMemberOf( (DeclaredType) typeMirror, executableElement );
-    }
-
-    private TypeMirror getWithinContext( VariableElement variableElement ) {
-        return typeUtils.asMemberOf( (DeclaredType) typeMirror, variableElement );
-    }
-
-    public List<Accessor> adderMethodsIn(List<ExecutableElement> elements) {
+    public List<Accessor> adderMethodsIn(List<ExecutableDescriptor> elements) {
+        if ( elements.isEmpty() ) {
+            return Collections.emptyList();
+        }
         return elements.stream()
             .filter( accessorNaming::isAdderMethod )
-            .map( method -> new ElementAccessor( method, getFirstParameter( method ), ADDER ) )
+            .map( method -> new ElementAccessor(
+                method,
+                resolveSingleParameterType( method ),
+                ADDER
+            ) )
             .collect( Collectors.toCollection( LinkedList::new ) );
+    }
+
+    private static boolean isFieldAccessor(FieldDescriptor field) {
+        return field != null
+            && field.modifiers().contains( LangModifier.PUBLIC )
+            && !field.isStatic();
+    }
+
+    private TypeDescriptor resolveReturnType(ExecutableDescriptor method) {
+        if ( returnTypeResolver != null ) {
+            TypeDescriptor resolved = returnTypeResolver.apply( method );
+            if ( resolved != null ) {
+                return resolved;
+            }
+        }
+        return method.returnType();
+    }
+
+    private TypeDescriptor resolveRecordComponentType(RecordComponentDescriptor recordComponent) {
+        if ( recordComponentTypeResolver != null ) {
+            TypeDescriptor resolved = recordComponentTypeResolver.apply( recordComponent );
+            if ( resolved != null ) {
+                return resolved;
+            }
+        }
+        TypeDescriptor fallback = recordComponent.componentType();
+        return fallback != null ? fallback : recordComponent.asType();
+    }
+
+    private TypeDescriptor resolveFieldType(FieldDescriptor field) {
+        if ( fieldTypeResolver != null ) {
+            TypeDescriptor resolved = fieldTypeResolver.apply( field );
+            if ( resolved != null ) {
+                return resolved;
+            }
+        }
+        return field.fieldType();
+    }
+
+    private TypeDescriptor resolveSingleParameterType(ExecutableDescriptor method) {
+        if ( singleParameterResolver != null ) {
+            TypeDescriptor resolved = singleParameterResolver.apply( method );
+            if ( resolved != null ) {
+                return resolved;
+            }
+        }
+        return method.parameters().isEmpty()
+            ? null
+            : method.parameters().get( 0 ).type();
     }
 }

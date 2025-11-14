@@ -10,9 +10,8 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Objects;
 
-import org.mapstruct.ap.internal.langmodel.api.DescriptorUnwrapper;
-import org.mapstruct.ap.internal.langmodel.api.LangElements;
-import org.mapstruct.ap.internal.langmodel.api.LangTypes;
+import javax.lang.model.util.Elements;
+import javax.lang.model.util.Types;
 import org.mapstruct.ap.spi.MapStructProcessingEnvironment;
 
 /**
@@ -20,18 +19,15 @@ import org.mapstruct.ap.spi.MapStructProcessingEnvironment;
  */
 final class JavaxMapStructProcessingEnvironment implements MapStructProcessingEnvironment {
 
-    private final LangElements elements;
-    private final LangTypes types;
-    private final DescriptorUnwrapper descriptorUnwrapper;
+    private final Elements elements;
+    private final Types types;
     private final Map<String, String> options;
 
-    JavaxMapStructProcessingEnvironment(LangElements elements,
-                                        LangTypes types,
-                                        DescriptorUnwrapper descriptorUnwrapper,
+    JavaxMapStructProcessingEnvironment(Elements elements,
+                                        Types types,
                                         Map<String, String> options) {
         this.elements = Objects.requireNonNull( elements, "elements" );
         this.types = Objects.requireNonNull( types, "types" );
-        this.descriptorUnwrapper = Objects.requireNonNull( descriptorUnwrapper, "descriptorUnwrapper" );
         Map<String, String> resolved = new LinkedHashMap<>();
         if ( options != null ) {
             resolved.putAll( options );
@@ -40,22 +36,17 @@ final class JavaxMapStructProcessingEnvironment implements MapStructProcessingEn
     }
 
     @Override
-    public LangElements elements() {
+    public Elements getElementUtils() {
         return elements;
     }
 
     @Override
-    public LangTypes types() {
+    public Types getTypeUtils() {
         return types;
     }
 
     @Override
-    public DescriptorUnwrapper descriptorUnwrapper() {
-        return descriptorUnwrapper;
-    }
-
-    @Override
-    public Map<String, String> options() {
+    public Map<String, String> getOptions() {
         return options;
     }
 }

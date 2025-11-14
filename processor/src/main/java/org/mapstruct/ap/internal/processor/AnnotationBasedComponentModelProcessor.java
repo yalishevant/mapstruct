@@ -24,9 +24,9 @@ import org.mapstruct.ap.internal.model.MapperReference;
 import org.mapstruct.ap.internal.model.common.Type;
 import org.mapstruct.ap.internal.model.common.TypeFactory;
 import org.mapstruct.ap.internal.model.source.MapperOptions;
-import org.mapstruct.ap.langmodel.LangModelContext;
-import org.mapstruct.ap.langmodel.MapperAnnotation;
-import org.mapstruct.ap.descriptor.TypeElementDescriptor;
+import org.mapstruct.ap.internal.langmodel.LangModelContext;
+import org.mapstruct.ap.internal.langmodel.MapperAnnotation;
+import org.mapstruct.ap.internal.langmodel.descriptor.TypeElementDescriptor;
 
 /**
  * An {@link ModelElementProcessor} which converts the given {@link Mapper} object into an annotation based component
@@ -49,7 +49,7 @@ public abstract class AnnotationBasedComponentModelProcessor implements ModelEle
         this.typeFactory = context.getTypeFactory();
         this.processorContext = context;
 
-        LangModelContext<?, ?, ?, ?> langModelContext = context.getLangModelContext();
+        LangModelContext langModelContext = context.getLangModelContext();
         MapperAnnotation mapperAnnotationDescriptor = langModelContext.elementQuery().mapperAnnotation(
             mapperDescriptor );
         MapperOptions mapperAnnotation = MapperOptions.fromAnnotation(

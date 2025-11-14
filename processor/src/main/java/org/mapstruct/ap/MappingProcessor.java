@@ -7,7 +7,6 @@ package org.mapstruct.ap;
 
 import java.io.PrintWriter;
 import java.io.StringWriter;
-import java.lang.reflect.Proxy;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
@@ -17,7 +16,10 @@ import java.util.List;
 import java.util.Map;
 import java.util.ServiceLoader;
 import java.util.Set;
+import java.util.Locale;
+import java.util.Objects;
 import java.util.stream.Collectors;
+import java.lang.reflect.Proxy;
 import java.util.stream.Stream;
 import javax.annotation.processing.AbstractProcessor;
 import javax.annotation.processing.ProcessingEnvironment;
@@ -25,6 +27,8 @@ import javax.annotation.processing.Processor;
 import javax.annotation.processing.RoundEnvironment;
 import javax.annotation.processing.SupportedAnnotationTypes;
 import javax.lang.model.SourceVersion;
+import javax.lang.model.element.AnnotationMirror;
+import javax.lang.model.element.AnnotationValue;
 import javax.lang.model.element.Element;
 import javax.lang.model.element.ElementKind;
 import javax.lang.model.element.Name;
@@ -34,13 +38,6 @@ import javax.lang.model.type.TypeMirror;
 import javax.lang.model.util.ElementKindVisitor6;
 import javax.tools.Diagnostic.Kind;
 
-import org.mapstruct.ap.internal.gem.MapperGem;
-import org.mapstruct.ap.internal.langmodel.LangModelContext;
-import org.mapstruct.ap.internal.langmodel.LangModelContextFactory;
-import org.mapstruct.ap.internal.langmodel.MapperEntryPoint;
-import org.mapstruct.ap.internal.langmodel.MissingLangModelCapabilityException;
-import org.mapstruct.ap.internal.langmodel.api.DescriptorUnwrapper;
-import org.mapstruct.ap.internal.langmodel.javax.JavaxLangModelContextFactory;
 import org.mapstruct.ap.internal.model.Mapper;
 import org.mapstruct.ap.internal.option.MappingOption;
 import org.mapstruct.ap.internal.option.Options;
@@ -48,10 +45,26 @@ import org.mapstruct.ap.internal.processor.DefaultModelElementProcessorContext;
 import org.mapstruct.ap.internal.processor.ModelElementProcessor;
 import org.mapstruct.ap.internal.processor.ModelElementProcessor.ProcessorContext;
 import org.mapstruct.ap.internal.util.AnnotationProcessingException;
-import org.mapstruct.ap.internal.util.AnnotationProcessorContext;
+import org.mapstruct.ap.internal.processor.AnnotationProcessorContext;
+import org.mapstruct.ap.internal.util.FormattingMessager;
+import org.mapstruct.ap.internal.util.MessagerBackedFormattingMessager;
+import org.mapstruct.ap.internal.util.MessagerDiagnosticReporter;
 import org.mapstruct.ap.internal.util.RoundContext;
 import org.mapstruct.ap.internal.util.Services;
 import org.mapstruct.ap.internal.version.VersionInformation;
+import org.mapstruct.ap.internal.langmodel.MissingLangModelCapabilityException;
+import org.mapstruct.ap.internal.langmodel.api.DescriptorUnwrapper;
+import org.mapstruct.ap.internal.langmodel.LangDescriptorFactory;
+import org.mapstruct.ap.internal.langmodel.LangModelContext;
+import org.mapstruct.ap.internal.langmodel.LangModelContextFactory;
+import org.mapstruct.ap.internal.langmodel.MapperEntryPoint;
+import org.mapstruct.ap.internal.langmodel.descriptor.TypeDescriptor;
+import org.mapstruct.ap.internal.langmodel.descriptor.TypeElementDescriptor;
+import org.mapstruct.ap.internal.langmodel.descriptor.ElementDescriptor;
+import org.mapstruct.ap.internal.langmodel.descriptor.AnnotationDescriptor;
+import org.mapstruct.ap.internal.langmodel.descriptor.AnnotationValueDescriptor;
+import org.mapstruct.ap.internal.langmodel.codegen.GeneratedFileSink;
+import org.mapstruct.ap.internal.langmodel.javax.JavaxLangModelContextFactory;
 import org.mapstruct.ap.spi.AdditionalSupportedOptionsProvider;
 import org.mapstruct.ap.spi.TypeHierarchyErroneousException;
 
@@ -96,6 +109,7 @@ public class MappingProcessor extends AbstractProcessor {
      * Whether this processor claims all processed annotations exclusively or not.
      */
     private static final boolean ANNOTATIONS_CLAIMED_EXCLUSIVELY = false;
+    private static final String MAPPER_ANNOTATION_FQCN = "org.mapstruct.Mapper";
 
     // CHECKSTYLE:OFF
     // Deprecated options, kept for backwards compatibility.
@@ -129,10 +143,10 @@ public class MappingProcessor extends AbstractProcessor {
 
     private Options options;
     private VersionInformation versionInformation;
-    private LangModelContextFactory langModelContextFactory;
-    private DescriptorUnwrapper descriptorUnwrapper;
 
     private AnnotationProcessorContext annotationProcessorContext;
+    private LangModelContextFactory langModelContextFactory;
+    private DescriptorUnwrapper descriptorUnwrapper;
 
     /**
      * Any mappers for which an implementation cannot be generated in the current round because they have source/target
@@ -166,15 +180,16 @@ public class MappingProcessor extends AbstractProcessor {
 
         options = new Options( processingEnv.getOptions() );
         versionInformation = new ProcessorVersionInformation( processingEnv );
-        langModelContextFactory = resolveLangModelContextFactory();
+        langModelContextFactory = resolveLangModelContextFactory( processingEnv );
         descriptorUnwrapper = langModelContextFactory.descriptorUnwrapper();
+        MessagerDiagnosticReporter diagnosticReporter = new MessagerDiagnosticReporter( processingEnv.getMessager() );
         annotationProcessorContext = new AnnotationProcessorContext(
-            processingEnv.getElementUtils(),
-            processingEnv.getTypeUtils(),
-            processingEnv.getMessager(),
+            diagnosticReporter,
             options.isDisableBuilders(),
             options.isVerbose(),
-            resolveAdditionalOptions( processingEnv.getOptions() )
+            resolveAdditionalOptions( processingEnv.getOptions() ),
+            descriptorUnwrapper,
+            langModelContextFactory.accessorNamingAdapterFactory()
         );
 
         if ( additionalSupportedOptionsError != null ) {
@@ -195,11 +210,11 @@ public class MappingProcessor extends AbstractProcessor {
 
             // process any mappers left over from previous rounds
             Set<TypeElement> deferredMappers = getAndResetDeferredMappers();
-            processMapperElements( deferredMappers, roundContext );
+            processMapperElements( deferredMappers, roundContext, roundEnvironment );
 
             // get and process any mappers from this round
             Set<TypeElement> mappers = getMappers( annotations, roundEnvironment );
-            processMapperElements( mappers, roundContext );
+            processMapperElements( mappers, roundContext, roundEnvironment );
         }
         else if ( !deferredMappers.isEmpty() ) {
             // If the processing is over and there are deferred mappers it means something wrong occurred and
@@ -220,7 +235,7 @@ public class MappingProcessor extends AbstractProcessor {
 
                 // When running on Java 8 we need to fetch the deferredMapperElement again.
                 // Otherwise the reporting will not work properly
-                deferredMapperElement = annotationProcessorContext.getElementUtils()
+                deferredMapperElement = processingEnv.getElementUtils()
                     .getTypeElement( deferredMapperElement.getQualifiedName() );
 
                 processingEnv.getMessager()
@@ -249,6 +264,86 @@ public class MappingProcessor extends AbstractProcessor {
             .collect( Collectors.toSet() );
     }
 
+    private LangModelContextFactory resolveLangModelContextFactory(ProcessingEnvironment processingEnvironment) {
+        List<LangModelContextFactory> factories = new ArrayList<>();
+        for ( LangModelContextFactory factory : Services.all( LangModelContextFactory.class ) ) {
+            factories.add( factory );
+        }
+        if ( factories.isEmpty() ) {
+            factories.add( new JavaxLangModelContextFactory() );
+        }
+
+        LangModelContextFactory defaultFactory = selectDefaultFactory( factories );
+
+        String requestedBackend = options.getLangModelBackend();
+        if ( requestedBackend == null || requestedBackend.trim().isEmpty() ) {
+            return defaultFactory;
+        }
+
+        String normalizedRequest = normalizeBackendName( requestedBackend );
+        for ( LangModelContextFactory factory : factories ) {
+            if ( matchesBackend( factory, normalizedRequest ) ) {
+                return factory;
+            }
+        }
+
+        String availableBackends = factories.stream()
+            .map( LangModelContextFactory::backendId )
+            .map( MappingProcessor::normalizeBackendName )
+            .filter( Objects::nonNull )
+            .distinct()
+            .sorted()
+            .collect( Collectors.joining( ", " ) );
+        if ( availableBackends.isEmpty() ) {
+            availableBackends = factories.stream()
+                .map( LangModelContextFactory::getClass )
+                .map( Class::getName )
+                .map( MappingProcessor::normalizeBackendName )
+                .filter( Objects::nonNull )
+                .distinct()
+                .sorted()
+                .collect( Collectors.joining( ", " ) );
+        }
+
+        String message = "Unknown MapStruct lang model backend \"" + requestedBackend + "\". Available backends: "
+            + availableBackends;
+        processingEnvironment.getMessager().printMessage( Kind.ERROR, message );
+        throw new IllegalStateException( "Unknown MapStruct lang model backend: " + requestedBackend );
+    }
+
+    private LangModelContextFactory selectDefaultFactory(List<LangModelContextFactory> factories) {
+        for ( LangModelContextFactory factory : factories ) {
+            String backendId = normalizeBackendName( factory.backendId() );
+            if ( "javax".equals( backendId ) ) {
+                return factory;
+            }
+        }
+        return factories.get( 0 );
+    }
+
+    private static boolean matchesBackend(LangModelContextFactory factory, String normalizedRequest) {
+        if ( normalizedRequest == null ) {
+            return false;
+        }
+        String backendId = normalizeBackendName( factory.backendId() );
+        if ( backendId != null && backendId.equals( normalizedRequest ) ) {
+            return true;
+        }
+        String className = normalizeBackendName( factory.getClass().getName() );
+        return className != null && className.equals( normalizedRequest );
+    }
+
+    private static String normalizeBackendName(String name) {
+        if ( name == null ) {
+            return null;
+        }
+        String trimmed = name.trim();
+        if ( trimmed.isEmpty() ) {
+            return null;
+        }
+        return trimmed.toLowerCase( Locale.ROOT );
+    }
+
     /**
      * Gets fresh copies of all mappers deferred from previous rounds (the originals may contain references to
      * erroneous source/target type elements).
@@ -263,24 +358,6 @@ public class MappingProcessor extends AbstractProcessor {
 
         deferredMappers.clear();
         return deferred;
-    }
-
-    private LangModelContextFactory resolveLangModelContextFactory() {
-        List<LangModelContextFactory> factories = new ArrayList<>();
-        for ( LangModelContextFactory factory : Services.all( LangModelContextFactory.class ) ) {
-            factories.add( factory );
-        }
-        if ( factories.isEmpty() ) {
-            return new JavaxLangModelContextFactory();
-        }
-        if ( factories.size() > 1 ) {
-            processingEnv.getMessager().printMessage(
-                Kind.WARNING,
-                "Multiple LangModelContextFactory implementations detected. "
-                    + "Using " + factories.get( 0 ).getClass().getName()
-            );
-        }
-        return factories.get( 0 );
     }
 
     private Set<TypeElement> getMappers(final Set<? extends TypeElement> annotations,
@@ -301,7 +378,7 @@ public class MappingProcessor extends AbstractProcessor {
 
                     // on some JDKs, RoundEnvironment.getElementsAnnotatedWith( ... ) returns types with
                     // annotations unknown to the compiler, even though they are not declared Mappers
-                    if ( mapperTypeElement != null && MapperGem.instanceOn( mapperTypeElement ) != null ) {
+                    if ( mapperTypeElement != null && isMapperAnnotationPresent( mapperTypeElement ) ) {
                         mapperTypes.add( mapperTypeElement );
                     }
                 }
@@ -314,35 +391,94 @@ public class MappingProcessor extends AbstractProcessor {
         return mapperTypes;
     }
 
-    private void processMapperElements(Set<TypeElement> mapperElements, RoundContext roundContext) {
+    private boolean isMapperAnnotationPresent(TypeElement element) {
+        try {
+            for ( AnnotationMirror annotationMirror : element.getAnnotationMirrors() ) {
+                Element annotationElement = annotationMirror.getAnnotationType().asElement();
+                if ( annotationElement instanceof TypeElement ) {
+                    CharSequence qualifiedName = ( (TypeElement) annotationElement ).getQualifiedName();
+                    if ( qualifiedName != null && MAPPER_ANNOTATION_FQCN.contentEquals( qualifiedName ) ) {
+                        return true;
+                    }
+                }
+                else if ( MAPPER_ANNOTATION_FQCN.equals( annotationMirror.getAnnotationType().toString() ) ) {
+                    return true;
+                }
+            }
+            return false;
+        }
+        catch ( RuntimeException ex ) {
+            return false;
+        }
+    }
+
+    private void processMapperElements(Set<TypeElement> mapperElements,
+                                       RoundContext roundContext,
+                                       RoundEnvironment roundEnvironment) {
         for ( TypeElement mapperElement : mapperElements ) {
             try {
+                // create a new context for each generated mapper in order to have imports of referenced types
+                // correctly managed;
+                // note that this assumes that a new source file is created for each mapper which must not
+                // necessarily be the case, e.g. in case of several mapper interfaces declared as inner types
+                // of one outer interface
                 MapperEntryPoint mapperEntryPoint = mapperEntryPointFor( mapperElement );
                 try ( LangModelContext langModelContext = langModelContextFactory.create( mapperEntryPoint ) ) {
                     annotationProcessorContext.prepare( langModelContext );
-                    ProcessorContext context = new DefaultModelElementProcessorContext(
-                        processingEnv,
-                        options,
-                        roundContext,
-                        getDeclaredTypesNotToBeImported( mapperElement ),
-                        mapperElement,
-                        langModelContext,
+                    GeneratedFileSink generatedFileSink = Objects.requireNonNull(
+                        langModelContext.generatedFiles().generatedFileSink(),
+                        () -> langModelContext.getClass().getName() + " produced a null GeneratedFileSink"
+                    );
+                    FormattingMessager formattingMessager = new MessagerBackedFormattingMessager(
+                        processingEnv.getMessager(),
+                        options.isVerbose(),
                         descriptorUnwrapper
                     );
 
-                    processMapperTypeElement( context, mapperElement );
+                    ProcessorContext context = new DefaultModelElementProcessorContext(
+                        options,
+                        roundContext,
+                        getDeclaredTypesNotToBeImported( mapperElement ),
+                        langModelContext,
+                        descriptorUnwrapper,
+                        formattingMessager,
+                        generatedFileSink,
+                        versionInformation
+                    );
+
+                    TypeElementDescriptor mapperDescriptor = toTypeElementDescriptor( context, mapperElement );
+                    processMapperDescriptor( context, mapperDescriptor );
                 }
             }
-            catch ( MissingLangModelCapabilityException missingCapability ) {
-                processingEnv.getMessager()
-                    .printMessage( Kind.ERROR, missingCapability.getMessage(), mapperElement );
+            catch ( MissingLangModelCapabilityException missing ) {
+                processingEnv.getMessager().printMessage(
+                    Kind.ERROR,
+                    missing.getMessage(),
+                    mapperElement
+                );
                 break;
             }
             catch ( TypeHierarchyErroneousException thie ) {
-                TypeMirror erroneousType = thie.getType();
-                Element erroneousElement = erroneousType != null ? roundContext.getAnnotationProcessorContext()
-                    .getTypeUtils()
-                    .asElement( erroneousType ) : null;
+                TypeDescriptor erroneousType = thie.getType();
+                Element erroneousElement = null;
+                if ( erroneousType != null && descriptorUnwrapper != null ) {
+                    TypeElementDescriptor erroneousDescriptor = erroneousType.typeElement().orElse( null );
+                    if ( erroneousDescriptor != null ) {
+                        erroneousElement = descriptorUnwrapper.element(
+                            erroneousDescriptor,
+                            TypeElement.class
+                        ).orElse( null );
+                    }
+                    if ( erroneousElement == null ) {
+                        erroneousElement = descriptorUnwrapper.type( erroneousType, TypeElement.class ).orElse( null );
+                    }
+                }
+                if ( erroneousElement == null ) {
+                    TypeMirror erroneousMirror = thie.getTypeMirror();
+                    if ( erroneousMirror != null ) {
+                        erroneousElement = processingEnv.getTypeUtils().asElement( erroneousMirror );
+                    }
+                }
                 if ( options.isVerbose() ) {
                     processingEnv.getMessager().printMessage(
                         Kind.NOTE, "MapStruct: referred types not available (yet), deferring mapper: "
@@ -355,6 +491,12 @@ public class MappingProcessor extends AbstractProcessor {
                 break;
             }
         }
+    }
+
+    private TypeElementDescriptor toTypeElementDescriptor(ProcessorContext context, TypeElement mapperElement) {
+        LangModelContext langModelContext = context.getLangModelContext();
+        LangDescriptorFactory descriptorFactory = langModelContext.typeSystem().descriptors();
+        return descriptorFactory.typeElementDescriptor( mapperElement );
     }
 
     private Map<String, String> getDeclaredTypesNotToBeImported(TypeElement element) {
@@ -384,34 +526,62 @@ public class MappingProcessor extends AbstractProcessor {
      * type.
      *
      * @param context The processor context.
-     * @param mapperTypeElement The mapper type element.
+     * @param mapperDescriptor Descriptor of the mapper type element.
      */
-    private void processMapperTypeElement(ProcessorContext context, TypeElement mapperTypeElement) {
+    private void processMapperDescriptor(ProcessorContext context, TypeElementDescriptor mapperDescriptor) {
         Object model = null;
 
         for ( ModelElementProcessor<?, ?> processor : getProcessors() ) {
             try {
-                model = process( context, processor, mapperTypeElement, model );
+                model = process( context, processor, mapperDescriptor, model );
             }
             catch ( AnnotationProcessingException e ) {
-                processingEnv.getMessager()
-                    .printMessage(
-                        Kind.ERROR,
-                        e.getMessage(),
-                        e.getElement(),
-                        e.getAnnotationMirror(),
-                        e.getAnnotationValue()
-                    );
+                Element element = unwrapElement( e.getElement() );
+                AnnotationMirror annotation = unwrapAnnotation( e.getAnnotation() );
+                AnnotationValue annotationValue = unwrapAnnotationValue( e.getAnnotationValue() );
+
+                if ( element != null && annotation != null && annotationValue != null ) {
+                    processingEnv.getMessager()
+                        .printMessage( Kind.ERROR, e.getMessage(), element, annotation, annotationValue );
+                }
+                else if ( element != null && annotation != null ) {
+                    processingEnv.getMessager()
+                        .printMessage( Kind.ERROR, e.getMessage(), element, annotation );
+                }
+                else if ( element != null ) {
+                    processingEnv.getMessager().printMessage( Kind.ERROR, e.getMessage(), element );
+                }
+                else {
+                    processingEnv.getMessager().printMessage( Kind.ERROR, e.getMessage() );
+                }
                 break;
             }
         }
     }
 
     private <P, R> R process(ProcessorContext context, ModelElementProcessor<P, R> processor,
-                             TypeElement mapperTypeElement, Object modelElement) {
+                             TypeElementDescriptor mapperDescriptor, Object modelElement) {
         @SuppressWarnings("unchecked")
         P sourceElement = (P) modelElement;
-        return processor.process( context, mapperTypeElement, sourceElement );
+        return processor.process( context, mapperDescriptor, sourceElement );
+    }
+
+    private Element unwrapElement(ElementDescriptor descriptor) {
+        return descriptorUnwrapper != null
+            ? descriptorUnwrapper.element( descriptor, Element.class ).orElse( null )
+            : null;
+    }
+
+    private AnnotationMirror unwrapAnnotation(AnnotationDescriptor descriptor) {
+        return descriptorUnwrapper != null
+            ? descriptorUnwrapper.annotation( descriptor, AnnotationMirror.class ).orElse( null )
+            : null;
+    }
+
+    private AnnotationValue unwrapAnnotationValue(AnnotationValueDescriptor descriptor) {
+        return descriptorUnwrapper != null
+            ? descriptorUnwrapper.annotationValue( descriptor, AnnotationValue.class ).orElse( null )
+            : null;
     }
 
     /**

@@ -75,6 +75,11 @@ final class JavaxExecutableDescriptor extends JavaxElementDescriptor implements 
     }
 
     @Override
+    public boolean isVarArgs() {
+        return executableElement.isVarArgs();
+    }
+
+    @Override
     public AnnotationValueDescriptor defaultValue() {
         return factory.annotationValueDescriptor( executableElement.getDefaultValue() );
     }

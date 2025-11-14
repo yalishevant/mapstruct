@@ -9,6 +9,7 @@ import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
 
+import org.mapstruct.ap.internal.langmodel.AnnotationAttribute;
 import org.mapstruct.ap.internal.langmodel.descriptor.AnnotationDescriptor;
 import org.mapstruct.ap.internal.langmodel.descriptor.TypeDescriptor;
 import org.mapstruct.ap.internal.gem.BuilderGem;
@@ -128,6 +129,7 @@ public final class MapperAnnotationView {
             emptyString,
             emptyString,
             emptyString,
+            emptyString,
             absentType,
             emptyString,
             emptyString,
@@ -135,7 +137,7 @@ public final class MapperAnnotationView {
             absentType,
             absentType,
             absentType,
-            Optional.empty()
+            Optional.<MapperConfigAnnotationView>empty()
         );
     }
 
@@ -305,4 +307,3 @@ public final class MapperAnnotationView {
         return mapperConfig;
     }
 }
-

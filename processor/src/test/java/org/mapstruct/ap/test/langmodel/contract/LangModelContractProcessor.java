@@ -20,38 +20,40 @@ import javax.annotation.processing.SupportedSourceVersion;
 import javax.lang.model.SourceVersion;
 import javax.lang.model.element.Element;
 import javax.lang.model.element.ElementKind;
+import javax.lang.model.element.ExecutableElement;
 import javax.lang.model.element.TypeElement;
+import javax.lang.model.util.Elements;
 import javax.tools.Diagnostic;
 
-import org.mapstruct.ap.langmodel.javax.DefaultVersionInformation;
+import org.mapstruct.ap.internal.langmodel.javax.DefaultVersionInformation;
 import org.mapstruct.ap.internal.version.VersionInformation;
-import org.mapstruct.ap.langmodel.AccessorNamingAdapter;
-import org.mapstruct.ap.langmodel.AccessorNamingAdapterFactory;
-import org.mapstruct.ap.langmodel.api.DescriptorUnwrapper;
-import org.mapstruct.ap.descriptor.ElementDescriptor;
-import org.mapstruct.ap.langmodel.api.EnumMappingSupport;
-import org.mapstruct.ap.descriptor.ExecutableDescriptor;
-import org.mapstruct.ap.langmodel.ExecutableSignature;
-import org.mapstruct.ap.descriptor.FieldDescriptor;
-import org.mapstruct.ap.langmodel.LangDescriptorFactory;
-import org.mapstruct.ap.spi.lang.EnumMappingCapability;
-import org.mapstruct.ap.langmodel.api.LangElements;
-import org.mapstruct.ap.langmodel.LangModelContext;
-import org.mapstruct.ap.langmodel.LangModelContextFactory;
-import org.mapstruct.ap.langmodel.LangModelElementQuery;
-import org.mapstruct.ap.langmodel.LangModelTypeSystem;
-import org.mapstruct.ap.descriptor.LangTypeKind;
-import org.mapstruct.ap.langmodel.api.LangTypes;
-import org.mapstruct.ap.spi.lang.MappingExclusionCapability;
-import org.mapstruct.ap.langmodel.api.MappingExclusionSupport;
-import org.mapstruct.ap.langmodel.OptionalCapability;
-import org.mapstruct.ap.langmodel.MapperEntryPoint;
-import org.mapstruct.ap.descriptor.RecordComponentDescriptor;
-import org.mapstruct.ap.descriptor.TypeDescriptor;
-import org.mapstruct.ap.descriptor.TypeElementDescriptor;
-import org.mapstruct.ap.langmodel.TypeIntrospector;
-import org.mapstruct.ap.langmodel.TypeIntrospector.Metadata;
-import org.mapstruct.ap.langmodel.javax.JavaxLangModelContextFactory;
+import org.mapstruct.ap.internal.langmodel.AccessorNamingAdapter;
+import org.mapstruct.ap.internal.langmodel.AccessorNamingAdapterFactory;
+import org.mapstruct.ap.internal.langmodel.api.DescriptorUnwrapper;
+import org.mapstruct.ap.internal.langmodel.descriptor.ElementDescriptor;
+import org.mapstruct.ap.internal.langmodel.api.EnumMappingSupport;
+import org.mapstruct.ap.internal.langmodel.descriptor.ExecutableDescriptor;
+import org.mapstruct.ap.internal.langmodel.ExecutableSignature;
+import org.mapstruct.ap.internal.langmodel.descriptor.FieldDescriptor;
+import org.mapstruct.ap.internal.langmodel.LangDescriptorFactory;
+import org.mapstruct.ap.internal.langmodel.spi.EnumMappingCapability;
+import org.mapstruct.ap.internal.langmodel.api.LangElements;
+import org.mapstruct.ap.internal.langmodel.LangModelContext;
+import org.mapstruct.ap.internal.langmodel.LangModelContextFactory;
+import org.mapstruct.ap.internal.langmodel.LangModelElementQuery;
+import org.mapstruct.ap.internal.langmodel.LangModelTypeSystem;
+import org.mapstruct.ap.internal.langmodel.descriptor.LangTypeKind;
+import org.mapstruct.ap.internal.langmodel.api.LangTypes;
+import org.mapstruct.ap.internal.langmodel.spi.MappingExclusionCapability;
+import org.mapstruct.ap.internal.langmodel.api.MappingExclusionSupport;
+import org.mapstruct.ap.internal.langmodel.OptionalCapability;
+import org.mapstruct.ap.internal.langmodel.MapperEntryPoint;
+import org.mapstruct.ap.internal.langmodel.descriptor.RecordComponentDescriptor;
+import org.mapstruct.ap.internal.langmodel.descriptor.TypeDescriptor;
+import org.mapstruct.ap.internal.langmodel.descriptor.TypeElementDescriptor;
+import org.mapstruct.ap.internal.langmodel.TypeIntrospector;
+import org.mapstruct.ap.internal.langmodel.TypeIntrospector.Metadata;
+import org.mapstruct.ap.internal.langmodel.javax.JavaxLangModelContextFactory;
 import org.mapstruct.ap.spi.AccessorNamingStrategy;
 import org.mapstruct.ap.spi.EnumMappingStrategy;
 import org.mapstruct.ap.spi.MapStructProcessingEnvironment;
@@ -93,7 +95,7 @@ public class LangModelContractProcessor extends AbstractProcessor {
                     processingEnv,
                     mapperElement
                 );
-                try ( LangModelContext<?, ?, ?, ?> context = factory.create( entryPoint ) ) {
+                try ( LangModelContext context = factory.create( entryPoint ) ) {
                     verifyDescriptorContract( context, factory, errors );
                 }
             }
@@ -122,7 +124,7 @@ public class LangModelContractProcessor extends AbstractProcessor {
         return (VersionInformation) factory.invoke( null, processingEnv );
     }
 
-    private void verifyDescriptorContract(LangModelContext<?, ?, ?, ?> context,
+    private void verifyDescriptorContract(LangModelContext context,
                                           LangModelContextFactory factory,
                                           List<String> errors) {
         LangModelTypeSystem<?, ?, ?, ?> typeSystem = context.typeSystem();
@@ -414,7 +416,7 @@ public class LangModelContractProcessor extends AbstractProcessor {
 
     private void verifyAccessorNamingAdapter(ElementsLookup lookup,
                                              LangModelContextFactory factory,
-                                             LangModelContext<?, ?, ?, ?> context,
+                                             LangModelContext context,
                                              List<String> errors) {
         TypeElementDescriptor box = lookup.typeElement(
             "org.mapstruct.ap.test.langmodel.contract.LangModelContractTypes.Box"
@@ -440,24 +442,24 @@ public class LangModelContractProcessor extends AbstractProcessor {
         expect( adapter.methodType( getter ) == MethodType.GETTER,
             "Adapter should delegate methodType to AccessorNamingStrategy", errors );
         expect( strategy.lastMethodType != null
-                && strategy.lastMethodType.id().equals( getter.id() ),
+                && Objects.equals( getter.unwrap(), strategy.lastMethodType ),
             "Adapter must forward underlying descriptor for getter", errors );
 
         expect( "value".equals( adapter.propertyName( getter ) ),
             "Adapter should return property name resolved by strategy", errors );
         expect( strategy.lastPropertyName != null
-                && strategy.lastPropertyName.id().equals( getter.id() ),
+                && Objects.equals( getter.unwrap(), strategy.lastPropertyName ),
             "Adapter must forward descriptor for propertyName", errors );
 
         expect( "item".equalsIgnoreCase( adapter.elementName( adder ) ),
             "Adapter should resolve element name for adder method", errors );
         expect( strategy.lastElementName != null
-                && strategy.lastElementName.id().equals( adder.id() ),
+                && Objects.equals( adder.unwrap(), strategy.lastElementName ),
             "Adapter must forward descriptor for elementName", errors );
     }
 
     private void verifyEnumMappingSupport(ElementsLookup lookup,
-                                          LangModelContext<?, ?, ?, ?> context,
+                                          LangModelContext context,
                                           List<String> errors) {
         TypeDescriptor enumDescriptor = lookup.typeDescriptor(
             "org.mapstruct.ap.test.langmodel.contract.LangModelContractTypes.SampleEnum"
@@ -479,14 +481,14 @@ public class LangModelContractProcessor extends AbstractProcessor {
         expect( "DEFAULT_NULL".equals( nullConstant ),
             "EnumMappingSupport should delegate defaultNullEnumConstant to strategy", errors );
         expect( strategy.lastNullRequest != null
-                && strategy.lastNullRequest.id().equals( enumDescriptor.id() ),
+                && Objects.equals( enumDescriptor.unwrap(), strategy.lastNullRequest ),
             "EnumMappingStrategy should receive original descriptor for defaultNullEnumConstant", errors );
 
         String mappedConstant = support.enumConstant( enumDescriptor, "FIRST" );
         expect( "FIRST_MAPPED".equals( mappedConstant ),
             "EnumMappingSupport should delegate enumConstant mapping", errors );
         expect( strategy.lastEnumConstantRequest != null
-                && strategy.lastEnumConstantRequest.id().equals( enumDescriptor.id() ),
+                && Objects.equals( enumDescriptor.unwrap(), strategy.lastEnumConstantRequest ),
             "EnumMappingStrategy should receive original descriptor for enumConstant", errors );
 
         TypeDescriptor unexpected = support.unexpectedValueMappingExceptionType();
@@ -495,7 +497,7 @@ public class LangModelContractProcessor extends AbstractProcessor {
     }
 
     private void verifyMappingExclusionSupport(ElementsLookup lookup,
-                                               LangModelContext<?, ?, ?, ?> context,
+                                               LangModelContext context,
                                                List<String> errors) {
         TypeDescriptor stringDescriptor = lookup.typeDescriptor( "java.lang.String" );
         TypeDescriptor listDescriptor = lookup.typeDescriptor( "java.util.List" );
@@ -516,7 +518,7 @@ public class LangModelContractProcessor extends AbstractProcessor {
         expect( support.isExcluded( stringDescriptor ),
             "DefaultMappingExclusionProvider should exclude java.lang.String", errors );
         expect( provider.lastChecked != null
-                && provider.lastChecked.qualifiedName().orElse( "" ).equals( "java.lang.String" ),
+                && "java.lang.String".contentEquals( provider.lastChecked.getQualifiedName() ),
             "MappingExclusionProvider should receive original descriptor", errors );
 
         expect( !support.isExcluded( listDescriptor ),
@@ -643,14 +645,14 @@ public class LangModelContractProcessor extends AbstractProcessor {
 
     private static final class CapturingAccessorNamingStrategy implements AccessorNamingStrategy {
 
-        private ExecutableDescriptor lastMethodType;
-        private ExecutableDescriptor lastPropertyName;
-        private ExecutableDescriptor lastElementName;
+        private ExecutableElement lastMethodType;
+        private ExecutableElement lastPropertyName;
+        private ExecutableElement lastElementName;
 
         @Override
-        public MethodType getMethodType(ExecutableDescriptor method) {
+        public MethodType getMethodType(ExecutableElement method) {
             lastMethodType = method;
-            String name = method.simpleName().content();
+            String name = method.getSimpleName().toString();
             if ( "getValue".equals( name ) ) {
                 return MethodType.GETTER;
             }
@@ -661,9 +663,9 @@ public class LangModelContractProcessor extends AbstractProcessor {
         }
 
         @Override
-        public String getPropertyName(ExecutableDescriptor getterOrSetterMethod) {
+        public String getPropertyName(ExecutableElement getterOrSetterMethod) {
             lastPropertyName = getterOrSetterMethod;
-            String name = getterOrSetterMethod.simpleName().content();
+            String name = getterOrSetterMethod.getSimpleName().toString();
             if ( name.startsWith( "get" ) && name.length() > 3 ) {
                 String base = name.substring( 3 );
                 return Character.toLowerCase( base.charAt( 0 ) ) + base.substring( 1 );
@@ -672,7 +674,7 @@ public class LangModelContractProcessor extends AbstractProcessor {
         }
 
         @Override
-        public String getElementName(ExecutableDescriptor adderMethod) {
+        public String getElementName(ExecutableElement adderMethod) {
             lastElementName = adderMethod;
             return "item";
         }
@@ -686,46 +688,45 @@ public class LangModelContractProcessor extends AbstractProcessor {
 
     private static final class CapturingEnumMappingStrategy implements EnumMappingStrategy {
 
-        private LangElements elements;
-        private TypeDescriptor lastNullRequest;
-        private TypeDescriptor lastEnumConstantRequest;
+        private Elements elements;
+        private TypeElement lastNullRequest;
+        private TypeElement lastEnumConstantRequest;
 
         @Override
         public void init(MapStructProcessingEnvironment processingEnvironment) {
             EnumMappingStrategy.super.init( processingEnvironment );
-            this.elements = processingEnvironment.elements();
+            this.elements = processingEnvironment.getElementUtils();
         }
 
         @Override
-        public String getDefaultNullEnumConstant(TypeDescriptor enumType) {
+        public String getDefaultNullEnumConstant(TypeElement enumType) {
             lastNullRequest = enumType;
             return "DEFAULT_NULL";
         }
 
         @Override
-        public String getEnumConstant(TypeDescriptor enumType, String enumConstant) {
+        public String getEnumConstant(TypeElement enumType, String enumConstant) {
             lastEnumConstantRequest = enumType;
             return enumConstant + "_MAPPED";
         }
 
         @Override
-        public TypeDescriptor getUnexpectedValueMappingExceptionType() {
-            return elements.typeElement( "java.lang.IllegalStateException" ).asType();
+        public TypeElement getUnexpectedValueMappingExceptionType() {
+            return elements.getTypeElement( "java.lang.IllegalStateException" );
         }
     }
 
     private static final class CapturingMappingExclusionProvider implements MappingExclusionProvider {
 
-        private TypeDescriptor lastChecked;
+        private TypeElement lastChecked;
 
         @Override
-        public boolean isExcluded(TypeDescriptor type) {
+        public boolean isExcluded(TypeElement type) {
             lastChecked = type;
             if ( type == null ) {
                 return false;
             }
-            String name = type.qualifiedName().orElse( type.displayName() );
-            return "java.lang.String".equals( name );
+            return "java.lang.String".equals( type.getQualifiedName().toString() );
         }
     }
 

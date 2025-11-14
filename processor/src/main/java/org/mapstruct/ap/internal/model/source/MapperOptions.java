@@ -19,14 +19,14 @@ import org.mapstruct.ap.internal.gem.ReportingPolicyGem;
 import org.mapstruct.ap.internal.gem.SubclassExhaustiveStrategyGem;
 import org.mapstruct.ap.internal.model.common.TypeFactory;
 import org.mapstruct.ap.internal.option.Options;
-import org.mapstruct.ap.langmodel.AnnotationAttribute;
-import org.mapstruct.ap.descriptor.AnnotationDescriptor;
-import org.mapstruct.ap.langmodel.LangModelContext;
-import org.mapstruct.ap.langmodel.LangModelElementQuery;
-import org.mapstruct.ap.langmodel.MapperAnnotation;
-import org.mapstruct.ap.langmodel.MapperConfigAnnotation;
-import org.mapstruct.ap.descriptor.TypeDescriptor;
-import org.mapstruct.ap.descriptor.TypeElementDescriptor;
+import org.mapstruct.ap.internal.langmodel.AnnotationAttribute;
+import org.mapstruct.ap.internal.langmodel.descriptor.AnnotationDescriptor;
+import org.mapstruct.ap.internal.langmodel.LangModelContext;
+import org.mapstruct.ap.internal.langmodel.LangModelElementQuery;
+import org.mapstruct.ap.internal.langmodel.MapperAnnotation;
+import org.mapstruct.ap.internal.langmodel.MapperConfigAnnotation;
+import org.mapstruct.ap.internal.langmodel.descriptor.TypeDescriptor;
+import org.mapstruct.ap.internal.langmodel.descriptor.TypeElementDescriptor;
 
 public class MapperOptions extends DelegatingOptions {
 
@@ -37,7 +37,7 @@ public class MapperOptions extends DelegatingOptions {
     public static MapperOptions fromAnnotation(MapperAnnotation mapper,
                                                TypeElementDescriptor mapperElement,
                                                Options options,
-                                               LangModelContext<?, ?, ?, ?> langModelContext) {
+                                               LangModelContext langModelContext) {
         DelegatingOptions defaults = new DefaultOptions( mapper, options );
         TypeDescriptor mapperConfigType = null;
         DelegatingOptions next = defaults;

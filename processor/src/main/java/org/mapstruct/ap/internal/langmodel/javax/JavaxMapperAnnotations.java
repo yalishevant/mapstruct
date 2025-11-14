@@ -9,9 +9,10 @@ import java.util.Optional;
 
 import javax.lang.model.element.TypeElement;
 
+import org.mapstruct.ap.internal.langmodel.MapperAnnotation;
+import org.mapstruct.ap.internal.langmodel.MapperConfigAnnotation;
+import org.mapstruct.ap.internal.langmodel.annotation.MapperAnnotationAdapter;
 import org.mapstruct.ap.internal.langmodel.descriptor.TypeDescriptor;
-import org.mapstruct.ap.internal.langmodel.annotation.MapperAnnotationView;
-import org.mapstruct.ap.internal.langmodel.annotation.MapperConfigAnnotationView;
 
 /**
  * Factory for {@link MapperAnnotationView} backed by {@code javax.lang.model}.
@@ -21,12 +22,13 @@ public final class JavaxMapperAnnotations {
     private JavaxMapperAnnotations() {
     }
 
-    public static MapperAnnotationView mapper(JavaxLangModelContext context, TypeElement element) {
-        return JavaxMapperAnnotation.from( context, element );
+    public static MapperAnnotation mapper(JavaxLangModelContext context, TypeElement element) {
+        return MapperAnnotationAdapter.wrap( JavaxMapperAnnotation.from( context, element ) );
     }
 
-    public static Optional<MapperConfigAnnotationView> mapperConfig(JavaxLangModelContext context,
-                                                                    TypeDescriptor config) {
-        return JavaxMapperConfigAnnotation.from( context, config );
+    public static Optional<MapperConfigAnnotation> mapperConfig(JavaxLangModelContext context,
+                                                                TypeDescriptor config) {
+        return JavaxMapperConfigAnnotation.from( context, config )
+            .map( MapperAnnotationAdapter::wrap );
     }
 }

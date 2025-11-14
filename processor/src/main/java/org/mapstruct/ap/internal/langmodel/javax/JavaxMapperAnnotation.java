@@ -15,7 +15,7 @@ import javax.lang.model.element.Name;
 import javax.lang.model.element.TypeElement;
 
 import org.mapstruct.ap.internal.gem.BuilderGem;
-import org.mapstruct.ap.internal.langmodel.annotation.AnnotationAttribute;
+import org.mapstruct.ap.internal.langmodel.AnnotationAttribute;
 import org.mapstruct.ap.internal.langmodel.annotation.MapperAnnotationView;
 import org.mapstruct.ap.internal.langmodel.annotation.MapperConfigAnnotationView;
 import org.mapstruct.ap.internal.util.AnnotationDescriptorUtils;
@@ -305,7 +305,7 @@ final class JavaxMapperAnnotation {
         );
 
         if ( descriptor == null || error[0] ) {
-            this.mapperConfig = Optional.empty();
+            this.mapperConfig = Optional.<MapperConfigAnnotationView>empty();
         }
         else {
             TypeDescriptor configValue = this.config.value().orElse( null );
@@ -313,7 +313,7 @@ final class JavaxMapperAnnotation {
                 this.mapperConfig = JavaxMapperConfigAnnotation.from( context, configValue );
             }
             else {
-                this.mapperConfig = Optional.empty();
+                this.mapperConfig = Optional.<MapperConfigAnnotationView>empty();
             }
         }
 
@@ -348,7 +348,7 @@ final class JavaxMapperAnnotation {
             mappingControl,
             unexpectedValueMappingException,
             config,
-            mapperConfig
+            (Optional<MapperConfigAnnotationView>) mapperConfig
         );
     }
 
@@ -391,7 +391,6 @@ final class JavaxMapperAnnotation {
         }
     }
 
-    @Override
     private static AnnotationAttribute<String> enumAttribute(AnnotationValueDescriptor descriptor,
                                                              String defaultValue) {
         if ( descriptor == null ) {

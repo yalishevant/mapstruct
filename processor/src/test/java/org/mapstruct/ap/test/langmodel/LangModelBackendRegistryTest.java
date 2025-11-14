@@ -12,18 +12,18 @@ import java.util.Optional;
 
 import org.junit.jupiter.api.Test;
 import org.mapstruct.ap.MappingProcessor;
-import org.mapstruct.ap.langmodel.AccessorNamingAdapter;
-import org.mapstruct.ap.langmodel.AccessorNamingAdapterFactory;
-import org.mapstruct.ap.langmodel.LangModelContext;
-import org.mapstruct.ap.langmodel.LangModelContextFactory;
-import org.mapstruct.ap.langmodel.MapperEntryPoint;
-import org.mapstruct.ap.langmodel.api.DescriptorUnwrapper;
-import org.mapstruct.ap.descriptor.AnnotationDescriptor;
-import org.mapstruct.ap.descriptor.AnnotationValueDescriptor;
-import org.mapstruct.ap.descriptor.ElementDescriptor;
-import org.mapstruct.ap.descriptor.ExecutableDescriptor;
-import org.mapstruct.ap.descriptor.TypeDescriptor;
-import org.mapstruct.ap.descriptor.TypeElementDescriptor;
+import org.mapstruct.ap.internal.langmodel.AccessorNamingAdapter;
+import org.mapstruct.ap.internal.langmodel.AccessorNamingAdapterFactory;
+import org.mapstruct.ap.internal.langmodel.LangModelContext;
+import org.mapstruct.ap.internal.langmodel.LangModelContextFactory;
+import org.mapstruct.ap.internal.langmodel.MapperEntryPoint;
+import org.mapstruct.ap.internal.langmodel.api.DescriptorUnwrapper;
+import org.mapstruct.ap.internal.langmodel.descriptor.AnnotationDescriptor;
+import org.mapstruct.ap.internal.langmodel.descriptor.AnnotationValueDescriptor;
+import org.mapstruct.ap.internal.langmodel.descriptor.ElementDescriptor;
+import org.mapstruct.ap.internal.langmodel.descriptor.ExecutableDescriptor;
+import org.mapstruct.ap.internal.langmodel.descriptor.TypeDescriptor;
+import org.mapstruct.ap.internal.langmodel.descriptor.TypeElementDescriptor;
 import org.mapstruct.ap.spi.AccessorNamingStrategy;
 import org.mapstruct.ap.spi.MethodType;
 
@@ -90,7 +90,7 @@ class LangModelBackendRegistryTest {
         }
 
         @Override
-        public LangModelContext<?, ?, ?, ?> create(MapperEntryPoint entryPoint) {
+        public LangModelContext create(MapperEntryPoint entryPoint) {
             throw new UnsupportedOperationException( "Not required for registry test" );
         }
 
@@ -128,11 +128,6 @@ class LangModelBackendRegistryTest {
         }
 
         @Override
-        public <NATIVE> Optional<NATIVE> executable(ExecutableDescriptor descriptor, Class<NATIVE> nativeType) {
-            return Optional.empty();
-        }
-
-        @Override
         public <NATIVE> Optional<NATIVE> annotation(AnnotationDescriptor descriptor, Class<NATIVE> nativeType) {
             return Optional.empty();
         }
@@ -149,7 +144,7 @@ class LangModelBackendRegistryTest {
         @Override
         public AccessorNamingAdapter create(AccessorNamingStrategy accessorNamingStrategy,
                                             DescriptorUnwrapper descriptorUnwrapper,
-                                            LangModelContext<?, ?, ?, ?> langModelContext) {
+                                            LangModelContext langModelContext) {
             return new AccessorNamingAdapter() {
                 @Override
                 public MethodType methodType(ExecutableDescriptor executable) {

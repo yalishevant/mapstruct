@@ -19,9 +19,9 @@ import org.mapstruct.ap.internal.model.common.Type;
 import org.mapstruct.ap.internal.model.common.TypeFactory;
 import org.mapstruct.ap.internal.util.Executables;
 import org.mapstruct.ap.internal.util.Strings;
-import org.mapstruct.ap.descriptor.ExecutableDescriptor;
-import org.mapstruct.ap.langmodel.api.LangElements;
-import org.mapstruct.ap.descriptor.LangModifier;
+import org.mapstruct.ap.internal.langmodel.descriptor.ExecutableDescriptor;
+import org.mapstruct.ap.internal.langmodel.api.LangElements;
+import org.mapstruct.ap.internal.langmodel.descriptor.LangModifier;
 
 import static org.mapstruct.ap.internal.model.source.MappingMethodUtils.isEnumMapping;
 import static org.mapstruct.ap.internal.util.Collections.first;

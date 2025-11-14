@@ -56,24 +56,24 @@ import org.mapstruct.ap.internal.util.AnnotationDescriptorUtils;
 import org.mapstruct.ap.internal.util.FormattingMessager;
 import org.mapstruct.ap.internal.util.Message;
 import org.mapstruct.ap.internal.util.Strings;
-import org.mapstruct.ap.descriptor.AnnotationDescriptor;
-import org.mapstruct.ap.langmodel.AnnotationGemFactory;
-import org.mapstruct.ap.langmodel.AnnotationGemsCapability;
-import org.mapstruct.ap.descriptor.ExecutableDescriptor;
+import org.mapstruct.ap.internal.langmodel.descriptor.AnnotationDescriptor;
+import org.mapstruct.ap.internal.langmodel.AnnotationGemFactory;
+import org.mapstruct.ap.internal.langmodel.AnnotationGemsCapability;
+import org.mapstruct.ap.internal.langmodel.descriptor.ExecutableDescriptor;
 import org.mapstruct.ap.internal.langmodel.MissingLangModelCapabilityException;
-import org.mapstruct.ap.descriptor.LangModifier;
-import org.mapstruct.ap.langmodel.LangDescriptorFactory;
-import org.mapstruct.ap.descriptor.LangElementKind;
-import org.mapstruct.ap.langmodel.api.LangElements;
-import org.mapstruct.ap.langmodel.LangModelContext;
-import org.mapstruct.ap.langmodel.LangModelElementQuery;
-import org.mapstruct.ap.langmodel.LangModelTypeSystem;
-import org.mapstruct.ap.langmodel.api.LangTypes;
-import org.mapstruct.ap.descriptor.FieldDescriptor;
-import org.mapstruct.ap.descriptor.ParameterDescriptor;
-import org.mapstruct.ap.descriptor.TypeDescriptor;
-import org.mapstruct.ap.descriptor.TypeElementDescriptor;
-import org.mapstruct.ap.langmodel.MapperAnnotation;
+import org.mapstruct.ap.internal.langmodel.descriptor.LangModifier;
+import org.mapstruct.ap.internal.langmodel.LangDescriptorFactory;
+import org.mapstruct.ap.internal.langmodel.descriptor.LangElementKind;
+import org.mapstruct.ap.internal.langmodel.api.LangElements;
+import org.mapstruct.ap.internal.langmodel.LangModelContext;
+import org.mapstruct.ap.internal.langmodel.LangModelElementQuery;
+import org.mapstruct.ap.internal.langmodel.LangModelTypeSystem;
+import org.mapstruct.ap.internal.langmodel.api.LangTypes;
+import org.mapstruct.ap.internal.langmodel.descriptor.FieldDescriptor;
+import org.mapstruct.ap.internal.langmodel.descriptor.ParameterDescriptor;
+import org.mapstruct.ap.internal.langmodel.descriptor.TypeDescriptor;
+import org.mapstruct.ap.internal.langmodel.descriptor.TypeElementDescriptor;
+import org.mapstruct.ap.internal.langmodel.MapperAnnotation;
 import org.mapstruct.ap.internal.version.VersionInformation;
 
 import static org.mapstruct.ap.internal.model.SupportingConstructorFragment.addAllFragmentsIn;
@@ -89,11 +89,11 @@ import static org.mapstruct.ap.internal.util.Collections.join;
  */
 public class MapperCreationProcessor implements ModelElementProcessor<List<SourceMethod>, Mapper> {
 
-    private LangModelContext<?, ?, ?, ?> langModelContext;
+    private LangModelContext langModelContext;
     private LangModelElementQuery langElementQuery;
     private LangElements langElements;
     private LangTypes langTypes;
-    private LangDescriptorFactory<Object, Object, Object, Object> descriptorFactory;
+    private LangDescriptorFactory descriptorFactory;
     private AnnotationGemFactory annotationGems;
     private FormattingMessager messager;
     private Options options;
@@ -116,8 +116,8 @@ public class MapperCreationProcessor implements ModelElementProcessor<List<Sourc
         this.langElements = langElementQuery.elements();
         this.langTypes = typeSystem.types();
         @SuppressWarnings("unchecked")
-        LangDescriptorFactory<Object, Object, Object, Object> descriptorFactory =
-            (LangDescriptorFactory<Object, Object, Object, Object>) typeSystem.descriptors();
+        LangDescriptorFactory descriptorFactory =
+            (LangDescriptorFactory) typeSystem.descriptors();
         this.descriptorFactory = descriptorFactory;
         this.messager =
             new MapperAnnotatedFormattingMessenger(

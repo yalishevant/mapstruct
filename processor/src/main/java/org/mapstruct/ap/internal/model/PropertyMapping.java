@@ -49,7 +49,7 @@ import org.mapstruct.ap.internal.util.Strings;
 import org.mapstruct.ap.internal.util.accessor.Accessor;
 import org.mapstruct.ap.internal.util.accessor.AccessorType;
 import org.mapstruct.ap.internal.util.accessor.ReadAccessor;
-import org.mapstruct.ap.descriptor.AnnotationDescriptor;
+import org.mapstruct.ap.internal.langmodel.descriptor.AnnotationDescriptor;
 
 import static org.mapstruct.ap.internal.gem.NullValueCheckStrategyGem.ALWAYS;
 import static org.mapstruct.ap.internal.gem.NullValuePropertyMappingStrategyGem.IGNORE;
