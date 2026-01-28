@@ -3,9 +3,14 @@ plugins {
     id("com.google.devtools.ksp")
 }
 
+val mapstructVersion = "1.7.0-SNAPSHOT"
+
 dependencies {
-    implementation(project(":processor"))
-    ksp(project(":processor"))
+    // MapStruct core annotations
+    implementation("org.mapstruct:mapstruct:$mapstructVersion")
+
+    // MapStruct KSP processor
+    ksp("org.mapstruct:mapstruct-processor-ksp:$mapstructVersion")
 
     testImplementation(kotlin("test"))
     testImplementation("org.assertj:assertj-core:3.24.2")
@@ -22,6 +27,10 @@ kotlin {
 // Add generated Java sources to compilation
 sourceSets.main {
     java.srcDir("build/generated/ksp/main/java")
+}
+
+ksp {
+    arg("mapstruct.verbose", "true")
 }
 
 tasks.test {

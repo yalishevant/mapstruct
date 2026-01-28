@@ -24,13 +24,17 @@ import org.mapstruct.ap.internal.langmodel.api.LangTypes;
 import org.mapstruct.ap.internal.langmodel.codegen.GeneratedFileSink;
 import org.mapstruct.ap.internal.langmodel.descriptor.TypeDescriptor;
 import org.mapstruct.ap.internal.langmodel.descriptor.TypeElementDescriptor;
+import org.mapstruct.ap.internal.langmodel.spi.EnumMappingCapability;
 import org.mapstruct.ap.internal.langmodel.spi.LangDiagnostics;
 import org.mapstruct.ap.internal.langmodel.spi.SpiBridgeCapability;
+import org.mapstruct.ap.internal.langmodel.AnnotationGemsCapability;
 import org.mapstruct.ap.internal.version.VersionInformation;
 import org.mapstruct.ap.spi.AstModifyingAnnotationProcessor;
 import org.mapstruct.ap.spi.TypeHierarchyErroneousException;
 
+import java.util.Collections;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 
@@ -45,6 +49,7 @@ public final class KspLangModelContext implements LangModelContext {
     private final CodeGenerator codeGenerator;
     private final VersionInformation versionInformation;
     private final KSClassDeclaration mapperElement;
+    private final Map<String, String> processorOptions;
 
     private final KspDescriptorFactory descriptorFactory;
     private final KspLangTypes types;
@@ -55,17 +60,21 @@ public final class KspLangModelContext implements LangModelContext {
     private final LangDiagnostics diagnostics;
     private final GeneratedFileAccess generatedFileAccess;
     private final SpiBridgeCapability spiBridgeCapability;
+    private final AnnotationGemsCapability annotationGemsCapability;
+    private final EnumMappingCapability enumMappingCapability;
 
     private KspLangModelContext(Resolver resolver,
                                 KSPLogger logger,
                                 CodeGenerator codeGenerator,
                                 VersionInformation versionInformation,
-                                KSClassDeclaration mapperElement) {
+                                KSClassDeclaration mapperElement,
+                                Map<String, String> processorOptions) {
         this.resolver = Objects.requireNonNull( resolver, "resolver" );
         this.logger = Objects.requireNonNull( logger, "logger" );
         this.codeGenerator = Objects.requireNonNull( codeGenerator, "codeGenerator" );
         this.versionInformation = Objects.requireNonNull( versionInformation, "versionInformation" );
         this.mapperElement = mapperElement;
+        this.processorOptions = processorOptions != null ? processorOptions : Collections.emptyMap();
 
         this.descriptorFactory = new KspDescriptorFactory( this, resolver );
         this.types = new KspLangTypes( this, descriptorFactory, resolver );
@@ -105,7 +114,12 @@ public final class KspLangModelContext implements LangModelContext {
             }
         };
 
-        this.spiBridgeCapability = processorOptions -> new KspMapStructProcessingEnvironment( processorOptions );
+        this.spiBridgeCapability = opts -> new KspMapStructProcessingEnvironment( opts );
+
+        KspAnnotationGemFactory gemFactory = new KspAnnotationGemFactory( resolver );
+        this.annotationGemsCapability = () -> gemFactory;
+
+        this.enumMappingCapability = strategy -> new KspEnumMappingSupport( this, strategy );
     }
 
     /**
@@ -116,6 +130,7 @@ public final class KspLangModelContext implements LangModelContext {
      * @param codeGenerator      KSP code generator
      * @param versionInformation version metadata
      * @param mapperElement      mapper class declaration (may be null)
+     * @param processorOptions   processor options
      *
      * @return new context
      */
@@ -123,8 +138,10 @@ public final class KspLangModelContext implements LangModelContext {
                                               KSPLogger logger,
                                               CodeGenerator codeGenerator,
                                               VersionInformation versionInformation,
-                                              KSClassDeclaration mapperElement) {
-        return new KspLangModelContext( resolver, logger, codeGenerator, versionInformation, mapperElement );
+                                              KSClassDeclaration mapperElement,
+                                              Map<String, String> processorOptions) {
+        return new KspLangModelContext(
+            resolver, logger, codeGenerator, versionInformation, mapperElement, processorOptions );
     }
 
     Resolver resolver() {
@@ -145,6 +162,10 @@ public final class KspLangModelContext implements LangModelContext {
 
     KSClassDeclaration mapperElement() {
         return mapperElement;
+    }
+
+    Map<String, String> processorOptions() {
+        return processorOptions;
     }
 
     KspDescriptorFactory descriptorFactory() {
@@ -209,6 +230,14 @@ public final class KspLangModelContext implements LangModelContext {
 
         if ( capabilityType == SpiBridgeCapability.class ) {
             return OptionalCapability.of( (T) spiBridgeCapability );
+        }
+
+        if ( capabilityType == AnnotationGemsCapability.class ) {
+            return OptionalCapability.of( (T) annotationGemsCapability );
+        }
+
+        if ( capabilityType == EnumMappingCapability.class ) {
+            return OptionalCapability.of( (T) enumMappingCapability );
         }
 
         // Other optional capabilities can be added here as needed

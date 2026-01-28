@@ -44,7 +44,8 @@ final class KspExecutableDescriptor implements ExecutableDescriptor {
         this.function = Objects.requireNonNull( function, "function" );
         this.id = computeId( function );
         this.kind = KspKindMapper.mapElementKind( function );
-        this.modifiers = KspKindMapper.mapModifiers( function.getModifiers() );
+        // Use function-specific modifier mapping to handle implicit abstract/public in interfaces
+        this.modifiers = KspKindMapper.mapModifiers( function );
     }
 
     KSFunctionDeclaration function() {

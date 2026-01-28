@@ -304,42 +304,30 @@ final class KspLangElements implements LangElements {
         }
         visitedTypes.add( qualifiedName );
 
-        // Collect methods from this class
-        for ( KSDeclaration declaration : KspSequenceUtils.toIterable( classDecl.getDeclarations() ) ) {
-            if ( declaration instanceof KSFunctionDeclaration ) {
-                KSFunctionDeclaration func = (KSFunctionDeclaration) declaration;
-
-                // Skip constructors
-                if ( "<init>".equals( func.getSimpleName().asString() ) ) {
-                    continue;
-                }
-
-                // Skip private methods
-                if ( func.getModifiers().contains( Modifier.PRIVATE ) ) {
-                    continue;
-                }
-
-                // Skip Object methods
-                if ( OBJECT_METHODS.contains( func.getSimpleName().asString() ) ) {
-                    continue;
-                }
-
-                String signature = computeMethodSignature( func );
-                if ( seenSignatures.add( signature ) ) {
-                    ExecutableDescriptor descriptor = (ExecutableDescriptor) factory.elementDescriptor( func );
-                    if ( descriptor != null ) {
-                        result.add( descriptor );
-                    }
-                }
+        // Use getAllFunctions() to get all functions including inherited ones
+        // This is important because getDeclarations() may not return abstract interface methods
+        for ( KSFunctionDeclaration func : KspSequenceUtils.toIterable( classDecl.getAllFunctions() ) ) {
+            // Skip constructors
+            if ( "<init>".equals( func.getSimpleName().asString() ) ) {
+                continue;
             }
-        }
 
-        // Collect from supertypes
-        for ( KSTypeReference superTypeRef : KspSequenceUtils.toIterable( classDecl.getSuperTypes() ) ) {
-            KSType superType = superTypeRef.resolve();
-            KSDeclaration superDecl = superType.getDeclaration();
-            if ( superDecl instanceof KSClassDeclaration ) {
-                collectExecutables( (KSClassDeclaration) superDecl, result, seenSignatures, visitedTypes );
+            // Skip private methods
+            if ( func.getModifiers().contains( Modifier.PRIVATE ) ) {
+                continue;
+            }
+
+            // Skip Object methods
+            if ( OBJECT_METHODS.contains( func.getSimpleName().asString() ) ) {
+                continue;
+            }
+
+            String signature = computeMethodSignature( func );
+            if ( seenSignatures.add( signature ) ) {
+                ExecutableDescriptor descriptor = (ExecutableDescriptor) factory.elementDescriptor( func );
+                if ( descriptor != null ) {
+                    result.add( descriptor );
+                }
             }
         }
     }

@@ -194,7 +194,8 @@ public class MapStructSymbolProcessor implements SymbolProcessor {
             resolver,
             logger,
             codeGenerator,
-            mapper
+            mapper,
+            processorOptions
         );
 
         try ( LangModelContext langModelContext = langModelContextFactory.create( mapperEntryPoint ) ) {

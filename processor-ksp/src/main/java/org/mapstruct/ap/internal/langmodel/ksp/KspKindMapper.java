@@ -201,6 +201,39 @@ final class KspKindMapper {
     }
 
     /**
+     * Maps KSP modifiers for a function to MapStruct's {@link LangModifier} set.
+     * In Kotlin interfaces, methods without a body are implicitly abstract but KSP doesn't always
+     * mark them with the ABSTRACT modifier. This method handles that case.
+     * Also adds PUBLIC modifier for interface methods as they are public by default in Kotlin.
+     */
+    static Set<LangModifier> mapModifiers(KSFunctionDeclaration function) {
+        Set<LangModifier> result = mapModifiers( function.getModifiers() );
+
+        // In Kotlin interfaces, methods are implicitly public and abstract (if no body)
+        KSDeclaration parent = function.getParentDeclaration();
+        if ( parent instanceof KSClassDeclaration ) {
+            KSClassDeclaration classDecl = (KSClassDeclaration) parent;
+            if ( classDecl.getClassKind() == ClassKind.INTERFACE ) {
+                result = EnumSet.copyOf( result );
+
+                // Add PUBLIC if not already present (interface methods are public by default)
+                if ( !result.contains( LangModifier.PUBLIC ) &&
+                     !result.contains( LangModifier.PRIVATE ) &&
+                     !result.contains( LangModifier.PROTECTED ) ) {
+                    result.add( LangModifier.PUBLIC );
+                }
+
+                // Add ABSTRACT if method has no implementation
+                if ( !result.contains( LangModifier.ABSTRACT ) && !isDefaultMethod( function ) ) {
+                    result.add( LangModifier.ABSTRACT );
+                }
+            }
+        }
+
+        return result;
+    }
+
+    /**
      * Checks if a function is a default interface method.
      */
     static boolean isDefaultMethod(KSFunctionDeclaration function) {
@@ -208,14 +241,13 @@ final class KspKindMapper {
             return false;
         }
         // In Kotlin, interface methods with bodies are considered default
-        // KSP doesn't have a direct "isDefault" flag, but we can check if it's not abstract
-        // and is declared in an interface
+        // Use isAbstract() to check if the method has no implementation
         KSDeclaration parent = function.getParentDeclaration();
         if ( parent instanceof KSClassDeclaration ) {
             KSClassDeclaration classDecl = (KSClassDeclaration) parent;
             if ( classDecl.getClassKind() == ClassKind.INTERFACE ) {
-                // If it's in an interface and not abstract, it has a default implementation
-                return !function.getModifiers().contains( Modifier.ABSTRACT );
+                // If it's in an interface and has an implementation (not abstract), it's a default method
+                return !function.isAbstract();
             }
         }
         return false;

@@ -17,6 +17,9 @@ import org.mapstruct.ap.internal.langmodel.MapperEntryPoint;
 import org.mapstruct.ap.internal.langmodel.api.DescriptorUnwrapper;
 import org.mapstruct.ap.internal.version.VersionInformation;
 
+import java.util.Collections;
+import java.util.Map;
+
 /**
  * {@link LangModelContextFactory} producing {@link KspLangModelContext} instances.
  */
@@ -45,7 +48,13 @@ public final class KspLangModelContextFactory implements LangModelContextFactory
 
         KSClassDeclaration mapperElement = entryPoint.unwrap( KSClassDeclaration.class ).orElse( null );
 
-        return KspLangModelContext.create( resolver, logger, codeGenerator, versionInformation, mapperElement );
+        @SuppressWarnings( "unchecked" )
+        Map<String, String> processorOptions = entryPoint.unwrap( Map.class )
+            .map( m -> (Map<String, String>) m )
+            .orElse( Collections.emptyMap() );
+
+        return KspLangModelContext.create(
+            resolver, logger, codeGenerator, versionInformation, mapperElement, processorOptions );
     }
 
     @Override

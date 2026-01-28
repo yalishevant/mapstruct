@@ -1,7 +1,7 @@
 package org.mapstruct.demo
 
-import org.mapstruct.ksp.Mapper
-import org.mapstruct.ksp.Mapping
+import org.mapstruct.Mapper
+import org.mapstruct.Mapping
 
 /**
  * Simple mapper - same field names.
@@ -16,7 +16,5 @@ interface PersonMapper {
  */
 @Mapper
 interface AddressMapper {
-    @Mapping(source = "zipCode", target = "postalCode")
-    @Mapping(source = "country", target = "countryName")
     fun toDto(address: Address): AddressDto
 }
