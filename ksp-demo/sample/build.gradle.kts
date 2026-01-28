@@ -19,6 +19,11 @@ kotlin {
     }
 }
 
+// Add generated Java sources to compilation
+sourceSets.main {
+    java.srcDir("build/generated/ksp/main/java")
+}
+
 tasks.test {
     useJUnitPlatform()
 }

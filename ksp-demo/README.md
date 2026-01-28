@@ -2,6 +2,13 @@
 
 This demo project demonstrates how to use **KSP (Kotlin Symbol Processing)** to generate **Java mapper implementations** from Kotlin interfaces annotated with `@Mapper`.
 
+## Related Components
+
+This demo is part of MapStruct KSP integration:
+
+- **`processor-ksp/`** — Full MapStruct KSP processor module (Maven, integrates with MapStruct architecture)
+- **`ksp-demo/`** — Standalone proof-of-concept demonstrating the core approach (Gradle)
+
 ## What This Demo Shows
 
 - KSP processor that reads Kotlin mapper interfaces
